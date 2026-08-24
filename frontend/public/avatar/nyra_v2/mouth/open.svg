@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1086" height="1448" viewBox="0 0 1086 1448" aria-hidden="true">
+  <defs>
+    <radialGradient id="skin"><stop offset="0" stop-color="#fdc799"/><stop offset=".72" stop-color="#fdcda1"/><stop offset="1" stop-color="#fed1a5"/></radialGradient>
+    <linearGradient id="mouth" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#3b222b"/><stop offset="1" stop-color="#682f3a"/></linearGradient>
+    <linearGradient id="tongue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#db7d7c"/><stop offset="1" stop-color="#aa505a"/></linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="0.75"/></filter>
+  </defs>
+  <ellipse cx="522" cy="682" rx="58" ry="36" fill="url(#skin)" filter="url(#soft)"/>
+  <path d="M487 669Q522 683 558 669Q560 714 522 722Q484 714 487 669Z" fill="url(#mouth)" stroke="#7f3e48" stroke-width="2.2"/>
+  <path d="M494 674Q522 681 551 673Q547 682 522 685Q499 682 494 674Z" fill="#fff1df" opacity=".9"/>
+  <path d="M493 707Q522 694 552 708Q544 719 522 722Q500 718 493 707Z" fill="url(#tongue)"/>
+  <path d="M502 713Q522 706 543 713" fill="none" stroke="#f09b94" stroke-width="2" stroke-linecap="round" opacity=".76"/>
+</svg>

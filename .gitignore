@@ -1,0 +1,49 @@
+# ---- segredos / ambiente
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ---- python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ---- node
+node_modules/
+
+# ---- build / artefatos
+dist/
+build/
+target/
+packaging/dist/
+packaging/build/
+*.exe
+*.msi
+*.pdb
+*.dmp
+
+# ---- logs / temporários / caches
+logs/
+*.log
+.tmp/
+.test-temp/
+.test-tmp/
+.cache/
+cache/
+downloads/
+.pytest_cache/
+
+# ---- dados locais (nunca publicar)
+data/
+config/homelab_hosts.yaml
+config/network_aliases.json
+
+# ---- sistema / IDE
+.nyra-runtime.json
+.nyra-processes.json
+Thumbs.db
+.DS_Store

@@ -1,0 +1,67 @@
+{
+  "version": "3.4.0",
+  "pack": "nyra_v3",
+  "renderer": "layered",
+  "renderers": ["svg", "png", "layered", "future-live2d"],
+  "assets": {
+    "desktop": "/avatar/nyra_v3/bust/nyra-bust-violet.png",
+    "bust": "/avatar/nyra_v3/bust/nyra-bust-violet.png",
+    "portrait": "/avatar/nyra_v3/portrait/nyra-portrait-violet-rgba.png",
+    "full_body": "/avatar/nyra_v3/desktop/nyra-full-violet-rgba.png",
+    "symbol": "/avatar/nyra_v3/symbols/nyra-symbol.svg",
+    "fallback": "/avatar/nyra_v2/master/nyra-avatar-master.png"
+  },
+  "expressions": {
+    "neutral": "neutral",
+    "happy": "happy",
+    "curious": "curious",
+    "focused": "focused",
+    "concerned": "concerned",
+    "amused": "amused",
+    "tired": "tired",
+    "surprised": "surprised"
+  },
+  "eyes": {
+    "open": "eyes_open",
+    "half": "eyes_half",
+    "closed": "eyes_closed",
+    "blink": "blink",
+    "look_left": "look_left",
+    "look_right": "look_right",
+    "look_up": "look_up",
+    "look_down": "look_down"
+  },
+  "mouths": {
+    "closed": "mouth_closed",
+    "small": "mouth_small",
+    "medium": "mouth_medium",
+    "open": "mouth_open",
+    "smile": "mouth_smile"
+  },
+  "states": {
+    "idle": { "eye": "open", "neural_link": "dim", "motion": "idle" },
+    "listening": { "eye": "open", "neural_link": "steady", "motion": "attentive" },
+    "thinking": { "eye": "half", "neural_link": "pulse", "motion": "thinking" },
+    "speaking": { "eye": "open", "neural_link": "activity", "motion": "speaking" },
+    "offline": { "eye": "half", "neural_link": "offline", "motion": "still" }
+  },
+  "scale": { "default": 1.0, "minimum": 0.5, "maximum": 1.5, "steps": [0.5, 0.75, 1.0, 1.25, 1.5] },
+  "anchor": { "x": 0.5, "y": 1.0 },
+  "framing": {
+    "default": "bust",
+    "variants": {
+      "bust": { "asset": "bust", "fit": "contain", "anchor": { "x": 0.5, "y": 1.0 }, "face": { "eyeY": 28.4, "mouthY": 37.1, "linkY": 31.0 } },
+      "portrait": { "asset": "portrait", "fit": "contain", "anchor": { "x": 0.5, "y": 0.5 }, "face": { "eyeY": 20.7, "mouthY": 27.1, "linkY": 22.6 } },
+      "full_body": { "asset": "full_body", "fit": "contain", "anchor": { "x": 0.5, "y": 1.0 }, "face": { "eyeY": 9.7, "mouthY": 13.5, "linkY": 11.2 } }
+    }
+  },
+  "offsets": {
+    "desktop": { "x": 0, "y": 0, "eyeX": 0, "eyeY": 0, "mouthX": 0, "mouthY": 0 },
+    "dashboard": { "x": 0, "y": 0, "eyeX": 0, "eyeY": 0, "mouthX": 0, "mouthY": 0 }
+  },
+  "dashboardVariant": { "asset": "portrait", "fit": "contain", "anchor": { "x": 0.5, "y": 0.5 } },
+  "desktopVariant": { "asset": "bust", "fit": "contain", "anchor": { "x": 0.5, "y": 1.0 }, "transparent": true },
+  "palette": { "hairBase": "#24162F", "hairMid": "#3A214A", "hairHighlight": "#59356C", "hairReflection": "#65417A", "hairShadow": "#160F20", "innerStreak": "teal" },
+  "fallback": { "pack": "v2", "renderer": "svg", "asset": "/avatar/nyra_v2/master/nyra-avatar-master.png", "on": ["manifest-error", "missing-essential-asset", "renderer-error"] },
+  "readiness": { "live2d": "prepared-not-required", "dynamicLayers": "v3-vector-overlay-placeholders" }
+}

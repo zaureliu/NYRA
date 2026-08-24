@@ -1,0 +1,33 @@
+{
+  "version": 4,
+  "profile": "NYRA_VOICE",
+  "description": "Substituições exclusivas para speech_text em português brasileiro. display_text nunca é alterado.",
+  "terms": {
+    "NYRA": "Naira",
+    "Nyra": "Naira",
+    "Utamo": "Utâmo",
+    "Utamo Sentinel": "Utâmo Sentinél",
+    "Sentinel": "Sentinél",
+    "Proxmox": "Próxmóx",
+    "OpenWrt": "Ôpen dábliu érre tê",
+    "Linux": "Línux",
+    "Docker": "Dóquer",
+    "Nginx": "Engine X",
+    "Cloudflare": "Cláud flér",
+    "VLAN": "vê lan",
+    "DNS": "dê ene ésse",
+    "DHCP": "dê agá cê pê",
+    "SSH": "ésse ésse agá",
+    "HTTPS": "agá tê tê pê ésse",
+    "HTTP": "agá tê tê pê",
+    "API": "á pê í",
+    "CPU": "cê pê ú",
+    "GPU": "gê pê ú",
+    "RAM": "memória RAM",
+    "Wi-Fi": "uái fái",
+    "IPv4": "IP versão quatro",
+    "IPv6": "IP versão seis",
+    "Ollama": "Olama",
+    "Qwen": "Cuén"
+  }
+}

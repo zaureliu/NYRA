@@ -1,0 +1,253 @@
+.nyra-avatar {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  isolation: isolate;
+  pointer-events: none;
+  background: transparent !important;
+}
+
+.nyra-avatar-base {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  user-select: none;
+  transition: transform .34s ease, filter .34s ease;
+  transform: translate(calc(var(--head-x, 0%) + var(--body-x, 0%)), var(--head-y, 0%)) rotate(var(--head-tilt, 0deg));
+}
+.nyra-eye-continuous { transform: translate(var(--eye-x, 0px), var(--eye-y, 0px)); transition: transform .28s ease-out; }
+
+.nyra-avatar-dashboard .nyra-avatar-base { object-position: center center; }
+.nyra-face-layer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.nyra-eye-overlay { opacity: 0; transition: opacity .08s ease-in-out; }
+.nyra-eye-overlay .eye-cover { fill: none; stroke: #edc3b4; stroke-width: 2.8; stroke-linecap: round; }
+.nyra-eye-overlay .eye { fill: none; stroke: #24181b; stroke-width: .48; stroke-linecap: round; }
+.nyra-avatar[data-eye="half"] .nyra-eye-overlay,
+.nyra-avatar[data-eye="closed"] .nyra-eye-overlay,
+.nyra-avatar[data-eye="blink"] .nyra-eye-overlay { opacity: 1; }
+
+.nyra-mouth-overlay { opacity: 0; }
+.mouth-cover { fill: #ecc0b2; }
+.mouth-line { fill: none; stroke: #6b4148; stroke-width: .42; stroke-linecap: round; }
+.mouth-open { fill: #3b2028; stroke: #6b4148; stroke-width: .3; }
+.nyra-avatar[data-mouth="mouth_small"] .nyra-mouth-overlay,
+.nyra-avatar[data-mouth="mouth_medium"] .nyra-mouth-overlay,
+.nyra-avatar[data-mouth="mouth_open"] .nyra-mouth-overlay,
+.nyra-avatar[data-mouth="mouth_smile"] .nyra-mouth-overlay { opacity: 1; }
+.nyra-avatar[data-mouth="mouth_closed"] .mouth-open,
+.nyra-avatar[data-mouth="mouth_small"] .mouth-open,
+.nyra-avatar[data-mouth="mouth_smile"] .mouth-open { opacity: 0; }
+.nyra-avatar[data-mouth="mouth_small"] .mouth-line { stroke-width: .58; }
+.nyra-avatar[data-mouth="mouth_medium"] .mouth-open { rx: 1.35; ry: .85; }
+.nyra-avatar[data-mouth="mouth_open"] .mouth-open { rx: 1.7; ry: 1.5; }
+
+.nyra-neural-link { fill: #22d3ee; opacity: .1; filter: drop-shadow(0 0 .2px #22d3ee); }
+.nyra-avatar[data-status="listening"] .nyra-neural-link { opacity: .85; filter: drop-shadow(0 0 1.2px #22d3ee); }
+.nyra-avatar[data-status="thinking"] .nyra-neural-link { animation: neural-pulse 1.65s ease-in-out infinite; }
+.nyra-avatar[data-status="speaking"] .nyra-neural-link { animation: neural-activity .42s steps(2, end) infinite; }
+.nyra-avatar[data-status="offline"] .nyra-neural-link { fill: #62727a; opacity: .22; }
+
+.nyra-eye-network { fill: #22d3ee; stroke: #22d3ee; stroke-width: .08; opacity: 0; }
+.nyra-avatar[data-status="listening"] .nyra-eye-network { opacity: .3; }
+.nyra-avatar[data-status="thinking"] .nyra-eye-network { opacity: .48; animation: network-think 1.8s ease-in-out infinite; }
+.nyra-avatar[data-state="concerned"] .nyra-eye-network { opacity: .08; }
+.nyra-avatar[data-state="curious"] .nyra-avatar-base { transform: translate(calc(var(--head-x, 0%) + var(--body-x, 0%)), calc(var(--head-y, 0%) - .2%)) rotate(calc(var(--head-tilt, 0deg) + .7deg)); }
+.nyra-avatar[data-state="amused"] .nyra-avatar-base { transform: translate(calc(var(--head-x, 0%) + var(--body-x, 0%)), var(--head-y, 0%)) rotate(calc(var(--head-tilt, 0deg) - .35deg)); }
+.nyra-avatar[data-state="focused"] .nyra-avatar-base { filter: contrast(1.025); }
+.nyra-avatar[data-state="concerned"] .nyra-avatar-base { filter: saturate(.92) brightness(.97); }
+.nyra-avatar[data-state="tired"] .nyra-avatar-base { filter: saturate(.9) brightness(.96); }
+.nyra-avatar[data-state="surprised"] .nyra-avatar-base { transform: translate(calc(var(--head-x, 0%) + var(--body-x, 0%)), calc(var(--head-y, 0%) - .25%)) rotate(var(--head-tilt, 0deg)); }
+
+.nyra-avatar[data-idle-animation="true"] { animation: nyra-breathe 6.6s ease-in-out infinite; }
+/* Hair is not a separately segmented layer yet; avoid a rectangular fake sheen. */
+.nyra-hair-motion { display: none; }
+.nyra-avatar[data-blink="true"] .nyra-eye-overlay { animation: avatar-blink 6.4s ease-in-out infinite; }
+.nyra-avatar[data-eye-movement="true"] .nyra-eye-network { animation: eye-drift 9s ease-in-out infinite; }
+
+.avatar-debug {
+  position: absolute;
+  z-index: 5;
+  left: 4%;
+  bottom: 3%;
+  max-width: 92%;
+  padding: 6px 8px;
+  background: #071015d9;
+  border: 1px solid #164e63;
+  color: #9be7ed;
+  font: 9px IBM Plex Mono, monospace;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.avatar-loading { display: block; width: 100%; height: 100%; background: url('/avatar/nyra_v2/master/nyra-avatar-master.png') center bottom/contain no-repeat; }
+.nyra-svg-fallback { position: relative; display: block; width: 100%; height: 100%; }
+
+@keyframes nyra-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-.25%) scale(1.0025); }
+}
+@keyframes neural-pulse { 0%, 100% { opacity: .18; } 50% { opacity: .9; } }
+@keyframes neural-activity { 0% { opacity: .25; } 50% { opacity: .95; } }
+@keyframes network-think { 50% { opacity: .18; } }
+@keyframes eye-drift { 0%, 40%, 100% { transform: translateX(0); } 48%, 57% { transform: translateX(.32px); } 72%, 80% { transform: translateX(-.22px); } }
+@keyframes avatar-blink { 0%, 43.5%, 46.2%, 100% { opacity: 0; } 44.3%, 45.4% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nyra-avatar, .nyra-avatar * { animation: none !important; }
+}
+
+/* NYRA Avatar V2: the bitmap and every functional layer share one SVG viewBox. */
+.nyra-avatar-v2 {
+  overflow: hidden;
+  transform: none;
+  animation: none;
+}
+
+.nyra-v2-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.nyra-v2-character-root {
+  transform: translate(
+    calc(var(--nyra-root-x, 0px) + var(--nyra-pointer-head-x, 0px)),
+    calc(var(--nyra-root-y, 0px) + var(--nyra-pointer-head-y, 0px))
+  ) rotate(calc(var(--nyra-root-tilt, 0deg) + var(--nyra-pointer-head-tilt, 0deg)));
+  transform-box: view-box;
+  transform-origin: var(--nyra-head-origin-x, 522px) var(--nyra-head-origin-y, 610px);
+  transition: filter .34s ease-out;
+}
+
+.nyra-v2-presence {
+  transform-box: view-box;
+  transform-origin: 543px 1420px;
+}
+
+.nyra-v2-master,
+.nyra-v2-eye-layer,
+.nyra-v2-mouth-layer {
+  pointer-events: none;
+  user-select: none;
+}
+
+.nyra-v2-eye-layer,
+.nyra-v2-mouth-layer {
+  opacity: 0;
+  transition: opacity 24ms linear;
+}
+
+.nyra-v2-gaze-layer {
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+
+.nyra-avatar-v2[data-eye="open"][data-eye-movement="true"] .nyra-v2-gaze-layer { opacity: 1; }
+.nyra-v2-gaze-pupils {
+  transform: translate(
+    calc(var(--nyra-eye-control-x, 0px) + var(--nyra-eye-follow-x, 0px)),
+    calc(var(--nyra-eye-control-y, 0px) + var(--nyra-eye-follow-y, 0px))
+  );
+  transform-box: view-box;
+  transition: transform 30ms linear;
+}
+
+.nyra-avatar-v2[data-eye="seventy_five"] .nyra-v2-eye-seventy-five,
+.nyra-avatar-v2[data-eye="half"] .nyra-v2-eye-half,
+.nyra-avatar-v2[data-eye="twenty_five"] .nyra-v2-eye-twenty-five,
+.nyra-avatar-v2[data-eye="closed"] .nyra-v2-eye-closed,
+.nyra-avatar-v2[data-mouth="mouth_small"] .nyra-v2-mouth-small,
+.nyra-avatar-v2[data-mouth="mouth_medium"] .nyra-v2-mouth-medium,
+.nyra-avatar-v2[data-mouth="mouth_open"] .nyra-v2-mouth-open,
+.nyra-avatar-v2[data-mouth="mouth_wide"] .nyra-v2-mouth-wide,
+.nyra-avatar-v2[data-mouth="mouth_smile"] .nyra-v2-mouth-smile,
+.nyra-avatar-v2[data-mouth="mouth_speaking_smile"] .nyra-v2-mouth-speaking-smile {
+  opacity: 1;
+}
+
+.nyra-v2-breath-highlight {
+  opacity: 0;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+.nyra-avatar-v2[data-idle-animation="true"][data-status="idle"] .nyra-v2-breath-highlight {
+  animation: nyra-v2-breathe 6.8s ease-in-out infinite;
+}
+
+.nyra-avatar-v2[data-idle-animation="true"][data-status="idle"] .nyra-v2-presence {
+  animation: nyra-v2-presence-idle 7.8s ease-in-out infinite;
+}
+
+.nyra-avatar-v2[data-idle-animation="true"][data-status="thinking"] .nyra-v2-presence {
+  animation: nyra-v2-presence-thinking 4.8s ease-in-out infinite;
+}
+
+.nyra-avatar-v2[data-idle-animation="true"][data-status="speaking"] .nyra-v2-presence {
+  animation: nyra-v2-presence-speaking 2.7s ease-in-out infinite;
+}
+
+.nyra-v2-headphones {
+  opacity: .08;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.nyra-avatar-v2[data-status="listening"] .nyra-v2-headphones { opacity: .78; }
+.nyra-avatar-v2[data-status="thinking"] .nyra-v2-headphones { animation: nyra-v2-headphone-thinking 1.8s ease-in-out infinite; }
+.nyra-avatar-v2[data-status="speaking"] .nyra-v2-headphones { animation: nyra-v2-headphone-speaking .72s ease-in-out infinite; }
+.nyra-avatar-v2[data-status="offline"] .nyra-v2-headphones { opacity: 0; }
+.nyra-avatar-v2[data-status="thinking"] .nyra-v2-character-root { filter: saturate(.98) contrast(1.015); }
+.nyra-avatar-v2[data-status="listening"] .nyra-v2-character-root { filter: brightness(1.008); }
+.nyra-avatar-v2[data-state="concerned"] .nyra-v2-character-root { filter: saturate(.94) brightness(.98); }
+.nyra-avatar-v2[data-expression="slight_smile"] .nyra-v2-character-root { filter: saturate(1.012) brightness(1.006); }
+.nyra-avatar-v2[data-expression="focused"] .nyra-v2-character-root { filter: contrast(1.018); }
+.nyra-avatar-v2[data-expression="surprised_soft"] .nyra-v2-character-root { filter: brightness(1.008); }
+
+@keyframes nyra-v2-breathe {
+  0%, 100% { opacity: .008; transform: scaleY(1); transform-origin: 543px 1420px; }
+  50% { opacity: .045; transform: scaleY(1.008); transform-origin: 543px 1420px; }
+}
+
+@keyframes nyra-v2-presence-idle {
+  0%, 100% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-2px) scale(1.0015); }
+  72% { transform: translate(1px, -1px) scale(1.001); }
+}
+
+@keyframes nyra-v2-presence-thinking {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1.5px) rotate(.12deg); }
+}
+
+@keyframes nyra-v2-presence-speaking {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+
+@keyframes nyra-v2-headphone-thinking {
+  0%, 100% { opacity: .16; }
+  50% { opacity: .55; }
+}
+
+@keyframes nyra-v2-headphone-speaking {
+  0%, 100% { opacity: .22; }
+  50% { opacity: .62; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nyra-avatar-v2 .nyra-v2-character-root { transition: none; }
+  .nyra-avatar-v2 .nyra-v2-gaze-pupils { transition: none; }
+  .nyra-avatar-v2[data-status="listening"] .nyra-v2-headphones { opacity: .78; }
+  .nyra-avatar-v2[data-status="thinking"] .nyra-v2-headphones { opacity: .42; }
+  .nyra-avatar-v2[data-status="speaking"] .nyra-v2-headphones { opacity: .5; }
+}

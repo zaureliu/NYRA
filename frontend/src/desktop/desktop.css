@@ -1,0 +1,120 @@
+:root, html, body, #root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+  background-color: transparent !important;
+  font-family: Inter, Segoe UI, sans-serif;
+  color: #d8e7e9;
+}
+
+* { box-sizing: border-box; }
+html::before, html::after, body::before, body::after, #root::before, #root::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+}
+
+.desktop-presence {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  user-select: none;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.avatar-button {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  padding: 0;
+  overflow: visible;
+  cursor: pointer;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.desktop-avatar,
+.avatar-button > .nyra-avatar,
+.avatar-button > .nyra-svg-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: transparent !important;
+  filter: drop-shadow(0 7px 9px rgba(7, 4, 12, .38));
+}
+
+.desktop-avatar .nyra-avatar-base { object-fit: contain; object-position: center bottom; }
+.drag-region { position: absolute; z-index: 6; left: 34%; top: 19%; width: 32%; height: 42%; border: 0; background: transparent; opacity: 0; cursor: move; }
+
+.presence-status {
+  position: absolute;
+  z-index: 7;
+  right: 6%;
+  bottom: 2%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font: 600 8px IBM Plex Mono, monospace;
+  letter-spacing: .12em;
+  color: #7ccdbd;
+  text-shadow: 0 1px 3px #000, 0 0 5px #000;
+  animation: status-appear .3s ease-out;
+}
+.presence-status i { display: inline-block; width: 4px; height: 4px; margin-right: 6px; border-radius: 50%; background: #22d3ee; box-shadow: 0 0 7px #22d3ee; }
+.presence-status.offline { color: #d08a92; }
+.presence-status.offline i { background: #b85d69; box-shadow: none; }
+
+.speech-bubble {
+  position: absolute;
+  z-index: 8;
+  top: 2%;
+  right: 2%;
+  max-width: 74%;
+  padding: 11px 13px;
+  border: 1px solid rgba(34, 211, 238, .28);
+  border-radius: 9px 9px 2px 9px;
+  background: rgba(9, 18, 25, .91);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  font-size: 12px;
+  line-height: 1.45;
+  animation: appear .25s ease-out;
+  user-select: text;
+}
+.speech-bubble strong { display: block; margin-bottom: 5px; color: #65d2dd; font: 600 9px IBM Plex Mono, monospace; letter-spacing: .13em; }
+
+.context-card {
+  position: absolute;
+  z-index: 10;
+  right: 5%;
+  bottom: 5%;
+  left: 5%;
+  padding: 10px;
+  border: 1px solid #385763;
+  background: rgba(9, 18, 25, .96);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, .7);
+  user-select: text;
+}
+.context-card textarea { width: 100%; padding: 9px; resize: none; border: 1px solid #263c45; background: #0c171d; color: #d8e7e9; }
+.context-card div { display: flex; gap: 6px; margin-top: 7px; }
+.context-card button { padding: 7px; border: 1px solid #315862; background: #14232a; color: #a7e4ea; font: 600 8px IBM Plex Mono, monospace; }
+.avatar-debug { bottom: 8%; }
+
+.status-listening .avatar-button > .nyra-avatar { transform: translateY(-.2%); }
+.status-thinking .avatar-button > .nyra-avatar { filter: drop-shadow(0 7px 9px rgba(7, 4, 12, .38)) drop-shadow(0 0 5px rgba(34, 211, 238, .16)); }
+.status-offline .avatar-button > .nyra-avatar { filter: grayscale(.18) brightness(.86) drop-shadow(0 7px 9px rgba(7, 4, 12, .38)); }
+
+@keyframes appear { from { opacity: 0; transform: translateY(5px); } }
+@keyframes status-appear { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }

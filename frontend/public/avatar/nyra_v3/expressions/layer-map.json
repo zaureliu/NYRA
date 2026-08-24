@@ -1,0 +1,6 @@
+{
+  "type": "vector-overlay-placeholder",
+  "states": ["neutral", "happy", "curious", "focused", "concerned", "amused", "tired", "surprised"],
+  "implementation": "frontend/src/avatar/LayeredRenderer.tsx",
+  "replaceable": true
+}

@@ -1,0 +1,46 @@
+# NYRA Desktop Application Control V1 — registry de aplicativos desktop.
+# IDs válidos existem somente aqui; tools desktop_* rejeitam qualquer outro valor.
+# `executable` pode ser caminho absoluto ou nome resolvido via PATH (shutil.which).
+apps:
+  - id: notepad
+    display_name: Bloco de Notas
+    enabled: true
+    executable: notepad.exe
+    process_names: [notepad.exe]
+    window_title_contains: ["Bloco de Notas", "Notepad", "Sem título"]
+    single_instance: false
+    startup_timeout_seconds: 10
+    risk: LOW_RISK
+
+  - id: calculadora
+    display_name: Calculadora
+    enabled: true
+    executable: calc.exe
+    process_names: [CalculatorApp.exe, ApplicationFrameHost.exe, calc.exe]
+    window_title_contains: ["Calculadora", "Calculator"]
+    single_instance: true
+    startup_timeout_seconds: 12
+    notes: "UWP: a janela pode pertencer a ApplicationFrameHost; verificação por título cobre isso."
+    risk: LOW_RISK
+
+  - id: paint
+    display_name: Paint
+    enabled: true
+    executable: mspaint.exe
+    process_names: [mspaint.exe]
+    window_title_contains: ["Paint"]
+    single_instance: false
+    startup_timeout_seconds: 10
+    risk: LOW_RISK
+
+  - id: explorer
+    display_name: Explorador de Arquivos
+    enabled: true
+    executable: explorer.exe
+    arguments: []
+    process_names: [explorer.exe]
+    window_title_contains: ["Explorador de Arquivos", "File Explorer"]
+    single_instance: false
+    startup_timeout_seconds: 8
+    notes: "Abrir nova janela do Explorer; nunca encerrar o processo explorer existente."
+    risk: LOW_RISK

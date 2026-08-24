@@ -1,0 +1,5 @@
+.desktop-settings { display: flex; flex-direction: column; gap: 9px; font-size: 11px; }
+.desktop-settings > strong { font: 600 9px IBM Plex Mono; color: #65d2dd; letter-spacing: .12em; }
+.desktop-settings label { display: flex; align-items: center; gap: 7px; }
+.desktop-settings small { color: #789097; font-size: 9px; }
+.desktop-settings select { margin-left: auto; border: 1px solid #315862; background: #0c171d; color: #a7e4ea; font-size: 10px; }

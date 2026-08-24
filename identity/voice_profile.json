@@ -1,0 +1,77 @@
+{
+  "profile_id": "NYRA_VOICE",
+  "default_language": "pt-BR",
+  "presentation": "adult_feminine",
+  "provider": "kokoro",
+  "model": "kokoro-v1.0",
+  "reference_file": "data/voices/nyra_reference.wav",
+  "edge_rate": "+0%",
+  "edge_pitch": "+5Hz",
+  "edge_volume": "+0%",
+  "voice": "pf_dora",
+  "speaking_rate": 0.97,
+  "temperature": 0.8,
+  "exaggeration": 0.5,
+  "cfg_weight": 0.45,
+  "seed": 42,
+  "sentence_pause_ms": 240,
+  "paragraph_pause_ms": 1200,
+  "selection": {
+    "reason": "TTS local primário validado para pt-BR, com latência muito menor que o provider experimental em CPU",
+    "selected_after_real_samples": true,
+    "pitch_shift": false,
+    "reference_audio_required": false
+  },
+  "emotion_modifiers": {
+    "neutral": {
+      "rate_multiplier": 1.0,
+      "exaggeration_delta": 0.0,
+      "cfg_delta": 0.0,
+      "pause_multiplier": 1.0
+    },
+    "happy": {
+      "rate_multiplier": 1.02,
+      "exaggeration_delta": 0.04,
+      "cfg_delta": -0.02,
+      "pause_multiplier": 0.94
+    },
+    "curious": {
+      "rate_multiplier": 0.99,
+      "exaggeration_delta": 0.04,
+      "cfg_delta": -0.01,
+      "pause_multiplier": 1.04
+    },
+    "focused": {
+      "rate_multiplier": 0.96,
+      "exaggeration_delta": -0.04,
+      "cfg_delta": 0.04,
+      "pause_multiplier": 1.06
+    },
+    "concerned": {
+      "rate_multiplier": 0.92,
+      "exaggeration_delta": -0.06,
+      "cfg_delta": 0.05,
+      "pause_multiplier": 1.18
+    },
+    "amused": {
+      "rate_multiplier": 1.0,
+      "exaggeration_delta": 0.06,
+      "cfg_delta": -0.01,
+      "pause_multiplier": 0.98
+    },
+    "tired": {
+      "rate_multiplier": 0.9,
+      "exaggeration_delta": -0.08,
+      "cfg_delta": 0.03,
+      "pause_multiplier": 1.15
+    },
+    "surprised": {
+      "rate_multiplier": 1.03,
+      "exaggeration_delta": 0.08,
+      "cfg_delta": -0.03,
+      "pause_multiplier": 0.92
+    }
+  },
+  "selected_by_user_at": "2026-08-22T22:00:59+00:00",
+  "voice_hunter_candidate_id": "kokoro-pf-dora"
+}

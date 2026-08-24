@@ -1,0 +1,8 @@
+idle: {expression: neutral, neural_link: idle, motion: idle_soft}
+listening: {expression: curious, neural_link: listening, motion: attention}
+thinking: {expression: focused, neural_link: thinking, motion: thinking}
+speaking: {neural_link: speaking}
+amused: {expression: amused, motion: head_tilt}
+sentinel_warning: {expression: concerned, neural_link: warning, motion: attention}
+sentinel_critical: {expression: concerned, neural_link: critical, motion: alert}
+network_recovery: {expression: neutral, neural_link: idle}

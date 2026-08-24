@@ -1,0 +1,40 @@
+.settings-group { border: 1px solid var(--line); padding: 15px; }
+.settings-group h3 { font: 600 11px IBM Plex Mono; color: var(--cyan); letter-spacing: .13em; margin: 0 0 15px; }
+.settings-group label { display: flex; flex-direction: column; gap: 6px; font: 8px IBM Plex Mono; color: var(--muted); }
+.settings-group select, .settings-group textarea { background: #080d11; border: 1px solid var(--line); color: #c3d3d8; padding: 8px; }
+.pronunciation-terms { display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow:auto; margin:10px 0; }
+.pronunciation-terms button, .term-chip { border:1px solid var(--line); background:#0b151b; color:#b9d4da; padding:5px 7px; font:9px IBM Plex Mono; }
+.pronunciation-terms small { display:block; color:var(--muted); font-size:7px; }
+.pronunciation-preview { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; font:10px IBM Plex Mono; }
+.pronunciation-preview strong { color:var(--cyan); font-size:9px; letter-spacing:.08em; }
+.pronunciation-preview p { color:#d6e4e7; white-space:pre-wrap; }
+.term-chip { display:inline-block; margin:3px; color:#9be7f2; }
+.adult-toggle { margin-top:10px; border-top:1px solid var(--line); padding-top:8px; }
+.adult-toggle input { accent-color:#d77c9a; }
+.adult-toggle small { color:var(--muted); font-size:8px; }
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.settings-actions { display: flex; align-items: center; gap: 8px; margin-top: 13px; }
+.settings-actions button { border: 1px solid #315862; background: #14232a; color: #a7e4ea; padding: 9px 11px; font: 600 8px IBM Plex Mono; cursor: pointer; }
+.settings-actions button:disabled { opacity: .35; }
+.settings-actions .danger { border-color: #834c55; color: #f2aab3; }
+.settings-actions audio { height: 32px; max-width: 230px; }
+.ab-actions button { flex: 1; }
+.lab-notice { font-size: 10px; color: #9ccbd0; }
+.lab-notice.error, .warn { color: #e88f9a !important; }
+.level-meter { height: 14px; background: #070a0d; border: 1px solid var(--line); position: relative; overflow: hidden; }
+.level-meter i { display: block; height: 100%; background: linear-gradient(90deg,#3b9aaa,#d4b955,#d85f69); transition: width .08s; }
+.level-meter b { position: absolute; top: 0; height: 100%; width: 1px; background: #fff; }
+.mic-readout { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; margin: 12px 0; font: 8px IBM Plex Mono; color: #7e9299; }
+.transcript { padding: 10px; border-left: 2px solid var(--cyan); background: #101a20; font-size: 11px; line-height: 1.5; }
+.audio-settings-v2 { display: grid; gap: 12px; width: 100%; }
+.audio-settings-v2 input[type="range"] { width: 100%; accent-color: var(--cyan); }
+.audio-settings-v2 input[type="checkbox"] { accent-color: var(--cyan); }
+.setting-readonly { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); background: #080d11; }
+.setting-readonly span { color: var(--muted); font: 8px IBM Plex Mono; }
+.setting-readonly strong { color: #c3d3d8; font: 10px IBM Plex Mono; }
+.audio-diagnostics { margin-top: 0; }
+.diagnostic-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; padding: 14px; }
+.diagnostic-grid span { display: flex; justify-content: space-between; gap: 10px; padding: 8px; border: 1px solid var(--line); color: var(--muted); font: 8px IBM Plex Mono; }
+.diagnostic-grid b { color: #bcd7dc; text-align: right; }
+@media (max-width:720px) { .diagnostic-grid { grid-template-columns: 1fr; } }
+.transcript strong { display: block; font: 8px IBM Plex Mono; color: var(--cyan); }

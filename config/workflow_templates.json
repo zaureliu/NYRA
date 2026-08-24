@@ -1,0 +1,227 @@
+﻿{
+  "version": 1,
+  "description": "Templates oficiais de workflow da NYRA (spec Â§59-Â§62). Usam tools estruturadas do registry â€” nunca shell cru quando existe capability dedicada. Seed idempotente: templates ausentes sÃ£o criados; edits do operador nunca sÃ£o sobrescritos.",
+  "templates": [
+    {
+      "workflow_id": "wf_check_nyra_health",
+      "name": "Check NYRA Health",
+      "description": "VerificaÃ§Ã£o estruturada da saÃºde da NYRA: runtime services + status geral. Somente leitura.",
+      "trigger_phrases": ["verifica a nyra", "check nyra health", "health check"],
+      "risk": "READ_ONLY",
+      "parameters": {},
+      "steps": [
+        {
+          "step_id": "s1_runtime_status",
+          "tool": "runtime_status",
+          "params": {"service_id": ""},
+          "depends_on": [],
+          "verification": "snapshot dos runtime services disponÃ­vel",
+          "verification_probe": null,
+          "description": "Estado de todos os serviÃ§os gerenciados"
+        },
+        {
+          "step_id": "s2_system_stats",
+          "tool": "get_local_system_stats",
+          "params": {},
+          "depends_on": ["s1_runtime_status"],
+          "verification": "estatÃ­sticas locais retornadas",
+          "description": "CPU/RAM do host"
+        }
+      ]
+    },
+    {
+      "workflow_id": "wf_open_dev_environment",
+      "name": "Open Development Environment",
+      "description": "Abre VS Code no projeto NYRA e verifica runtime (frontend/Ollama).",
+      "trigger_phrases": ["abre ambiente de desenvolvimento", "open dev environment"],
+      "risk": "LOW_RISK",
+      "parameters": {"project_path": "<NYRA_ROOT>"},
+      "steps": [
+        {
+          "step_id": "s1_frontend",
+          "tool": "runtime_status",
+          "params": {"service_id": "nyra_frontend_dev"},
+          "depends_on": [],
+          "verification": "frontend dev server visÃ­vel ao supervisor",
+          "description": "Confere frontend dev antes de abrir editor"
+        },
+        {
+          "step_id": "s2_ollama",
+          "tool": "runtime_status",
+          "params": {"service_id": "ollama"},
+          "depends_on": [],
+          "verification": "ollama visÃ­vel ao supervisor",
+          "description": "Confere Ollama antes de abrir editor"
+        },
+        {
+          "step_id": "s3_vscode",
+          "tool": "desktop_launch",
+          "params": {"app": "vscode", "args": ["{project_path}"]},
+          "depends_on": ["s1_frontend", "s2_ollama"],
+          "verification": "janela do VS Code aberta",
+          "timeout_seconds": 60,
+          "rollback": null,
+          "description": "Abre VS Code no projeto NYRA"
+        }
+      ]
+    },
+    {
+      "workflow_id": "wf_check_homelab",
+      "name": "Check Homelab",
+      "description": "Overview somente leitura do homelab: hosts, OpenWrt, Proxmox, Home Assistant.",
+      "trigger_phrases": ["verifica meu homelab", "check homelab"],
+      "risk": "READ_ONLY",
+      "parameters": {},
+      "steps": [
+        {
+          "step_id": "s1_overview",
+          "tool": "homelab_overview",
+          "params": {},
+          "depends_on": [],
+          "verification": "overview agregado retornado",
+          "description": "Estado consolidado dos hosts"
+        },
+        {
+          "step_id": "s2_ha",
+          "tool": "ha_status",
+          "params": {},
+          "depends_on": ["s1_overview"],
+          "verification": "status do Home Assistant retornado",
+          "description": "Home Assistant (UNCONFIGURED Ã© estado vÃ¡lido)"
+        },
+        {
+          "step_id": "s3_proxmox",
+          "tool": "proxmox_cluster_status",
+          "params": {},
+          "depends_on": ["s1_overview"],
+          "verification": "cluster status ou AUTH_MISSING honesto",
+          "description": "Proxmox read-only"
+        },
+        {
+          "step_id": "s4_openwrt",
+          "tool": "openwrt_status",
+          "params": {},
+          "depends_on": ["s1_overview"],
+          "verification": "status do OpenWrt retornado",
+          "description": "OpenWrt via SSH trusted host"
+        }
+      ]
+    },
+    {
+      "workflow_id": "wf_open_app_and_file",
+      "name": "Open Application and File",
+      "description": "Abre um aplicativo e um arquivo associado (parÃ¢metros app/file).",
+      "trigger_phrases": ["abre app e arquivo"],
+      "risk": "LOW_RISK",
+      "parameters": {"app": "notepad", "file_path": ""},
+      "steps": [
+        {
+          "step_id": "s1_app",
+          "tool": "desktop_open_application",
+          "params": {"app_id": "{app}"},
+          "depends_on": [],
+          "verification": "aplicativo aberto",
+          "timeout_seconds": 60,
+          "description": "Abre o aplicativo solicitado"
+        },
+        {
+          "step_id": "s2_file",
+          "tool": "desktop_open_file",
+          "params": {"path": "{file_path}"},
+          "depends_on": ["s1_app"],
+          "verification": "arquivo aberto no aplicativo",
+          "timeout_seconds": 60,
+          "description": "Abre o arquivo alvo"
+        }
+      ]
+    },
+    {
+      "workflow_id": "wf_build_project",
+      "name": "Build Project",
+      "description": "Build do frontend NYRA com verificaÃ§Ã£o determinÃ­stica do artefato dist.",
+      "trigger_phrases": ["build do projeto", "build project"],
+      "risk": "LOW_RISK",
+      "parameters": {"project_root": "<NYRA_ROOT>/frontend"},
+      "steps": [
+        {
+          "step_id": "s1_build",
+          "tool": "system_shell",
+          "params": {
+            "command": "npm run build",
+            "cwd": "{project_root}",
+            "shell": "powershell",
+            "timeout_seconds": 300
+          },
+          "depends_on": [],
+          "verification": "vite build concluÃ­do sem erro",
+          "timeout_seconds": 330,
+          "retry_policy": {"max_retries": 1, "backoff_seconds": 3},
+          "description": "tsc -b && vite build"
+        },
+        {
+          "step_id": "s2_verify_dist",
+          "tool": "filesystem_search",
+          "params": {"path": "{project_root}/dist", "pattern": "index.html"},
+          "depends_on": ["s1_build"],
+          "verification": "index.html presente em dist/",
+          "verification_probe": null,
+          "description": "Prova do artefato buildado"
+        }
+      ]
+    },
+    {
+      "workflow_id": "wf_diagnose_local_service",
+      "name": "Diagnose Local Service",
+      "description": "DiagnÃ³stico somente leitura de um serviÃ§o local gerenciado (parÃ¢metro service_id).",
+      "trigger_phrases": ["diagnostica servico local"],
+      "risk": "READ_ONLY",
+      "parameters": {"service_id": "nyra_backend"},
+      "steps": [
+        {
+          "step_id": "s1_health",
+          "tool": "runtime_health",
+          "params": {"service_id": "{service_id}"},
+          "depends_on": [],
+          "verification": "resultado de health retornado",
+          "description": "Health check via supervisor"
+        },
+        {
+          "step_id": "s2_logs",
+          "tool": "runtime_logs",
+          "params": {"service_id": "{service_id}", "lines": 40},
+          "depends_on": ["s1_health"],
+          "verification": "tail de logs retornado",
+          "description": "Ãšltimas linhas de log"
+        }
+      ]
+    },
+    {
+      "workflow_id": "wf_diagnose_remote_host",
+      "name": "Diagnose Remote Host",
+      "description": "DiagnÃ³stico read-only de host remoto cadastrado no Trusted Host Registry (parÃ¢metro host_alias).",
+      "trigger_phrases": ["diagnostica host remoto"],
+      "risk": "LOW_RISK",
+      "parameters": {"host_alias": ""},
+      "steps": [
+        {
+          "step_id": "s1_ping",
+          "tool": "ping_host",
+          "params": {"host": "{host_alias}"},
+          "depends_on": [],
+          "verification": "latÃªncia reportada ou falha honesta de reachability",
+          "description": "Reachability primeiro"
+        },
+        {
+          "step_id": "s2_shell",
+          "tool": "remote_shell",
+          "params": {"host": "{host_alias}", "command": "uptime"},
+          "depends_on": ["s1_ping"],
+          "verification": "saÃ­da do uptime ou AUTH_FAILURE honesto",
+          "timeout_seconds": 45,
+          "description": "Somente comandos READ_ONLY via remote_shell"
+        }
+      ]
+    }
+  ]
+}
+

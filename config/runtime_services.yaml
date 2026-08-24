@@ -1,0 +1,93 @@
+# NYRA Runtime Supervisor V1 — registry de serviços persistentes.
+# Tokens: {python} = executável Python do backend; {repo_root} = raiz do projeto.
+# IDs válidos existem somente aqui; tools runtime_* rejeitam qualquer outro valor.
+version: 1
+services:
+  - id: nyra_backend
+    display_name: NYRA Backend
+    type: PROCESS
+    ownership: OWNED
+    enabled: true
+    working_directory: "{repo_root}/backend"
+    start_command: ["{python}", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]
+    health:
+      kind: HTTP
+      url: "http://127.0.0.1:8000/api/health"
+      timeout_seconds: 3
+      expected_status: 200
+    readiness:
+      kind: HEALTH_PASS
+    capabilities: {status: true, health: true, start: true, stop: false, restart: false, logs: true}
+    startup_policy: MANUAL
+    startup_timeout_seconds: 45
+    auto_recovery: {enabled: false}
+    notes: "stop/restart desabilitados: self-restart do backend exige supervisor externo (limitação declarada, sem mecanismo confiável nesta etapa)."
+
+  - id: nyra_frontend_dev
+    display_name: NYRA Frontend (Vite dev)
+    type: PROCESS
+    ownership: OWNED
+    enabled: true
+    working_directory: "{repo_root}/frontend"
+    start_command: ["node", "node_modules/vite/bin/vite.js", "--host", "127.0.0.1"]
+    health:
+      kind: TCP
+      host: 127.0.0.1
+      port: 5173
+      timeout_seconds: 2
+    readiness:
+      kind: HEALTH_PASS
+    capabilities: {status: true, health: true, start: true, stop: true, restart: true, logs: true}
+    startup_policy: MANUAL
+    startup_timeout_seconds: 25
+    stop_grace_seconds: 8
+    auto_recovery: {enabled: false}
+    notes: "Servidor de desenvolvimento Vite; produção rota via Tauri e não depende desta entrada."
+
+  - id: ollama
+    display_name: Ollama
+    type: EXTERNAL_SERVICE
+    ownership: EXTERNAL
+    enabled: true
+    health:
+      kind: WARM_MANAGER
+    readiness:
+      kind: OLLAMA_WARM
+    capabilities: {status: true, health: true, start: false, stop: false, restart: false, logs: false}
+    startup_policy: MONITOR_ONLY
+    auto_recovery: {enabled: false}
+    notes: "Processo externo gerenciado pela instalação própria; nunca iniciar segunda instância. Readiness segue critério do Warm Manager existente."
+
+  - id: utamo_sentinel
+    display_name: UTAMO Sentinel
+    type: EXTERNAL_SERVICE
+    ownership: EXTERNAL
+    enabled: true
+    health:
+      kind: SENTINEL
+    readiness:
+      kind: HEALTH_PASS
+    capabilities: {status: true, health: true, start: false, stop: false, restart: false, logs: false}
+    startup_policy: MONITOR_ONLY
+    auto_recovery: {enabled: false}
+    notes: "Bridge Sentinel existente é a fonte de verdade para detecção/estado; supervisor apenas observa."
+
+  - id: nyra_test_service
+    display_name: Serviço de Teste NYRA
+    type: PROCESS
+    ownership: OWNED
+    enabled: true
+    working_directory: "{repo_root}"
+    start_command: ["{python}", "{repo_root}/scripts/runtime_test_service.py"]
+    health:
+      kind: HTTP
+      url: "http://127.0.0.1:18765/health"
+      timeout_seconds: 2
+    readiness:
+      kind: HEALTH_PASS
+    capabilities: {status: true, health: true, start: true, stop: true, restart: true, logs: true}
+    startup_policy: MANUAL
+    startup_timeout_seconds: 15
+    stop_grace_seconds: 4
+    auto_recovery: {enabled: false}
+    notes: "Serviço seguro e reversível para smoke tests ACT→VERIFY."
