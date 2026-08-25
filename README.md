@@ -15,7 +15,7 @@ nuvem obrigatória.
 - **Homelab**: control plane com probes ICMP/TCP/SSH, adapters OpenWrt/Proxmox/HA, inventário somente-leitura
 - **Operations UI**: painel web embutido no app desktop (capabilities, integrações, rede, voz, settings)
 - **Credential Broker**: segredos ficam no Windows Credential Manager; o LLM nunca vê valores
-- **Estados honestos**: `UNCONFIGURED`/`AUTH_FAILED`/`OFFLINE` reais — nada de status inventado
+- **Estados honestos**: `UNCONFIGURED`/`AUTH_FAILED`/`OFFLINE` reais nada de status inventado
 
 ## Arquitetura
 
