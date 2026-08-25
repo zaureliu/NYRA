@@ -2,7 +2,7 @@
 
 Assistente pessoal **local-first** para Windows: conversa por texto e voz,
 automação do próprio ambiente com aprovação explícita, monitoramento de rede e
-homelab (OpenWrt / Proxmox / Home Assistant) — tudo rodando na sua máquina, sem
+homelab (OpenWrt / Proxmox / Home Assistant) tudo rodando na sua máquina, sem
 nuvem obrigatória.
 
 > Projeto pessoal em desenvolvimento contínuo. Não é um produto comercial.
@@ -10,8 +10,8 @@ nuvem obrigatória.
 ## O que ela faz
 
 - **Conversa** por texto/voz com LLM local via [Ollama](https://ollama.com) (padrão: `qwen3:8b`)
-- **Ferramentas com segurança**: shell local, SSH para hosts confiáveis, desktop e browser do próprio usuário — sempre com schema, classificação de risco e aprovação single-use para ações sensíveis
-- **Voz local**: STT com Faster-Whisper, TTS com fallback (kokoro → edge-tts → pyttsx3), always-listening com wake word
+- **Ferramentas com segurança**: shell local, SSH para hosts confiáveis, desktop e browser do próprio usuário sempre com schema, classificação de risco e aprovação single-use para ações sensíveis
+- **Voz local**: STT com Faster-Whisper, TTS com fallback (kokoro > edge-tts > pyttsx3), always-listening com wake word
 - **Homelab**: control plane com probes ICMP/TCP/SSH, adapters OpenWrt/Proxmox/HA, inventário somente-leitura
 - **Operations UI**: painel web embutido no app desktop (capabilities, integrações, rede, voz, settings)
 - **Credential Broker**: segredos ficam no Windows Credential Manager; o LLM nunca vê valores
