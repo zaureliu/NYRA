@@ -17,12 +17,13 @@ def make_controller(tmp_path: Path) -> tuple[OperatorController, ShellApprovalGa
 
 
 async def grant_for(controller: OperatorController, gate: ShellApprovalGate, action: str, target: str,
-                    timeout_seconds: int = 120) -> str:
+                    timeout_seconds: int = 120, binding_digest: str = "") -> str:
     """Create + grant an approval whose fingerprint matches controller._approval."""
     import os
 
     record = gate.request(
-        command=f"{action}:{target}", shell="local_operator", working_directory=os.getcwd(),
+        command=f"{action}:{target}:{binding_digest or 'none'}",
+        shell="local_operator", working_directory=os.getcwd(),
         timeout_seconds=timeout_seconds, risk_level="LOW_RISK", target="local", agent_run_id=None,
     )
     assert gate.grant(record.approval_id, "test") is not None
@@ -38,7 +39,10 @@ async def test_fs_write_mkdir_read_rename_roundtrip(tmp_path: Path):
     assert result["success"] and result["effect_verified"] and target_dir.is_dir()
 
     file_path = target_dir / "arquivo.txt"
-    write_id = await grant_for(controller, gate, "fs_write", str(file_path))
+    write_id = await grant_for(
+        controller, gate, "fs_write", str(file_path),
+        binding_digest=controller._binding_digest(False, "conteúdo NYRA çãí"),
+    )
     written = await controller.fs_write(str(file_path), "conteúdo NYRA çãí",
                                         append=False, approval_id=write_id)
     assert written["success"] and written["effect_verified"]
@@ -46,7 +50,10 @@ async def test_fs_write_mkdir_read_rename_roundtrip(tmp_path: Path):
     read = await controller.fs_read(str(file_path))
     assert read["success"] and "conteúdo NYRA" in read["content"]
 
-    rename_id = await grant_for(controller, gate, "rename", str(file_path))
+    rename_id = await grant_for(
+        controller, gate, "rename", str(file_path),
+        binding_digest=controller._binding_digest("renomeado.txt"),
+    )
     renamed = await controller.fs_rename(str(file_path), "renomeado.txt", rename_id)
     assert renamed["success"] and renamed["effect_verified"] and (target_dir / "renomeado.txt").is_file()
 
@@ -81,6 +88,26 @@ async def test_fs_delete_blocks_protected_paths_without_approval(tmp_path: Path)
     blocked = await controller.fs_write(str(write_target), "x", append=False, approval_id=None)
     assert blocked["error_code"] == "APPROVAL_REQUIRED"
     assert blocked.get("approval_id")
+
+
+@pytest.mark.asyncio
+async def test_fs_write_approval_binds_exact_content_and_append_mode(tmp_path: Path):
+    controller, gate = make_controller(tmp_path)
+    target = tmp_path / "bound.txt"
+    pending = await controller.fs_write(str(target), "approved", append=False)
+    gate.grant(pending["approval_id"], "test")
+
+    tampered = await controller.fs_write(
+        str(target), "changed", append=False, approval_id=pending["approval_id"],
+    )
+    assert tampered["error_code"] == "APPROVAL_REJECTED"
+    assert not target.exists()
+
+    exact = await controller.fs_write(
+        str(target), "approved", append=False, approval_id=pending["approval_id"],
+    )
+    assert exact["success"] is True
+    assert target.read_text(encoding="utf-8") == "approved"
 
 
 @pytest.mark.asyncio

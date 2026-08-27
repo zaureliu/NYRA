@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -43,6 +44,7 @@ class ApplicationCandidate:
     target: str
     confidence: float = 0.0
     expected_window: bool = True
+    process_names: tuple[str, ...] = ()
 
     def public_dict(self) -> dict:
         return {
@@ -53,6 +55,7 @@ class ApplicationCandidate:
             "target": redact_secrets(self.target),
             "confidence": round(self.confidence, 3),
             "expected_window": self.expected_window,
+            "process_names": list(self.process_names),
         }
 
 
@@ -66,6 +69,8 @@ _KNOWN_APPS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("terminal", "windows terminal", "wt"), "wt.exe"),
     (("gerenciador de tarefas", "task manager", "taskmgr", "taskmgr.exe"), "taskmgr.exe"),
     (("painel de controle", "control panel", "control"), "control.exe"),
+    (("vs code", "vscode", "visual studio code", "code.exe"),
+     "%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe"),
     (("configuracoes", "configurações", "settings", "ms-settings:"), "ms-settings:"),
     (("executar", "run dialog", "run"), None),
 )
@@ -77,8 +82,14 @@ _TOKEN_SPLIT = re.compile(r"[\s\-_.]+")
 
 
 def normalize(value: str) -> str:
-    lowered = (value or "").casefold().strip()
-    return _SANITIZE.sub("", lowered)
+    """Minúsculas sem acentos e sem não-alfanuméricos.
+
+    Diacríticos são REMOVIDOS (NFKD + combining filter), não descartados
+    junto com a pontuação: 'Músicas' e 'musicas' normalizam iguais.
+    """
+    decomposed = unicodedata.normalize("NFKD", (value or "").casefold().strip())
+    unmarked = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return _SANITIZE.sub("", unmarked)
 
 
 def expand_launch_target(value: str) -> str:
@@ -273,11 +284,15 @@ class ApplicationDiscovery:
                 # AUMIDs contain a separator/dot pattern; plain paths are skipped here.
                 if "." not in app_id and "\\" not in app_id:
                     continue
+            is_executable_path = (
+                (chr(92) in app_id or "/" in app_id)
+                and app_id.casefold().endswith(".exe")
+            )
             candidates.append(ApplicationCandidate(
                 id=normalize(name),
                 display_name=name,
-                source="get_start_apps",
-                launch_method=LaunchMethod.APP_USER_MODEL_ID,
+                source="get_start_apps:executable" if is_executable_path else "get_start_apps",
+                launch_method=LaunchMethod.EXE if is_executable_path else LaunchMethod.APP_USER_MODEL_ID,
                 target=app_id,
                 confidence=0.7,
             ))
@@ -285,23 +300,162 @@ class ApplicationDiscovery:
 
     # -------------------------------------------------------------- index
 
+    @staticmethod
+    def _uninstall_candidates() -> list[ApplicationCandidate]:
+        """Metadata de desinstalação (nyra-full §2.3): DisplayName + DisplayIcon/InstallLocation."""
+        import winreg
+
+        hive_keys = (
+            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        )
+        candidates: list[ApplicationCandidate] = []
+        seen_names: set[str] = set()
+        for hive, key_path in hive_keys:
+            try:
+                with winreg.OpenKey(hive, key_path) as root:
+                    index = 0
+                    while True:
+                        try:
+                            subkey_name = winreg.EnumKey(root, index)
+                        except OSError:
+                            break
+                        index += 1
+                        if len(candidates) >= 400:
+                            break
+                        try:
+                            with winreg.OpenKey(root, subkey_name) as sub:
+                                def _value(name: str) -> str:
+                                    try:
+                                        value, _ = winreg.QueryValueEx(sub, name)
+                                        return str(value).strip()
+                                    except OSError:
+                                        return ""
+
+                                display = _value("DisplayName")
+                                if not display or len(display) < 2:
+                                    continue
+                                norm_name = normalize(display)
+                                if not norm_name or norm_name in seen_names:
+                                    continue
+                                system_component = _value("SystemComponent")
+                                if system_component == "1":
+                                    continue
+                                icon = _value("DisplayIcon")
+                                install_location = _value("InstallLocation")
+                                target = ""
+                                if icon:
+                                    icon = icon.split(",")[0].strip().strip('"')
+                                    if icon.casefold().endswith(".exe"):
+                                        expanded = expand_launch_target(icon)
+                                        if Path(expanded).is_file():
+                                            target = expanded
+                                if not target and install_location:
+                                    base = expand_launch_target(install_location.rstrip("\\"))
+                                    if base and Path(base).is_dir():
+                                        for exe in sorted(Path(base).glob("*.exe"))[:6]:
+                                            if exe.stem.casefold() in {"uninstall", "unins000", "setup", "update"}:
+                                                continue
+                                            target = str(exe)
+                                            break
+                                if not target:
+                                    continue
+                                seen_names.add(norm_name)
+                                candidates.append(ApplicationCandidate(
+                                    id=norm_name,
+                                    display_name=display,
+                                    source="uninstall_registry",
+                                    launch_method=LaunchMethod.EXE,
+                                    target=target,
+                                    confidence=0.65,
+                                ))
+                        except OSError:
+                            continue
+            except OSError:
+                continue
+        return candidates
+
+    @classmethod
+    def _common_dirs_candidates(cls) -> list[ApplicationCandidate]:
+        """Executáveis raiz em diretórios típicos (nyra-full §2.6), com limites."""
+        roots = []
+        local = os.environ.get("LOCALAPPDATA", "")
+        if local:
+            roots.append(Path(local) / "Programs")
+        program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        roots.append(Path(program_files))
+        pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        if pf86 != program_files:
+            roots.append(Path(pf86))
+        candidates: list[ApplicationCandidate] = []
+        skip_stems = {"uninstall", "unins000", "setup", "update", "crashpad_handler", "installer"}
+        max_dirs_per_root = 220
+        max_total = 500
+        for root in roots:
+            if len(candidates) >= max_total or not root.is_dir():
+                continue
+            scanned = 0
+            try:
+                children = sorted(root.iterdir())
+            except OSError:
+                continue
+            for child in children:
+                if scanned >= max_dirs_per_root or len(candidates) >= max_total:
+                    break
+                if not child.is_dir():
+                    continue
+                scanned += 1
+                try:
+                    exes = [exe for exe in child.glob("*.exe") if exe.stem.casefold() not in skip_stems]
+                except OSError:
+                    continue
+                if len(exes) != 1:
+                    # pastas com vários exes ficam cobertas por Atalhos do Menu Iniciar
+                    continue
+                exe = exes[0]
+                candidates.append(ApplicationCandidate(
+                    id=normalize(exe.stem),
+                    display_name=child.name,
+                    source="common_dirs",
+                    launch_method=LaunchMethod.EXE,
+                    target=str(exe),
+                    confidence=0.55,
+                ))
+        return candidates
+
     def index(self, force: bool = False) -> list[ApplicationCandidate]:
         if not force and self.cache.valid():
             return self.cache.entries
-        entries: dict[str, ApplicationCandidate] = {}
+        entries: dict[tuple[str, str, str], ApplicationCandidate] = {}
         for candidate in (
             self._known_candidates()
             + self._app_paths_candidates()
             + self._start_menu_candidates()
             + self._get_start_apps_candidates()
+            + self._uninstall_candidates()
+            + self._common_dirs_candidates()
             + self._path_candidates()
         ):
-            existing = entries.get(candidate.id)
+            key = (
+                candidate.id,
+                str(candidate.launch_method),
+                expand_launch_target(candidate.target).casefold(),
+            )
+            existing = entries.get(key)
             if existing is None or candidate.confidence > existing.confidence:
-                entries[candidate.id] = candidate
+                entries[key] = candidate
         self.cache.entries = list(entries.values())
         self.cache.indexed_at = time.monotonic()
         return self.cache.entries
+
+    def candidates_for(self, app_id: str) -> list[ApplicationCandidate]:
+        """Return every discovered launch route for one logical application."""
+        normalized = normalize(app_id)
+        return [
+            candidate for candidate in self.index()
+            if candidate.id == normalized
+        ]
 
     # ------------------------------------------------------------- search
 
@@ -362,19 +516,33 @@ class ApplicationDiscovery:
             return {"status": "NOT_FOUND", "candidates": [], "query": query}
         exact = [item for item in candidates if item.confidence >= 1.0]
         high = [item for item in candidates if item.confidence >= 0.85]
-        if len(exact) == 1:
+        exact_ids = {item.id for item in exact}
+        if len(exact_ids) == 1:
+            best = max(exact, key=lambda item: item.confidence)
             return {
                 "status": "EXACT_MATCH",
-                "candidate": exact[0].public_dict(),
+                "candidate": best.public_dict(),
                 "candidates": [item.public_dict() for item in candidates[:3]],
                 "query": query,
             }
         if len(exact) > 1:
-            distinct_targets = {item.target for item in exact}
-            if len(distinct_targets) == 1:
+            # nyra-full §31: mesmo executável por fontes diferentes NÃO é
+            # ambiguidade real (ex.: "Microsoft Edge" lnk + App Paths msedge).
+            def _final_key(item: ApplicationCandidate) -> tuple:
+                try:
+                    if item.launch_method == LaunchMethod.EXE:
+                        expanded = Path(expand_launch_target(item.target))
+                        return ("exe", expanded.name.casefold())
+                    return (str(item.launch_method), item.target.casefold())
+                except OSError:
+                    return (str(item.launch_method), item.target.casefold())
+
+            distinct = {_final_key(item) for item in exact}
+            if len(distinct) == 1:
+                best = max(exact, key=lambda item: (item.confidence, item.source == "shell_known"))
                 return {
                     "status": "EXACT_MATCH",
-                    "candidate": exact[0].public_dict(),
+                    "candidate": best.public_dict(),
                     "candidates": [item.public_dict() for item in candidates[:3]],
                     "query": query,
                 }

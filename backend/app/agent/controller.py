@@ -23,6 +23,21 @@ from app.tools.redaction import redact_secrets
 logger = logging.getLogger("nyra.agent")
 
 
+def _persistent_fingerprint_arguments(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Remove conteúdo privado antes de produzir fingerprints persistentes.
+
+    O loop pode usar os argumentos completos em memória para dedupe durante o
+    turno, mas o Agent Run salvo em disco deve reter somente metadados seguros.
+    """
+    safe = {key: value for key, value in arguments.items() if key != "approval_id"}
+    if tool == "clipboard_write_text" and "text" in safe:
+        safe["text"] = {
+            "redacted": True,
+            "length": len(str(safe["text"])),
+        }
+    return safe
+
+
 class AgentController:
     def __init__(self, settings: Settings, event_bus: EventBus, llm: LLMProvider, registry) -> None:
         self.settings = settings
@@ -116,7 +131,14 @@ class AgentController:
             summary_source = str(result_data.get("message") or result_data.get("stderr") or result_data.get("stdout") or "")
             safe_summary = redact_secrets(" ".join(summary_source.split()))[:400]
             command_fingerprint = hashlib.sha256(
-                json.dumps({"tool": tool, "arguments": {k: v for k, v in arguments.items() if k != "approval_id"}}, sort_keys=True, ensure_ascii=False).encode("utf-8")
+                json.dumps(
+                    {
+                        "tool": tool,
+                        "arguments": _persistent_fingerprint_arguments(tool, arguments),
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode("utf-8")
             ).hexdigest()
             result_fingerprint = hashlib.sha256(
                 json.dumps(

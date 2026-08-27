@@ -10,6 +10,7 @@ are protected from indiscriminate stops (§281-§285).
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import subprocess
@@ -56,11 +57,14 @@ class OperatorController:
         self.approvals = approvals
 
     async def _approval(self, action: str, target: str, risk: str, approval_id: str | None,
-                        description: str, timeout_seconds: int = 120) -> tuple[bool, dict | None]:
+                        description: str, timeout_seconds: int = 120,
+                        binding_digest: str = "") -> tuple[bool, dict | None]:
         """Single-use approval flow; returns (granted, error_payload)."""
         agent_run_id = current_agent_run_id.get()
+        binding = binding_digest or "none"
+        bound_description = f"{description} [params_sha256={binding[:16]}]"
         fingerprint = self.approvals.fingerprint(
-            f"{action}:{target}", "local_operator", os.getcwd(), timeout_seconds,
+            f"{action}:{target}:{binding}", "local_operator", os.getcwd(), timeout_seconds,
             target="local", agent_run_id=agent_run_id,
         )
         if approval_id:
@@ -70,14 +74,14 @@ class OperatorController:
                                "message": rejection or "Approval inválido para esta ação.", "approval_required": True}
             return True, None
         record = self.approvals.request(
-            command=description, shell="local_operator", working_directory=os.getcwd(),
+            command=bound_description, shell="local_operator", working_directory=os.getcwd(),
             timeout_seconds=timeout_seconds, risk_level=risk, target=target, agent_run_id=agent_run_id,
             fingerprint=fingerprint,
         )
         await self.event_bus.publish(
             EventType.SHELL_APPROVAL_REQUIRED,
             approval_id=record.approval_id, agent_run_id=agent_run_id,
-            command=description, shell="local_operator",
+            command=bound_description, shell="local_operator",
             risk_level=risk, reason=f"local operator {action}", turn_id=None,
         )
         return False, {
@@ -85,6 +89,11 @@ class OperatorController:
             "message": f"Ação '{description}' exige aprovação explícita do operador antes da execução.",
             "approval_required": True, "approval_id": record.approval_id,
         }
+
+    @staticmethod
+    def _binding_digest(*values: object) -> str:
+        payload = json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _run_elevated_command(powershell_statement: str, timeout_seconds: int = 60) -> dict:
@@ -166,6 +175,7 @@ class OperatorController:
         granted, error = await self._approval(
             "fs_write", str(resolved), "LOW_RISK", approval_id,
             f"{'anexar em' if append else 'escrever'} {resolved.name}",
+            binding_digest=self._binding_digest(bool(append), content),
         )
         if not granted and error is None:
             error = {"success": False, "error_code": "APPROVAL_REJECTED"}
@@ -235,7 +245,8 @@ class OperatorController:
         resolved = (Path.cwd() / clean).resolve() if not clean.is_absolute() else clean.resolve()
         safe_name = Path(new_name.strip().strip('"')).name
         granted, error = await self._approval("rename", str(resolved), "LOW_RISK", approval_id,
-                                              f"renomear {resolved.name} -> {safe_name}")
+                                              f"renomear {resolved.name} -> {safe_name}",
+                                              binding_digest=self._binding_digest(safe_name))
         if error:
             return operation_result(app="fs", action="rename", duration_ms=(time.perf_counter() - started) * 1000, **error)
         if not resolved.exists():
@@ -393,35 +404,11 @@ class OperatorController:
 
     async def process_start(self, executable: str, arguments: str = "", approval_id: str | None = None) -> dict:
         started = time.perf_counter()
-        clean = executable.strip().strip('"')
-        resolved = None
-        if Path(clean).is_file():
-            resolved = clean
-        else:
-            import shutil as _shutil
-
-            resolved = _shutil.which(clean)
-        if not resolved:
-            return operation_result(app="process", action="start", duration_ms=(time.perf_counter() - started) * 1000,
-                                    success=False, error_code="EXECUTABLE_NOT_FOUND",
-                                    message=f"Executável não encontrado no PATH: {clean}", execution_success=False)
-        argv = [resolved] + ([arguments] if arguments else [])
-        creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        try:
-            process = subprocess.Popen(  # noqa: S603 - executável resolvido via PATH validado
-                argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                close_fds=True, creationflags=creationflags,
-            )
-        except OSError as exc:
-            return operation_result(app="process", action="start", duration_ms=(time.perf_counter() - started) * 1000,
-                                    success=False, error_code="SPAWN_FAILED", message=str(exc)[:200], execution_success=False)
-        await asyncio_sleep_short()
-        alive = process.poll() is None
         return operation_result(app="process", action="start", duration_ms=(time.perf_counter() - started) * 1000,
-                                success=alive, execution_success=True, effect_verified=alive,
-                                verification_status="VERIFIED" if alive else "VERIFICATION_FAILED",
-                                message=f"Processo iniciado pid={process.pid}" + ("" if alive else " mas já encerrou."),
-                                detail={"pid": process.pid, "executable": resolved})
+                                success=False, execution_success=False,
+                                error_code="PROCESS_START_REQUIRES_SYSTEM_SHELL",
+                                verification_status="NOT_EXECUTED",
+                                message="Inicialização arbitrária de processos só é permitida por system_shell.")
 
     async def process_stop(self, pid: int, approval_id: str | None = None, force: bool = False, reason: str = "") -> dict:
         started = time.perf_counter()
@@ -440,6 +427,7 @@ class OperatorController:
         granted, error = await self._approval(
             "process_stop", f"{identity['pid']}:{identity['name']}", "ELEVATED", approval_id,
             f"parar processo {identity['name']} (pid {identity['pid']})", timeout_seconds=180,
+            binding_digest=self._binding_digest(bool(force)),
         )
         if error:
             payload = operation_result(app="process", action="stop", duration_ms=(time.perf_counter() - started) * 1000, **error)
@@ -581,7 +569,8 @@ class OperatorController:
         backup = await self.registry_read(key_path, safe_value_name)
         previous = (backup.get("detail") or {}).get("output", "")[:1500] if backup.get("success") else ""
         granted, error = await self._approval("registry_set", f"{hive}\\{rest}\\{safe_value_name}", "ELEVATED", approval_id,
-                                              f"definir {safe_value_name} em {hive}\\{rest}", timeout_seconds=180)
+                                              f"definir {safe_value_name} em {hive}\\{rest}", timeout_seconds=180,
+                                              binding_digest=self._binding_digest(safe_type, value))
         if error:
             return operation_result(app="registry", action="set", duration_ms=(time.perf_counter() - started) * 1000, **error)
         full_key = f"{hive}\\{rest}"

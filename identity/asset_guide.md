@@ -9,7 +9,7 @@ Pack ativo: `frontend/public/avatar/nyra_v2/`.
 - `frontend/src/assets/nyra-v2/master/nyra-avatar-master.png`: master interna oficial e imutável para derivações;
 - `docs/avatar-v2.md`: contrato completo e procedimento de extensão.
 
-Todo layer facial mede `1086×1448` e usa `viewBox="0 0 1086 1448"`. Não criar crops locais nem offsets por viewport. A referência original em `E:\nyra-v2\nyra_master.png` permanece fora do projeto e read-only.
+Todo layer facial mede `1086×1448` e usa `viewBox="0 0 1086 1448"`. Não criar crops locais nem offsets por viewport. A master versionada em `frontend/src/assets/nyra-v2/master/nyra-avatar-master.png` é a referência read-only.
 
 ## Histórico legado — assets V3
 

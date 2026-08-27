@@ -9,6 +9,8 @@ before acting (§24). Destructive modal acceptance is never automatic (§30).
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import re
 import time
 
@@ -28,9 +30,10 @@ from app.tools.redaction import redact_secrets
 
 _MODAL_UAC = re.compile(r"(?i)(controle de conta de usu|user account control|\buac\b)")
 _MODAL_ERROR = re.compile(r"(?i)^\[?(erro|error|alerta|warning|falha)")
-_MODAL_CONFIRM = re.compile(r"(?i)(confirmar|confirme|tem certeza|are you sure|excluir|apagar)")
+_MODAL_CONFIRM = re.compile(
+    r"(?i)(confirmar|confirme|tem certeza|are you sure|excluir|apagar|deletar|formatar|delete|format)"
+)
 _MODAL_SAVE = re.compile(r"(?i)(salvar como|save as)")
-_ACCEPT_LABELS = re.compile(r"^(ok|sim|yes|confirmar|confirm|excluir|delete|apagar|continuar)$")
 _DESTRUCTIVE_LABELS = re.compile(r"(?i)(excluir|apagar|deletar|formatar|delete)")
 
 
@@ -52,16 +55,35 @@ class VisionEngine:
         self._pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="nyra-vision-com",
         )
+        self._shutdown = False
 
     async def _run(self, fn, *args, **kwargs):
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._pool, lambda: fn(*args, **kwargs))
+
+        def invoke():
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                # UIA providers belong to the target application's COM/RPC
+                # lifetime. Dispose their apartment-bound proxies immediately,
+                # while still on this worker and before that app can close.
+                if getattr(fn, "__module__", "") == uia_layer.__name__:
+                    uia_layer.release_current_thread()
+
+        return await loop.run_in_executor(self._pool, invoke)
 
     def shutdown(self) -> None:
+        if self._shutdown:
+            return
+        self._shutdown = True
         try:
-            self._pool.shutdown(wait=False)
+            self._pool.submit(uia_layer.close_current_thread).result(timeout=5)
         except Exception:  # noqa: BLE001
             pass
+        finally:
+            self._pool.shutdown(wait=True, cancel_futures=True)
+            self.frames.clear()
+            self._fingerprints.clear()
 
     # ------------------------------------------------------------------ capture
     def capture(self, *, target: str = "window", hwnd: int | None = None,
@@ -235,16 +257,24 @@ class VisionEngine:
         if stale:
             return {"success": False, "error_code": "FRAME_STALE",
                     "message": "Geometria mudou desde a captura; recapture antes de clicar (§24)."}
-        label = (element.get("name") or "").strip().casefold()
-        destructive_click = bool(_DESTRUCTIVE_LABELS.search(label)) and bool(_ACCEPT_LABELS.match(label))
-        if destructive_click:
-            decision = self._require_approval(
-                f"Clique visual em botão destrutivo '{label}'", resource_key=f"vision:click:{element_id}",
-                approval_id=approval_id,
-            )
-            if decision is not None:
-                decision["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
-                return decision
+        target_binding = json.dumps(
+            {"hwnd": hwnd, "frame_id": frame_id, "element_id": element_id,
+             "frame_fingerprint": self._fingerprints.get(frame_id, ""),
+             "element": element},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        target_hash = hashlib.sha256(target_binding.encode("utf-8")).hexdigest()
+        decision = self._require_approval(
+            f"visual_click target_sha256={target_hash}",
+            resource_key=f"vision:click:{hwnd}:{frame_id}:{element_id}",
+            approval_id=approval_id,
+        )
+        if decision is not None:
+            decision["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
+            return decision
+        if await self._frame_is_stale(frame):
+            return {"success": False, "error_code": "FRAME_STALE",
+                    "message": "Geometria mudou após o approval; recapture antes de clicar."}
         before_fp = self._fingerprints.get(frame_id, "")
         try:
             action = await self._run(
@@ -267,6 +297,7 @@ class VisionEngine:
             "change_area_ratio": verification.get("area_ratio"),
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
             "before_fingerprint": before_fp[:16],
+            "approval_used": True,
         }
 
     # -------------------------------------------------------------------- type
@@ -282,6 +313,28 @@ class VisionEngine:
             return {"success": False, "error_code": "HWND_REQUIRED"}
         if secret and len(text) > 4096:
             return {"success": False, "error_code": "INVALID_SECRET"}
+        if await self._frame_is_stale(frame):
+            return {"success": False, "error_code": "FRAME_STALE"}
+        target_binding = json.dumps(
+            {"hwnd": hwnd, "frame_id": frame_id, "element_id": element_id,
+             "frame_fingerprint": self._fingerprints.get(frame_id, ""),
+             "element": element,
+             "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+             "secret": bool(secret)},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        target_hash = hashlib.sha256(target_binding.encode("utf-8")).hexdigest()
+        decision = self._require_approval(
+            f"visual_type target_sha256={target_hash}",
+            resource_key=f"vision:type:{hwnd}:{frame_id}:{element_id}",
+            approval_id=approval_id,
+        )
+        if decision is not None:
+            decision["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
+            return decision
+        if await self._frame_is_stale(frame):
+            return {"success": False, "error_code": "FRAME_STALE",
+                    "message": "Geometria mudou após o approval; recapture antes de digitar."}
         try:
             result = await self._run(
                 uia_layer.set_text, hwnd, text,
@@ -300,6 +353,7 @@ class VisionEngine:
             "effect_verified": verified,
             "verification_status": "VERIFIED" if verified else "VERIFICATION_FAILED",
             "stored_preview": "<secret not echoed>" if secret else sanitize_visual_text(stored_preview[:80]),
+            "approval_used": True,
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
         }
 
@@ -347,7 +401,7 @@ class VisionEngine:
             return True
         fresh_fp = fingerprint_pixels(fresh)
         old_fp = fingerprint_pixels(frame)
-        return fresh_fp != old_fp and abs(fresh.width - frame.width) + abs(fresh.height - frame.height) > 4
+        return fresh_fp != old_fp
 
     async def _verify_after_action(self, frame: Frame) -> dict:
         try:
@@ -365,11 +419,13 @@ class VisionEngine:
 
         if self.approvals is None:
             return {"success": False, "error_code": "APPROVAL_REQUIRED", "approval_required": True}
-        fingerprint = self.approvals.fingerprint(description, "vision", "", 30, target="local")
+        bound_description = f"{description} resource={resource_key}"
+        fingerprint = self.approvals.fingerprint(bound_description, "vision", "", 30, target="local")
         if not approval_id:
             record = self.approvals.request(
-                command=description, shell="vision", working_directory=".",
+                command=bound_description, shell="vision", working_directory="",
                 timeout_seconds=30, risk_level=ShellRiskLevel.ELEVATED, target="local",
+                fingerprint=fingerprint,
             )
             return {"success": False, "error_code": "APPROVAL_REQUIRED", "approval_required": True,
                     "approval_id": record.approval_id}

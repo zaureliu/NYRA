@@ -113,6 +113,18 @@ agent_auto_remediation: true
 agent_auto_remediation_actions: ""
 agent_max_identical_repeats: 2
 agent_max_consecutive_failures: 3
+selfdev_mode: AUTONOMOUS_SAFE
+selfdev_model: qwen3:8b
+selfdev_workspace: ../nyra-selfdev
+selfdev_canonical_root: .
+selfdev_public_snapshot: ../NYRA-GitHub-Public
+selfdev_run_when_idle: true
+selfdev_auto_publish_github: false
+selfdev_max_auto_promotions_per_day: 3
+selfdev_max_candidate_runtime_minutes: 30
+selfdev_max_files_low_risk: 8
+selfdev_max_diff_lines_low_risk: 500
+selfdev_cooldown_minutes: 15
 sentinel_watch_enabled: false
 sentinel_auto_discovery: true
 sentinel_discovery_interval: 60
@@ -151,6 +163,7 @@ watchdog_enabled: true
 proactive_operator_enabled: false
 elevated_session_default_ttl_seconds: 300
 homelab_poll_interval: 60
+homelab_mutations_enabled: false
 proactive_mode: false
 cpu_alert_threshold: 90
 memory_alert_threshold: 90

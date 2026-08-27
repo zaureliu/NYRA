@@ -21,7 +21,8 @@ def test_operator_v2_status_exposes_all_flags(client):
     assert body["operator_v2"] is True
     flags = body["flags"]
     expected = {"vision", "browser_control", "credentials", "persistent_jobs",
-                "workflow_engine", "desktop_watcher", "proactive_operator"}
+                "workflow_engine", "desktop_watcher", "proactive_operator",
+                "clipboard"}
     assert expected <= set(flags.keys())
     assert flags["proactive_operator"] is False  # §233 default OFF
 
@@ -93,8 +94,16 @@ def test_credentials_api_never_returns_secret(client, tmp_path, monkeypatch):
     broker = client.app.state.services.operator_v2.credentials
 
     secret = "token-super-secreto-da-api-9876"
-    upsert = client.put("/api/credentials/api_test_cred",
-                        json={"secret": secret, "kind": "http"})
+    pending = client.put("/api/credentials/api_test_cred",
+                         json={"secret": secret, "kind": "http"})
+    assert pending.status_code == 200
+    assert pending.json()["error_code"] == "APPROVAL_REQUIRED"
+    assert secret not in pending.text
+    broker.approvals.grant(pending.json()["approval_id"], "test")
+    upsert = client.put("/api/credentials/api_test_cred", json={
+        "secret": secret, "kind": "http",
+        "approval_id": pending.json()["approval_id"],
+    })
     assert upsert.status_code == 200
     assert upsert.json()["success"] is True
 
@@ -110,7 +119,8 @@ def test_tasks_endpoints_roundtrip(client):
     created = client.post("/api/tasks", json={
         "goal": "tarefa de teste api",
         "steps": [
-            {"step_id": "s1", "tool": "get_local_system_stats"},
+            {"step_id": "s1", "tool": "system_shell",
+             "params": {"command": "Get-Date", "shell": "powershell"}},
         ],
         "auto_run": False,
     })
@@ -122,6 +132,14 @@ def test_tasks_endpoints_roundtrip(client):
         assert status.status_code == 200
         cancel = client.post(f"/api/tasks/{task_id}/cancel")
         assert cancel.status_code == 200
+
+    hidden = client.post("/api/tasks", json={
+        "goal": "sink interno não pode ser composto",
+        "steps": [{"step_id": "s1", "tool": "get_local_system_stats"}],
+        "auto_run": False,
+    })
+    assert hidden.status_code == 422
+    assert hidden.json()["detail"]["error_code"] == "TOOL_NOT_EXPOSED"
 
 
 def test_elevated_session_status_endpoint(client):
@@ -142,6 +160,7 @@ def test_browser_status_endpoint_exists(client):
         "browser_wait_condition", "browser_execute_script", "browser_select_tab",
         "browser_status",
         "credential_list", "credential_status",
+        "clipboard_status", "clipboard_write_text", "clipboard_clear",
         "elevated_session_open", "elevated_session_close", "elevated_session_status",
         "job_start", "job_status", "job_list", "job_logs",
         "job_cancel", "job_pause", "job_resume",

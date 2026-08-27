@@ -96,6 +96,10 @@ class ShellRiskClassifier:
 
         level = ShellRiskLevel.READ_ONLY
         reasons: list[str] = []
+        dynamic_reason = self._dynamic_execution_reason(value, shell)
+        if dynamic_reason:
+            level = ShellRiskLevel.ELEVATED
+            reasons.append(dynamic_reason)
         for target_level, rules in (
             (ShellRiskLevel.CRITICAL, self._critical),
             (ShellRiskLevel.DESTRUCTIVE, self._destructive),
@@ -124,6 +128,53 @@ class ShellRiskClassifier:
             reasons=list(dict.fromkeys(reasons)),
             components=components,
         )
+
+    @staticmethod
+    def _dynamic_execution_reason(command: str, shell: str) -> str | None:
+        """Fail closed when evaluation can be hidden inside arguments."""
+        outside_single: list[str] = []
+        single = False
+        double = False
+        escaped = False
+        for char in command:
+            if escaped:
+                if not single:
+                    outside_single.append(char)
+                escaped = False
+                continue
+            if char == "`" and not single:
+                outside_single.append(char)
+                escaped = True
+                continue
+            if char == "'" and not double:
+                single = not single
+                continue
+            if char == '"' and not single:
+                double = not double
+                outside_single.append(char)
+                continue
+            if not single:
+                outside_single.append(char)
+        visible = "".join(outside_single)
+
+        if shell in {"bash", "ssh", "linux", "openwrt"}:
+            if re.search(r"\$\(|`|(?<![<>])[<>]\(", visible):
+                return "shell substitution/process substitution requires approval"
+            return None
+
+        # PowerShell expressions can invoke members whose names are quoted or
+        # computed (for example `.'Delete'()`). Treat every expression/type/
+        # index delimiter as dynamic instead of trying to enumerate its AST in
+        # regexes. Plain read-only cmdlets with ordinary arguments stay safe.
+        if any(char in visible for char in "()[]{}"):
+            return "PowerShell expression or type/member evaluation requires approval"
+        if re.search(r"\$\(|@\(|`|(?<!&)&(?!&)|[{}]", visible):
+            return "PowerShell substitution, call operator or script block requires approval"
+        if re.search(r"(?i)(?:::|\.)[A-Za-z_]\w*\s*\(", visible):
+            return "PowerShell member invocation requires approval"
+        if re.search(r"\(\s*(?:&|\$|[A-Za-z_][\w.-]*(?:\s|\)))", visible):
+            return "nested PowerShell expression requires approval"
+        return None
 
     def _classify_component(self, component: str, shell: str) -> tuple[ShellRiskLevel, str]:
         text = component.strip().lstrip("(&{").strip()

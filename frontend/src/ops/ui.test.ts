@@ -42,4 +42,13 @@ describe('api client — envelope de erro (§153/§154)', () => {
     expect((error as ApiRequestError).code).toBe('SENTINEL_UNCONFIGURED')
     expect((error as ApiRequestError).stage).toBe('sentinel')
   })
+
+  it('permite bypass explícito do cache para status em tempo real', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: 'online' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiGet('/api/health', 12000, 'no-store')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/health', expect.objectContaining({ cache: 'no-store' }))
+  })
 })

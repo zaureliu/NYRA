@@ -39,6 +39,7 @@ class VisionTypeInput(VisionFrameInput):
     element_id: str = Field(min_length=3, max_length=24)
     text: str = Field(min_length=1, max_length=4000)
     secret: bool = False
+    approval_id: str | None = Field(default=None, min_length=16, max_length=128)
 
 
 class VisionReadInput(VisionFrameInput):
@@ -52,6 +53,10 @@ class VisionDiffInput(BaseModel):
 
 class EmptyV2Input(BaseModel):
     placeholder: str = Field(default="", max_length=4)
+
+
+class ClipboardWriteInput(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
 
 
 class AdapterActionInput(BaseModel):
@@ -88,24 +93,30 @@ class BrowserClickElementInput(BaseModel):
     x: int = Field(default=0, ge=0, le=8000)
     y: int = Field(default=0, ge=0, le=8000)
     tab_id: str = Field(default="", max_length=64)
+    approval_id: str | None = Field(default=None, min_length=16, max_length=128)
 
 
 class BrowserTypeInput(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
-    selector: str = Field(default="", max_length=500)
+    selector: str = Field(min_length=2, max_length=500)
     submit: bool = False
     secret: bool = False
     tab_id: str = Field(default="", max_length=64)
+    approval_id: str | None = Field(default=None, min_length=16, max_length=128)
 
 
-class BrowserSelectOptionInput(BrowserTypeInput):
-    pass  # text reused as option value
+class BrowserSelectOptionInput(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    selector: str = Field(min_length=2, max_length=500)
+    tab_id: str = Field(default="", max_length=64)
+    approval_id: str | None = Field(default=None, min_length=16, max_length=128)
 
 
 class BrowserSetCheckedInput(BaseModel):
     selector: str = Field(min_length=2, max_length=500)
     checked: bool = True
     tab_id: str = Field(default="", max_length=64)
+    approval_id: str | None = Field(default=None, min_length=16, max_length=128)
 
 
 class BrowserWaitInput(BaseModel):
@@ -210,6 +221,7 @@ def register_operator_v2_tools(registry, service) -> None:
     """Register the full V2 tool surface onto the shared ToolRegistry."""
 
     _register_vision_tools(registry, service)
+    _register_clipboard_tools(registry, service)
     _register_adapter_tools(registry, service)
     _register_browser_v2_tools(registry, service)
     _register_credential_tools(registry, service)
@@ -218,6 +230,38 @@ def register_operator_v2_tools(registry, service) -> None:
     _register_task_tools(registry, service)
     _register_watch_tools(registry, service)
     _register_workflow_tools(registry, service)
+
+
+def _register_clipboard_tools(registry, service) -> None:
+    clipboard = service.clipboard
+
+    async def clipboard_status(**_):
+        return await asyncio.to_thread(clipboard.status)
+
+    async def clipboard_write_text(text, **_):
+        return await asyncio.to_thread(clipboard.write_text, str(text))
+
+    async def clipboard_clear(**_):
+        return await asyncio.to_thread(clipboard.clear)
+
+    registry.register(ToolDefinition(
+        "clipboard_status",
+        "Lê somente metadados do clipboard local (formatos/has_text/sequence); nunca retorna conteúdo.",
+        RiskLevel.READ_ONLY, EmptyV2Input, clipboard_status,
+        preflight=_local_preflight("clipboard", "READ_ONLY"),
+    ))
+    registry.register(ToolDefinition(
+        "clipboard_write_text",
+        "Substitui o clipboard local por texto explícito e verifica o formato Win32. A resposta nunca ecoa o conteúdo.",
+        RiskLevel.LOW_RISK, ClipboardWriteInput, clipboard_write_text,
+        preflight=_local_preflight("clipboard", "LOW_RISK"),
+    ))
+    registry.register(ToolDefinition(
+        "clipboard_clear",
+        "Limpa o clipboard local e verifica que nenhum formato permaneceu.",
+        RiskLevel.LOW_RISK, EmptyV2Input, clipboard_clear,
+        preflight=_local_preflight("clipboard", "LOW_RISK"),
+    ))
 
 def _register_vision_tools(registry, service) -> None:
     if service.vision is None:
@@ -250,19 +294,21 @@ def _register_vision_tools(registry, service) -> None:
 
     registry.register(ToolDefinition(
         "visual_click",
-        "Clica em elemento visual identificado. Revalida o frame antes (FRAME_STALE) e verifica mudança depois. Botões destrutivos EXIGEM approval_id (§23/§24/§30).",
-        RiskLevel.LOW_RISK, VisionClickInput, visual_click,
-        dynamic_risk=True, preflight=_local_preflight("vision", "LOW_RISK"),
+        "Clica em elemento visual somente após approval one-use exato. Revalida integralmente o frame antes (FRAME_STALE) e verifica mudança depois.",
+        RiskLevel.ELEVATED, VisionClickInput, visual_click,
+        preflight=_local_preflight("vision", "ELEVATED"),
     ))
 
-    async def visual_type(frame_id, element_id, text, secret=False, **_):
-        return await vision.type_text(frame_id, element_id, text, secret=bool(secret))
+    async def visual_type(frame_id, element_id, text, secret=False, approval_id=None, **_):
+        return await vision.type_text(
+            frame_id, element_id, text, secret=bool(secret), approval_id=approval_id,
+        )
 
     registry.register(ToolDefinition(
         "visual_type",
-        "Digita em elemento visual (ValuePattern com read-back). Com secret=true o valor nunca é ecoado (§74).",
-        RiskLevel.LOW_RISK, VisionTypeInput, visual_type,
-        dynamic_risk=True, preflight=_local_preflight("vision", "LOW_RISK"),
+        "Digita em elemento visual somente após approval one-use exato (ValuePattern com read-back). Com secret=true o valor nunca é ecoado (§74).",
+        RiskLevel.ELEVATED, VisionTypeInput, visual_type,
+        preflight=_local_preflight("vision", "ELEVATED"),
     ))
 
     async def visual_read(frame_id, use_ocr=False, **_):
@@ -381,45 +427,62 @@ def _register_browser_v2_tools(registry, service) -> None:
         preflight=_local_preflight("browser", "READ_ONLY"),
     ))
 
-    async def browser_click_element(selector="", x=0, y=0, tab_id="", **_):
-        return await controller.click_element(selector=selector, x=int(x), y=int(y), tab_id=tab_id)
+    async def browser_click_element(selector="", x=0, y=0, tab_id="", approval_id=None, **_):
+        return await controller.click_element(
+            selector=selector, x=int(x), y=int(y), tab_id=tab_id,
+            approval_id=approval_id,
+            approvals=getattr(service.approvals, "_gate", service.approvals)
+            if service.approvals else None,
+        )
 
     registry.register(ToolDefinition(
         "browser_click_element",
-        "Clique REAL (Input.dispatchMouseEvent) no centro do elemento/coordenada da página controlada; detecta navegação pós-clique.",
-        RiskLevel.LOW_RISK, BrowserClickElementInput, browser_click_element,
-        preflight=_local_preflight("browser", "LOW_RISK"),
+        "Clique somente após approval one-use vinculado a tab, URL, identidade do alvo e selector/coordenadas; detecta navegação pós-clique.",
+        RiskLevel.ELEVATED, BrowserClickElementInput, browser_click_element,
+        preflight=_local_preflight("browser", "ELEVATED"),
     ))
 
-    async def browser_type_text(text, selector="", submit=False, secret=False, tab_id="", **_):
+    async def browser_type_text(text, selector="", submit=False, secret=False, tab_id="",
+                                approval_id=None, **_):
         return await controller.type_text(str(text), selector=selector, submit=bool(submit),
-                                          secret=bool(secret), tab_id=tab_id)
+                                          secret=bool(secret), tab_id=tab_id,
+                                          approval_id=approval_id,
+                                          approvals=getattr(service.approvals, "_gate", service.approvals)
+                                          if service.approvals else None)
 
     registry.register(ToolDefinition(
         "browser_type_text",
-        "Digita no campo focado/selecionado com read-back verificado. secret=true mascara preview e login real deve passar pelo Credential Broker internamente (§75/§76).",
-        RiskLevel.LOW_RISK, BrowserTypeInput, browser_type_text,
-        preflight=_local_preflight("browser", "LOW_RISK"),
+        "Digita somente após approval one-use vinculado a tab, URL, alvo, selector, modo submit e hash do texto. secret=true mascara preview.",
+        RiskLevel.ELEVATED, BrowserTypeInput, browser_type_text,
+        preflight=_local_preflight("browser", "ELEVATED"),
     ))
 
-    async def browser_select_option(text, selector="", tab_id="", **_):
-        return await controller.select_option(selector, str(text), tab_id=tab_id)
+    async def browser_select_option(text, selector="", tab_id="", approval_id=None, **_):
+        return await controller.select_option(
+            selector, str(text), tab_id=tab_id, approval_id=approval_id,
+            approvals=getattr(service.approvals, "_gate", service.approvals)
+            if service.approvals else None,
+        )
 
     registry.register(ToolDefinition(
         "browser_select_option",
-        "Seleciona <option> por valor/texto num <select> da página controlada e verifica selected.",
-        RiskLevel.LOW_RISK, BrowserSelectOptionInput, browser_select_option,
-        preflight=_local_preflight("browser", "LOW_RISK"),
+        "Seleciona <option> somente após approval one-use exato e verifica selected.",
+        RiskLevel.ELEVATED, BrowserSelectOptionInput, browser_select_option,
+        preflight=_local_preflight("browser", "ELEVATED"),
     ))
 
-    async def browser_set_checked(selector, checked=True, tab_id="", **_):
-        return await controller.set_checked(selector, bool(checked), tab_id=tab_id)
+    async def browser_set_checked(selector, checked=True, tab_id="", approval_id=None, **_):
+        return await controller.set_checked(
+            selector, bool(checked), tab_id=tab_id, approval_id=approval_id,
+            approvals=getattr(service.approvals, "_gate", service.approvals)
+            if service.approvals else None,
+        )
 
     registry.register(ToolDefinition(
         "browser_set_checked",
-        "Marca/desmarca checkbox ou radio da página controlada e verifica estado final (§66).",
-        RiskLevel.LOW_RISK, BrowserSetCheckedInput, browser_set_checked,
-        preflight=_local_preflight("browser", "LOW_RISK"),
+        "Marca/desmarca checkbox ou radio somente após approval one-use exato e verifica estado final (§66).",
+        RiskLevel.ELEVATED, BrowserSetCheckedInput, browser_set_checked,
+        preflight=_local_preflight("browser", "ELEVATED"),
     ))
 
     async def browser_wait_condition(condition, selector="", timeout_seconds=15.0, tab_id="", **_):
@@ -531,6 +594,7 @@ def _register_job_tools(registry, service) -> None:
             "resource_key": f"job:{str(payload.get('name') or 'unnamed')[:60]}",
             "host": "local",
         },
+        llm_enabled=False,
     ))
 
     async def job_status(job_id, **_):

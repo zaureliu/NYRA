@@ -255,8 +255,13 @@ async def test_auto_remediation_requires_normalized_global_host_and_resource_all
     await remote.initialize()
     allowed = await remote.execute("proxmox", "systemctl restart nginx")
     unknown_resource = await remote.execute("proxmox", "systemctl restart pveproxy")
+    injected_suffix = await remote.execute(
+        "proxmox", "systemctl restart nginx; /usr/sbin/useradd intruder"
+    )
     assert allowed["success"] is True and allowed["normalized_action"] == "restart_known_service"
     assert unknown_resource["error_code"] == RemoteShellErrorCode.APPROVAL_REQUIRED.value
+    assert injected_suffix["error_code"] == RemoteShellErrorCode.APPROVAL_REQUIRED.value
+    assert len(executor.calls) == 1
 
 
 @pytest.mark.parametrize(

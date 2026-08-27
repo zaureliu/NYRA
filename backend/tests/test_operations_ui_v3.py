@@ -9,6 +9,7 @@ sequence id do EventBus.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -331,6 +332,10 @@ async def test_integrations_status_cards(tmp_path, runtime_file, monkeypatch):
     monkeypatch.setattr(ha_profiles_mod, "SECRETS_DIR", tmp_path / "secrets")
     monkeypatch.delenv("NYRA_HOME_ASSISTANT_TOKEN", raising=False)
     monkeypatch.setattr(pm_config_mod, "CONFIG_PATH", tmp_path / "proxmox-config.json")
+    # O overlay runtime e o CredentialBroker também leem estado da máquina real;
+    # sem neutralizá-los o card do Proxmox vira READY nesta máquina.
+    monkeypatch.setattr(pm_config_mod, "load_runtime_settings", lambda: {})
+    monkeypatch.setattr(pm_config_mod, "resolve_credentials", lambda settings: ("", ""))
 
     settings = Settings(home_assistant_url="", homelab_enabled=True,
                         proxmox_enabled=True)
@@ -393,13 +398,17 @@ async def test_integration_action_enable_persists(runtime_file, monkeypatch, tmp
 
 
 async def test_openwrt_ssh_auth_failure_is_not_offline():
-    """§91 — ping OK + SSH auth failed ⇒ DEGRADED, nunca OFFLINE."""
+    """§91 — ping OK + SSH auth failed ⇒ DEGRADED, nunca OFFLINE.
+
+    O código usado no stub é o valor REAL mapeado em
+    homelab/adapters/base.py (SSH_AUTHENTICATION_FAILED → REMOTE_AUTH_FAILED).
+    """
     from app.integrations.center import _openwrt_card
 
     class AuthFailHost(StubHost):
         reachable = True
         overall_state = "DEGRADED"
-        integration_error_code = "SSH_AUTH_FAILED"
+        integration_error_code = "REMOTE_AUTH_FAILED"
 
     class Overview:
         hosts = [AuthFailHost()]
@@ -416,7 +425,7 @@ async def test_openwrt_ssh_auth_failure_is_not_offline():
     services.homelab = Homelab()
     card = await _openwrt_card(services)
     assert card["state"] == "DEGRADED"
-    assert "SSH_AUTH_FAILED" in str(card["health"])
+    assert "REMOTE_AUTH_FAILED" in str(card["health"])
 
 
 # ---------------------------------------------------------------------------
@@ -567,6 +576,44 @@ async def test_bridge_fallback_flag_when_down(bridge_store, monkeypatch):
     status = bridge.cached_status()
     assert status["fallback_internal_active"] is True
     assert status["health"] == "OFFLINE"
+
+
+async def test_bridge_background_refresh_tracks_processor(bridge_store, monkeypatch):
+    """Refresh periódico mantém cached_status coerente (READY↔OFFLINE automático)."""
+    mod, _ = bridge_store
+    state = {"up": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if state["up"]:
+            return httpx.Response(200, json={
+                "name": "satellite", "version": "0.1", "healthy": True,
+                "capabilities": {"stt": True},
+            })
+        raise httpx.ConnectError("down")
+
+    _patch_http(monkeypatch, handler)
+    bridge = mod.VoiceProcessorBridge(Settings())
+    await bridge.update({"enabled": True})
+    assert bridge.cached_status()["health"] == "OFFLINE"
+    bridge.start_background_refresh(interval=0.01)
+    try:
+        state["up"] = True
+        for _ in range(100):
+            if bridge.cached_status()["health"] == "HEALTHY":
+                break
+            await asyncio.sleep(0.02)
+        assert bridge.cached_status()["health"] == "HEALTHY"
+
+        state["up"] = False
+        for _ in range(100):
+            if bridge.cached_status()["health"] == "OFFLINE":
+                break
+            await asyncio.sleep(0.02)
+        assert bridge.cached_status()["health"] == "OFFLINE"
+        assert bridge.cached_status()["fallback_internal_active"] is True
+    finally:
+        await bridge.stop_background_refresh()
+    assert bridge._refresh_task is None
 
 
 # ---------------------------------------------------------------------------

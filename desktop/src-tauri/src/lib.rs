@@ -5,9 +5,11 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-use tauri_plugin_window_state::{StateFlags, WindowExt};
+use tauri_plugin_window_state::StateFlags;
 
 mod backend_manager;
+mod backend_transport;
+mod conversation_transport;
 mod presence;
 
 static CLICK_THROUGH: AtomicBool = AtomicBool::new(false);
@@ -68,6 +70,23 @@ fn show_dashboard(app: &tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn open_dashboard(app: tauri::AppHandle) -> Result<(), String> {
     show_dashboard(&app)
+}
+
+#[tauri::command]
+async fn backend_request(
+    request: backend_transport::BackendRequest,
+) -> Result<backend_transport::BackendResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || backend_transport::execute(request))
+        .await
+        .map_err(|_| "BACKEND_BRIDGE_TASK_FAILED".to_string())?
+}
+
+#[tauri::command]
+fn start_conversation_bridge(
+    app: tauri::AppHandle,
+    bridge: tauri::State<'_, conversation_transport::ConversationBridge>,
+) -> bool {
+    bridge.start(app)
 }
 
 #[tauri::command]
@@ -311,9 +330,12 @@ fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
 pub fn run() {
     tauri::Builder::default()
         .manage(backend_manager::BackendManager::new())
+        .manage(conversation_transport::ConversationBridge::new())
         .invoke_handler(tauri::generate_handler![
             set_click_through,
             open_dashboard,
+            backend_request,
+            start_conversation_bridge,
             presence_show,
             presence_hide,
             presence_toggle,
@@ -332,7 +354,13 @@ pub fn run() {
             tauri_plugin_window_state::Builder::default()
                 // VISIBILITY jamais é restaurada: um encerramento ocultado não pode
                 // fazer o Desktop Presence nascer invisível no próximo start.
-                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN | StateFlags::DECORATIONS)
+                .with_state_flags(
+                    StateFlags::SIZE
+                        | StateFlags::POSITION
+                        | StateFlags::MAXIMIZED
+                        | StateFlags::FULLSCREEN
+                        | StateFlags::DECORATIONS,
+                )
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
@@ -531,9 +559,21 @@ pub fn run() {
                 Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space),
                 Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyM),
             ];
+            // Registro único por processo: limpa qualquer registro residual do
+            // plugin antes de registrar, evitando "HotKey already registered".
+            let _ = app.global_shortcut().unregister_all();
             for shortcut in shortcuts {
                 if let Err(error) = app.global_shortcut().register(shortcut) {
-                    log::warn!("Atalho global indisponível: {error}");
+                    let detail = error.to_string();
+                    // "HotKey already registered" aqui é conflito de SO: outro
+                    // aplicativo (ex.: Discord/Parsec) já reservou o atalho.
+                    // Não é inicialização duplicada da NYRA; registra como
+                    // conflito externo em vez de espalhar o erro bruto.
+                    if detail.contains("already registered") {
+                        log::info!("Atalho global em uso por outro aplicativo: {shortcut}");
+                    } else {
+                        log::warn!("Atalho global indisponível: {error}");
+                    }
                     if shortcut
                         == Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyI)
                     {
@@ -549,7 +589,11 @@ pub fn run() {
                 Ok(dir) => dir.join("position-initialized"),
                 Err(error) => {
                     log::warn!("app_local_data_dir indisponível: {error}");
-                    app.path().temp_dir().ok().map(|dir| dir.join("nyra-position-initialized")).unwrap_or_default()
+                    app.path()
+                        .temp_dir()
+                        .ok()
+                        .map(|dir| dir.join("nyra-position-initialized"))
+                        .unwrap_or_default()
                 }
             };
             if !marker.exists() {
@@ -558,8 +602,10 @@ pub fn run() {
                     match (window.current_monitor(), window.outer_size()) {
                         (Ok(Some(monitor)), Ok(size)) => {
                             let area = monitor.work_area();
-                            let x = area.position.x + area.size.width as i32 - size.width as i32 - 16;
-                            let y = area.position.y + area.size.height as i32 - size.height as i32 - 12;
+                            let x =
+                                area.position.x + area.size.width as i32 - size.width as i32 - 16;
+                            let y =
+                                area.position.y + area.size.height as i32 - size.height as i32 - 12;
                             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
                         }
                         (monitor, size) => {
@@ -576,7 +622,9 @@ pub fn run() {
                     }
                 }
                 if !marker.as_os_str().is_empty() {
-                    let _ = std::fs::create_dir_all(marker.parent().unwrap_or(std::path::Path::new(".")));
+                    let _ = std::fs::create_dir_all(
+                        marker.parent().unwrap_or(std::path::Path::new(".")),
+                    );
                     let _ = std::fs::write(&marker, b"1");
                 }
             }
@@ -600,12 +648,10 @@ pub fn run() {
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(650));
                 if presence::show_on_start_enabled() {
-                    if let Some(window) = dashboard_app.get_webview_window("main") {
-                        restore_presence(&window);
-                    }
+                    reassert_presence_after_startup(&dashboard_app);
                 }
                 if let Err(error) = show_dashboard(&dashboard_app) {
-                    log::warn!("Falha ao restaurar painel apÃ³s startup: {error}");
+                    log::warn!("Falha ao restaurar painel após startup: {error}");
                 }
             });
             Ok(())
@@ -618,6 +664,23 @@ pub fn run() {
                 backend_manager::shutdown_owned(app_handle);
             }
         });
+}
+
+/// Reafirmação pós-startup (idempotente): só atua/loga se a janela terminou
+/// oculta ou minimizada. Evita o "Desktop Presence inicializado" duplicado.
+fn reassert_presence_after_startup(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let visible = window.is_visible().unwrap_or(false);
+    let minimized = window.is_minimized().unwrap_or(false);
+    if visible && !minimized {
+        return;
+    }
+    log::info!(
+        "Desktop Presence reafirmado pós-startup (visible={visible}, minimized={minimized})"
+    );
+    restore_presence(&window);
 }
 
 fn restore_presence(window: &tauri::WebviewWindow) {
@@ -638,7 +701,13 @@ fn restore_presence(window: &tauri::WebviewWindow) {
                 area.size.height as i32,
             );
             if (x, y) != (position.x, position.y) {
-                log::info!("Presença fora da tela reposicionada: ({}, {}) -> ({}, {})", position.x, position.y, x, y);
+                log::info!(
+                    "Presença fora da tela reposicionada: ({}, {}) -> ({}, {})",
+                    position.x,
+                    position.y,
+                    x,
+                    y
+                );
                 let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
             }
         }

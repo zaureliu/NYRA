@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from app.integrations.base import IntegrationError
+from app.integrations.base import IntegrationError, require_secure_credential_transport
 
 
 logger = logging.getLogger("nyra.homelab.proxmox")
@@ -123,6 +123,12 @@ class ProxmoxReadOnlyClient:
                 f"{_ERROR_PREFIX}_AUTH_MISSING",
                 "A integração Proxmox não está configurada; cadastre URL e API Token.",
             )
+        if not self.verify_ssl:
+            raise IntegrationError(
+                f"{_ERROR_PREFIX}_TLS_VERIFICATION_REQUIRED",
+                "A API do Proxmox exige validação TLS ativa; instale a CA local no host NYRA.",
+            )
+        require_secure_credential_transport(self.base_url)
         await self._check_fingerprint()
         url = f"{self.base_url}/api2/json/{path.lstrip('/')}"
         last_error: Exception | None = None

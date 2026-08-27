@@ -23,6 +23,11 @@ export function HAEntityBrowser() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [actionInfo, setActionInfo] = useState('')
+  const [pendingAction, setPendingAction] = useState<{
+    approvalId: string
+    service: string
+    entityId: string
+  } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,19 +63,46 @@ export function HAEntityBrowser() {
     }
   }
 
-  const runService = async (service: string) => {
-    if (!detail) return
+  const runService = async (service: string, approvalId?: string, entityId?: string) => {
+    const targetEntity = entityId ?? detail?.entity_id
+    if (!targetEntity) return
     setError('')
     try {
       const response = await apiSend<HAActionResponse>(
-        `/api/home-assistant/entities/${encodeURIComponent(detail.entity_id)}/service`,
+        `/api/home-assistant/entities/${encodeURIComponent(targetEntity)}/service`,
         'POST',
-        { service },
+        approvalId ? { service, approval_id: approvalId } : { service },
       )
+      if (response.approval_required && response.approval_id && !approvalId) {
+        setPendingAction({ approvalId: response.approval_id, service, entityId: targetEntity })
+        setActionInfo(`${service} requer approval elevado de uso único.`)
+        return
+      }
+      setPendingAction(null)
       setActionInfo(`${service} → ${verificationLabel(response)}`)
       // Readback imediato na UI também (o backend já verificou o efeito).
-      await openDetail(detail.entity_id)
+      await openDetail(targetEntity)
       void load()
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : String(issue))
+    }
+  }
+
+  const resolveActionApproval = async (approved: boolean) => {
+    if (!pendingAction) return
+    const pending = pendingAction
+    setPendingAction(null)
+    try {
+      await apiSend(
+        `/api/shell/approvals/${encodeURIComponent(pending.approvalId)}`,
+        'POST',
+        { approved },
+      )
+      if (approved) {
+        await runService(pending.service, pending.approvalId, pending.entityId)
+      } else {
+        setActionInfo('Ação cancelada; nenhum serviço foi chamado.')
+      }
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : String(issue))
     }
@@ -120,6 +152,17 @@ export function HAEntityBrowser() {
       <ErrorAlert message={error} />
       {actionInfo && (
         <div className="ops-alert info" style={{ marginTop: 8 }}>{actionInfo}</div>
+      )}
+      {pendingAction && (
+        <div className="ops-alert warning" style={{ marginTop: 8 }}>
+          Confirme a ação {pendingAction.service} em {pendingAction.entityId}.
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <ActionButton small variant="primary" onClick={() => resolveActionApproval(true)}>
+              Aprovar e executar
+            </ActionButton>
+            <ActionButton small onClick={() => resolveActionApproval(false)}>Cancelar</ActionButton>
+          </div>
+        </div>
       )}
 
       <div className="table-scroll" style={{ marginTop: 10 }}>

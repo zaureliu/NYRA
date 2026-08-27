@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from app.llm.base import LLMMessage, LLMProvider, LLMResponse
+from typing import Any
 
 
 logger = logging.getLogger("nyra")
@@ -64,6 +65,37 @@ class OllamaProvider(LLMProvider):
     def _is_resident(models: list[dict], model: str) -> bool:
         return any(item.get("name") == model or item.get("model") == model for item in models)
 
+    @classmethod
+    def _wire_messages(cls, messages: list[LLMMessage]) -> list[dict[str, Any]]:
+        """Serializa mensagens em formato aceitável para chat templates rígidos.
+
+        Templates como o do wrench/qwen3 no Ollama exigem: system somente no
+        início e no máximo um assistant no fim. Diretivas tardias da NYRA
+        (TURNO ATUAL, VERIFY REQUIRED, correções de grounding) são mantidas na
+        posição original recodificadas como mensagem do usuário com marcador
+        explícito — assim não sobra par de assistants adjacente nem system
+        fora do cabeçalho.
+        """
+        dumped = [message.model_dump(exclude_none=True, exclude_defaults=True) for message in messages]
+        leading_systems: list[str] = []
+        rest: list[dict[str, Any]] = []
+        seen_non_system = False
+        for item in dumped:
+            if item.get("role") == "system" and isinstance(item.get("content"), str):
+                if not seen_non_system:
+                    leading_systems.append(item["content"])
+                    continue
+                rest.append({
+                    "role": "user",
+                    "content": "[INSTRUÇÃO DO SISTEMA]\n" + item["content"],
+                })
+                continue
+            seen_non_system = True
+            rest.append(item)
+        if not leading_systems:
+            return rest
+        return [{"role": "system", "content": "\n\n".join(leading_systems)}, *rest]
+
     async def chat(self, messages: list[LLMMessage]) -> str:
         response = await self.complete(messages)
         content = response.content.strip()
@@ -78,7 +110,7 @@ class OllamaProvider(LLMProvider):
     ) -> LLMResponse:
         payload = {
             "model": self.model,
-            "messages": [message.model_dump(exclude_none=True, exclude_defaults=True) for message in messages],
+            "messages": self._wire_messages(messages),
             "stream": False,
             "think": False,
             "keep_alive": ollama_keep_alive_payload(self.keep_alive),
@@ -97,6 +129,13 @@ class OllamaProvider(LLMProvider):
         for attempt in range(2):
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{self.base_url}/api/chat", json=payload, extensions={"trace": trace})
+                if response.status_code >= 400:
+                    logger.error(
+                        "ollama_complete_http_error",
+                        extra={"model": self.model, "status": response.status_code,
+                               "roles": [str(m.get("role")) for m in payload["messages"]],
+                               "body": str((await response.aread())[:300])},
+                    )
                 response.raise_for_status()
                 data = response.json()
             self.last_runtime_metrics = self._runtime_metrics(data, started)
@@ -118,7 +157,7 @@ class OllamaProvider(LLMProvider):
     async def stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
         payload = {
             "model": self.model,
-            "messages": [message.model_dump(exclude_none=True, exclude_defaults=True) for message in messages],
+            "messages": self._wire_messages(messages),
             "stream": True,
             "think": False,
             "keep_alive": ollama_keep_alive_payload(self.keep_alive),
@@ -134,6 +173,14 @@ class OllamaProvider(LLMProvider):
         timeout = httpx.Timeout(self.timeout, connect=5)
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("POST", f"{self.base_url}/api/chat", json=payload, extensions={"trace": trace}) as response:
+                if response.status_code >= 400:
+                    body = await response.aread()
+                    logger.error(
+                        "ollama_stream_http_error",
+                        extra={"model": self.model, "status": response.status_code,
+                               "roles": [str(m.get("role")) for m in payload["messages"]],
+                               "body": str(body[:300])},
+                    )
                 response.raise_for_status()
                 headers_received = time.perf_counter()
                 async for line in response.aiter_lines():

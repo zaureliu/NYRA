@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import json
 import logging
 import re
 import time
@@ -24,6 +26,85 @@ from app.tools.remote_models import RemoteShellExecuteInput
 logger = logging.getLogger("nyra.tools")
 ToolCallable = Callable[..., Awaitable[dict[str, Any]]]
 PreflightCallable = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+@functools.lru_cache(maxsize=512)
+def _cached_json_schema(model: Type[BaseModel]) -> str:
+    """Pydantic schema JSON cached per input-model class (schema cost budget)."""
+    return json.dumps(model.model_json_schema(), ensure_ascii=False)
+
+
+# Domínios de roteamento (Apêndice PRO A). Um subconjunto pequeno de tools é
+# entregue ao LLM por turno; CONVERSATION não recebe nenhum schema.
+DOMAIN_CONVERSATION = "CONVERSATION"
+DOMAIN_DESKTOP = "DESKTOP"
+DOMAIN_FILESYSTEM = "FILESYSTEM"
+DOMAIN_RUNTIME = "RUNTIME"
+DOMAIN_HOMELAB_PROXMOX = "HOMELAB.PROXMOX"
+DOMAIN_HOMELAB_HA = "HOMELAB.HOME_ASSISTANT"
+DOMAIN_HOMELAB_OPENWRT = "HOMELAB.OPENWRT"
+DOMAIN_NETWORK = "NETWORK"
+DOMAIN_BROWSER = "BROWSER"
+DOMAIN_WORKFLOW = "WORKFLOW"
+DOMAIN_GENERIC = "GENERIC"
+
+_DOMAIN_TOOL_PREFIXES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("desktop_", "ui_", "clipboard_"), DOMAIN_DESKTOP),
+    (("browser_",), DOMAIN_BROWSER),
+    (("proxmox", "pve"), DOMAIN_HOMELAB_PROXMOX),
+    (("home_assistant", "ha_"), DOMAIN_HOMELAB_HA),
+    (("openwrt",), DOMAIN_HOMELAB_OPENWRT),
+    (("get_network_", "network_"), DOMAIN_NETWORK),
+    (("filesystem_", "file_"), DOMAIN_FILESYSTEM),
+    (("process_", "windows_service_", "registry_", "task_", "system_shell"), DOMAIN_RUNTIME),
+    (("remote_shell",), DOMAIN_GENERIC),
+    (("workflow", "skill_"), DOMAIN_WORKFLOW),
+)
+
+
+def classify_domain(text: str) -> str:
+    """Classify the operator request into one routing domain before tool selection."""
+    value = " ".join(text.casefold().split())
+    if re.search(r"\b(clipboard|transfer\w*)\b", value):
+        return DOMAIN_DESKTOP
+    if re.search(
+        r"\b(proxmox|pve|\bvm[s]?\b|m[aá]quinas?\s+virtuais?|hipervisor|hypervisor|lxc|container[s]?\s+do\s+(?:proxmox|servidor))\b",
+        value,
+    ):
+        return DOMAIN_HOMELAB_PROXMOX
+    if re.search(r"\b(home\s*assistant|homeassistant|\bha\b|automa[cç][aã]o\s+da?\s+casa|entidades?|luzes?|interruptores?)\b", value):
+        return DOMAIN_HOMELAB_HA
+    if re.search(r"\b(openwrt|roteador|gateway|router)\b", value):
+        return DOMAIN_HOMELAB_OPENWRT
+    if re.search(
+        r"\b(abre|abra|abrir|feche|fecha|fechar|minimiza|minimize|restaura|restaurar|maximiza|maximize|foca|focar|"
+        r"bloco\s+de\s+notas|notepad|calculadora|calculator|explorador|explorer|vs\s?code|visual\s+studio\s+code|"
+        r"janela[s]?|[aá]rea\s+de\s+trabalho)\b",
+        value,
+    ):
+        return DOMAIN_DESKTOP
+    if re.search(r"\b(navegador|chrome|edge|firefox|aba[s]?|site|url|pesquis[ae]\s+na\s+internet)\b", value):
+        return DOMAIN_BROWSER
+    if re.search(r"\b(arquivo[s]?|pasta[s]?|diret[oó]rio[s]?|lista\s+arquivos)\b", value):
+        return DOMAIN_FILESYSTEM
+    if re.search(r"\b(rede|internet|conex[aã]o|lat[eê]ncia|jitter|dns|ping|wi-?fi|interface[s]?|porta[s]?)\b", value):
+        return DOMAIN_NETWORK
+    if re.search(
+        r"\b(processo[s]?|servi[cç]o[s]?|registro|tarefa[s]?|shell|powershell|cmd|docker|git|ollama|backend|runtime)\b",
+        value,
+    ):
+        return DOMAIN_RUNTIME
+    if re.search(r"\b(workflow|fluxo|rotina|automa[cç][aã]o)\b", value):
+        return DOMAIN_WORKFLOW
+    return DOMAIN_CONVERSATION
+
+
+def _tool_domain(name: str) -> str:
+    lowered = name.casefold()
+    for prefixes, domain in _DOMAIN_TOOL_PREFIXES:
+        if lowered.startswith(prefixes) or lowered in prefixes:
+            return domain
+    return DOMAIN_GENERIC
 
 
 @dataclass(frozen=True)
@@ -58,23 +139,48 @@ class ToolRegistry:
             for tool in self._tools.values()
         ]
 
-    def llm_tools(self) -> list[dict[str, Any]]:
+    def llm_tools(self, domain: str | None = None) -> list[dict[str, Any]]:
+        """OpenAI-style schemas, optionally narrowed to one routing domain.
+
+        DOMAIN_CONVERSATION yields no tools; DOMAIN_GENERIC keeps every
+        LLM-enabled tool as safe fallback when routing is ambiguous.
+        """
+        tools = [tool for tool in self._tools.values() if tool.llm_enabled]
+        if domain is not None and domain != DOMAIN_GENERIC:
+            if domain == DOMAIN_CONVERSATION:
+                tools = []
+            else:
+                primary = [tool for tool in tools if _tool_domain(tool.name) == domain]
+                support_names = (
+                    {"remote_shell", "desktop_windows", "desktop_find_application"}
+                    if domain == DOMAIN_DESKTOP
+                    else {"system_shell", "remote_shell", "desktop_windows", "desktop_find_application"}
+                )
+                support = [
+                    tool for tool in tools
+                    if tool.name in support_names and _tool_domain(tool.name) != domain
+                ]
+                tools = primary + support
         return [
             {
                 "type": "function",
                 "function": {
                     "name": tool.name,
                     "description": tool.description,
-                    "parameters": tool.input_model.model_json_schema(),
+                    "parameters": json.loads(_cached_json_schema(tool.input_model)),
                 },
             }
-            for tool in self._tools.values()
-            if tool.llm_enabled
+            for tool in tools
         ]
 
     def should_route_to_agent(self, text: str) -> bool:
         """Use tool schemas only for requests that require observable state or action."""
         value = " ".join(text.casefold().split())
+        if re.search(r"\b(clipboard|transfer\w*)\b", value) and re.search(
+            r"\b(status|estado|copia|copie|copiar|cola|cole|colar|limpa|limpar|texto)\b",
+            value,
+        ):
+            return True
         homelab_target = re.search(
             r"\b(homelab|proxmox|openwrt|pve|home\s*assistant|homeassistant|\bha\b|hipervisor|hypervisor|"
             r"dc1|m[aá]quinas?\s+virtuais?|vms?|containers?|lxc)\b",
@@ -112,7 +218,17 @@ class ToolRegistry:
             r"[aá]rea de trabalho|desktop|tela)\b",
             value,
         )
-        return bool(intent and target)
+        if intent and target:
+            return True
+        # Comando imperativo no início da frase é ação mesmo sem palavra-alvo
+        # conhecida (ex.: "rode os testes", "abre o zumbi runner") — o domínio
+        # ambíguo cai no subset GENERIC em vez de conversa sem tools.
+        imperative = re.match(
+            r"^\s*(?:nyra[, ]+)?(?:abre|abra|abrir|feche|fecha|fechar|executa|execute|rode|roda|rodar|"
+            r"inicia|inicie|minimize|minimiza|restaura|maximize|foca|liste|lista|verifica|reinicia|reinicie)\b",
+            value,
+        )
+        return bool(imperative and len(value.split()) <= 12)
 
     def preflight(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         definition = self._tools.get(name)
@@ -134,10 +250,25 @@ class ToolRegistry:
             return None
         return {"host": host.id, "address": host.address}
 
-    async def execute(self, name: str, payload: dict[str, Any]) -> ToolResult:
+    def is_exposed(self, name: str) -> bool:
+        """Return whether a tool may be reached from LLM/API composition."""
+        definition = self._tools.get(name)
+        return bool(definition and definition.llm_enabled)
+
+    async def execute(
+        self,
+        name: str,
+        payload: dict[str, Any],
+        *,
+        exposure: str = "internal",
+    ) -> ToolResult:
         definition = self._tools.get(name)
         if not definition:
             raise KeyError(f"Ferramenta não permitida: {name}")
+        if exposure in {"llm", "api"} and not definition.llm_enabled:
+            raise PermissionError(
+                f"Ferramenta '{name}' não está autorizada para execução via {exposure}."
+            )
         validated = definition.input_model.model_validate(payload)
         started = time.perf_counter()
         ok = True

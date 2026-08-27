@@ -110,32 +110,117 @@ class BrainManager(LLMProvider):
         return self.fallback_enabled and self.active_model != self.fallback_model
 
     async def inventory(self) -> dict:
+        tags: list[dict] = []
+        running: list[dict] = []
+        tags_error_code: str | None = None
+        residency_error_code: str | None = None
         async with httpx.AsyncClient(timeout=5) as client:
-            tags = (await client.get(f"{self.base_url}/api/tags")).json().get("models", [])
             try:
-                running = (await client.get(f"{self.base_url}/api/ps")).json().get("models", [])
-            except httpx.HTTPError:
-                running = []
-        run_map = {item.get("name"): item for item in running}
-        tag_map = {item.get("name"): item for item in tags}
+                response = await client.get(f"{self.base_url}/api/tags")
+                response.raise_for_status()
+                tags = self._ollama_models(response.json())
+            except httpx.RequestError:
+                tags_error_code = "OLLAMA_OFFLINE"
+            except httpx.HTTPStatusError:
+                tags_error_code = "OLLAMA_API_ERROR"
+            except (TypeError, ValueError):
+                tags_error_code = "OLLAMA_SCHEMA_ERROR"
+            try:
+                response = await client.get(f"{self.base_url}/api/ps")
+                response.raise_for_status()
+                running = self._ollama_models(response.json())
+            except httpx.RequestError:
+                residency_error_code = "OLLAMA_OFFLINE"
+            except httpx.HTTPStatusError:
+                residency_error_code = "OLLAMA_API_ERROR"
+            except (TypeError, ValueError):
+                residency_error_code = "OLLAMA_SCHEMA_ERROR"
+
+        tags_ready = tags_error_code is None
+        residency_known = residency_error_code is None
+        ollama_ready = tags_ready or residency_known
+        if ollama_ready:
+            ollama_state = "READY"
+        elif tags_error_code == "OLLAMA_OFFLINE" and residency_error_code == "OLLAMA_OFFLINE":
+            ollama_state = "OFFLINE"
+        else:
+            ollama_state = "ERROR"
+
+        run_map: dict[str, dict] = {}
+        for item in running:
+            name = str(item.get("name") or item.get("model") or "").strip()
+            if name:
+                run_map[name] = item
+        resident_models = list(run_map)
+        resident_active_model = (
+            self.active_model
+            if self.active_model in run_map
+            else resident_models[0] if resident_models else None
+        )
         benchmark = self._load_benchmark()
         models = []
-        for name in SUPPORTED_MODELS:
-            item = tag_map.get(name, {})
-            details = item.get("details", {})
+        for item in tags:
+            name = item.get("name") or ""
+            if not name:
+                continue
+            details = item.get("details", {}) or {}
             recent = benchmark.get("models", {}).get(name, {})
             models.append({
-                "name": name, "installed": bool(item), "size": item.get("size"),
-                "digest": item.get("digest"), "quantization": details.get("quantization_level"),
-                "family": details.get("family"), "loaded": name in run_map,
+                "name": name,
+                "model": item.get("model"),
+                "installed": True,
+                "size": item.get("size"),
+                "modified_at": item.get("modified_at"),
+                "digest": item.get("digest") or None,
+                "family": details.get("family"),
+                "parameter_size": details.get("parameter_size"),
+                "quantization_level": details.get("quantization_level"),
+                "loaded": name in run_map if residency_known else None,
                 "runtime_size": run_map.get(name, {}).get("size_vram"),
                 "context_length": run_map.get(name, {}).get("context_length"),
-                "official": name == self.official_model, "active": name == self.active_model,
+                "official": name == self.official_model,
+                "active": name == resident_active_model,
                 "benchmark": recent,
             })
-        return {"provider": "ollama", "active_model": self.active_model, "official_model": self.official_model,
-                "fallback_model": self.fallback_model, "fallback_enabled": self.fallback_enabled,
-                "last_fallback": self.last_fallback, "models": models}
+        installed_names = {item["name"] for item in models}
+        return {
+            "provider": "ollama",
+            "ollama_ready": ollama_ready,
+            "ollama_state": ollama_state,
+            "active_model": resident_active_model,
+            "official_model": self.official_model,
+            "configured_model_not_installed": (
+                self.official_model not in installed_names if tags_ready else None
+            ),
+            "resident_models": resident_models,
+            "residency_known": residency_known,
+            "inventory_error_code": tags_error_code,
+            "residency_error_code": residency_error_code,
+            "fallback_model": self.fallback_model,
+            "fallback_enabled": self.fallback_enabled,
+            "last_fallback": self.last_fallback,
+            "models": models,
+        }
+
+    @staticmethod
+    def _ollama_models(payload: object) -> list[dict]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
+            raise ValueError("Invalid Ollama models response")
+        return [item for item in payload["models"] if isinstance(item, dict)]
+
+    async def is_installed(self, model: str) -> bool:
+        """Validate against the REAL Ollama installation - never a local list."""
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                response.raise_for_status()
+                names = {
+                    item.get("name") for item in response.json().get("models", [])
+                }
+        except (httpx.HTTPError, ValueError):
+            return False
+        base = model.split(":")[0]
+        return model in names or any(str(n).startswith(f"{base}:") for n in names)
 
     def use_temporarily(self, model: str) -> None:
         self._validate(model)
@@ -162,7 +247,8 @@ class BrainManager(LLMProvider):
 
     async def benchmark(self, models: list[str], context_size: int = 8192) -> dict:
         for model in models:
-            self._validate(model)
+            if model not in SUPPORTED_MODELS:
+                raise ValueError("Modelo não permitido no Brain Lab")
         system_prompt = (IDENTITY_ROOT / "system_prompt.md").read_text(encoding="utf-8")
         prompts = {
             "persona": "Nyra, você está online? Responda em no máximo duas frases.",
@@ -225,8 +311,9 @@ class BrainManager(LLMProvider):
                 "note": "Triagem automática; tool use, memória e qualidade final exigem validação funcional/humana."}
 
     def _validate(self, model: str) -> None:
-        if model not in SUPPORTED_MODELS:
-            raise ValueError("Modelo não permitido no Brain Lab")
+        cleaned = str(model or "").strip()
+        if not cleaned or len(cleaned) > 120:
+            raise ValueError("Nome de modelo inválido")
 
     def _load_settings(self) -> dict:
         try: return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))

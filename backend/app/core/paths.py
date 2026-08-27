@@ -1,6 +1,7 @@
 r"""Central path resolution for NYRA (dev repo vs installed/frozen layout).
 
-Dev mode: everything lives in the repository (PROJECT_ROOT = repo root).
+Dev mode: source lives in the repository while mutable runtime state lives in
+``%LOCALAPPDATA%\\NYRA`` (or ``NYRA_DATA_HOME``).
 
 Installed mode (PyInstaller ``nyra-backend.exe`` spawned by the Tauri shell):
 
@@ -44,41 +45,40 @@ def _installed_root() -> Path:
 FROZEN = _is_frozen()
 RESOURCE_ROOT = Path(getattr(sys, "_MEIPASS", _REPO_ROOT)) if FROZEN else _REPO_ROOT
 
+
+def resolve_packaged_path(value: Path) -> Path:
+    """Resolve um asset empacotado sem depender de cwd/repo/.venv no instalado.
+
+    Absoluto -> intocado (override explícito do operador). Relativo:
+    dev -> repo; instalado -> resource embutido (``_internal`` do onedir),
+    com queda para o root gravável caso o asset não tenha sido empacotado.
+    """
+    if value.is_absolute():
+        return value
+    if FROZEN:
+        bundled = RESOURCE_ROOT / value
+        if bundled.exists():
+            return bundled
+        return PROJECT_ROOT / value
+    return PROJECT_ROOT / value
+
 if FROZEN:
     PROJECT_ROOT = _installed_root()
+    RUNTIME_ROOT = PROJECT_ROOT
 else:
     PROJECT_ROOT = _REPO_ROOT
+    RUNTIME_ROOT = _installed_root()
 
 BACKEND_ROOT = PROJECT_ROOT / "backend"
 # Identidade vive no root GRAVÁVEL (overrides de pronúncia escrevem aqui);
 # o bootstrap semeia o conteúdo a partir do resource somente-leitura.
 IDENTITY_ROOT = PROJECT_ROOT / "identity"
-DATA_ROOT = PROJECT_ROOT / "data"
-LOG_ROOT = PROJECT_ROOT / "logs"
+DATA_ROOT = RUNTIME_ROOT / "data"
+LOG_ROOT = RUNTIME_ROOT / "logs"
 CONFIG_ROOT = PROJECT_ROOT / "config"
 
 # Subpastas exigidas no modo instalado (§3 do packaging fix).
 INSTALLED_SUBDIRS = ("config", "data", "logs", "cache", "backups", "workflows")
-
-# Arquivos pequenos de estado que migram do snapshot embutido na primeira
-# execução (apenas se ausentes — nada existente é sobrescrito).
-_MIGRATABLE_STATE_FILES = (
-    "credentials-vault.bin",
-    "nyra.db",
-    "nyra.db-wal",
-    "nyra.db-shm",
-    "settings-v33.json",
-    "settings-adult.json",
-    "settings-v4.json",
-    "proxmox-config.json",
-    "openwrt-config.json",
-    "ha-profiles.json",
-    "workflows.json",
-    "brain-settings.json",
-    "brain-benchmark.json",
-    "edge-voices.json",
-    "daily-check-history.jsonl",
-)
 
 _CONFIG_TEMPLATE_FILES = (
     "default.yaml",
@@ -106,11 +106,10 @@ def _copy_if_absent(source: Path, destination: Path) -> bool:
 
 
 def ensure_runtime_directories() -> None:
-    """Cria a árvore de runtime; no modo instalado semeia configs/state ausentes.
+    """Cria a árvore de runtime; no modo instalado semeia templates ausentes.
 
-    Preservação garantida: arquivos existentes NUNCA são sobrescritos e o
-    Credential Broker (Credential Manager ou vault DPAPI) não é tocado além da
-    migração one-shot do arquivo de fallback quando destino não existe.
+    Preservação garantida: arquivos existentes nunca são sobrescritos. Estado
+    do operador e o Credential Broker não são lidos nem incorporados ao pacote.
     """
     if FROZEN:
         for name in INSTALLED_SUBDIRS:
@@ -135,13 +134,17 @@ def ensure_runtime_directories() -> None:
             for extra in bundled_identity.glob("*"):
                 if extra.is_file():
                     _copy_if_absent(extra, live_identity / extra.name)
-        # Estado essencial: snapshot embutido -> data/ (apenas ausentes).
-        bundled_state = RESOURCE_ROOT / "data-snapshot"
-        if bundled_state.is_dir():
-            for name in _MIGRATABLE_STATE_FILES:
-                _copy_if_absent(bundled_state / name, DATA_ROOT / name)
-            for extra in bundled_state.glob("*"):
-                if extra.is_file():
-                    _copy_if_absent(extra, DATA_ROOT / extra.name)
-    for directory in (DATA_ROOT, LOG_ROOT, DATA_ROOT / "audio", DATA_ROOT / "recordings"):
+        # Estado do operador nunca é empacotado: banco, credenciais, settings,
+        # histórico, memória e topologia nascem somente no runtime local.
+    for directory in (
+        DATA_ROOT,
+        LOG_ROOT,
+        RUNTIME_ROOT / "cache",
+        RUNTIME_ROOT / "downloads",
+        RUNTIME_ROOT / "reports",
+        RUNTIME_ROOT / "tmp",
+        RUNTIME_ROOT / "selfdev",
+        DATA_ROOT / "audio",
+        DATA_ROOT / "recordings",
+    ):
         directory.mkdir(parents=True, exist_ok=True)

@@ -114,3 +114,61 @@ async def test_elevated_execute_blocks_destructive_without_own_approval():
     assert outcome["success"] is False
     assert outcome["error_code"] == "APPROVAL_REQUIRED"  # §112 fail-closed
 
+
+def test_elevated_approval_helper_consumes_exact_fingerprint():
+    from app.operator.elevated_sessions import ElevatedSessionManager
+    from app.tools.shell_approval import ShellApprovalGate
+
+    gate = ShellApprovalGate()
+    manager = ElevatedSessionManager(approvals=gate)
+    description = "Abrir sessão administrativa de teste"
+    pending = manager._require_approval(
+        description=description, risk="ELEVATED", approval_id=None,
+    )
+    assert pending["error_code"] == "APPROVAL_REQUIRED"
+    gate.grant(pending["approval_id"], "test")
+    assert manager._require_approval(
+        description=description, risk="ELEVATED",
+        approval_id=pending["approval_id"],
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_elevated_destructive_approval_binds_full_command_shell_and_timeout():
+    from app.operator.elevated_sessions import ElevatedSession, ElevatedSessionManager
+    from app.tools.shell_approval import ShellApprovalGate
+
+    gate = ShellApprovalGate()
+    manager = ElevatedSessionManager(approvals=gate)
+    now = __import__("time").time()
+    session = ElevatedSession(
+        session_id="esess_binding001", user="tester", started_at=now,
+        expires_at=now + 60, capabilities=["shell:powershell"],
+        pipe_name="nyra-elevated-binding", token="x", host_pid=None,
+    )
+    manager._sessions[session.session_id] = session
+    manager._send_request = lambda *_args, **_kwargs: {
+        "_transport_ok": True, "ok": True, "exit_code": 0,
+        "stdout": "", "stderr": "", "timed_out": False, "duration_ms": 1,
+    }
+    command = "Remove-Item C:\\important.txt -Force # " + ("x" * 220)
+    pending = await manager.execute(
+        session.session_id, command, shell="powershell", timeout_seconds=60,
+    )
+    gate.grant(pending["approval_id"], "test")
+    changed = await manager.execute(
+        session.session_id, command + "; Remove-Item C:\\other.txt -Force",
+        shell="powershell", timeout_seconds=60, approval_id=pending["approval_id"],
+    )
+    assert changed["error_code"] == "APPROVAL_INVALID"
+    changed_shell = await manager.execute(
+        session.session_id, command, shell="cmd", timeout_seconds=60,
+        approval_id=pending["approval_id"],
+    )
+    assert changed_shell["error_code"] == "APPROVAL_INVALID"
+    exact = await manager.execute(
+        session.session_id, command, shell="powershell", timeout_seconds=60,
+        approval_id=pending["approval_id"],
+    )
+    assert exact["success"] is True
+

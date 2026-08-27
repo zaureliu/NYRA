@@ -34,6 +34,7 @@ DEFAULT_ENDPOINT = "http://127.0.0.1:8977"
 PROBE_TIMEOUT_SECONDS = 2.0
 BREAKER_FAILURE_THRESHOLD = 5
 BREAKER_BACKOFF_SECONDS = 60.0
+REFRESH_INTERVAL_SECONDS = 10.0
 
 KNOWN_CAPABILITIES = ("stt", "tts", "vad", "aec", "ns", "streaming")
 
@@ -73,6 +74,7 @@ class VoiceProcessorBridge:
         self._consecutive_failures: int = 0
         self._breaker_open_until: float = 0.0
         self._health: str = "UNKNOWN"
+        self._refresh_task: asyncio.Task | None = None
 
     # ------------------------------------------------------------------ config
 
@@ -113,6 +115,44 @@ class VoiceProcessorBridge:
 
     async def set_enabled(self, enabled: bool) -> dict[str, Any]:
         return await self.update({"enabled": enabled})
+
+    # ------------------------------------------------- background refresh
+    def start_background_refresh(self, interval: float = REFRESH_INTERVAL_SECONDS) -> None:
+        """Sonda periódica honesta: mantém cached_status coerente com o processor.
+
+        Sem isso o status ficaria preso no último probe (ex.: HEALTHY para sempre
+        depois de o Satellite fechar).  Respeita o circuit breaker; só atua
+        quando enabled.  Idempotente.
+        """
+        if self._refresh_task is not None and not self._refresh_task.done():
+            return
+
+        async def _loop() -> None:
+            try:
+                while True:
+                    if self._enabled and not self._breaker_open():
+                        try:
+                            await self.probe()
+                        except Exception as error:  # noqa: BLE001 - loop nunca morre
+                            logger.debug("voice_bridge_refresh_failed error=%s",
+                                         type(error).__name__)
+                    await asyncio.sleep(max(1.0, interval))
+            except asyncio.CancelledError:  # pragma: no cover - shutdown path
+                return
+
+        self._refresh_task = asyncio.create_task(_loop(), name="voice-bridge-refresh")
+        logger.info("voice_bridge_refresh_started interval=%.1fs", interval)
+
+    async def stop_background_refresh(self) -> None:
+        task = self._refresh_task
+        self._refresh_task = None
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            logger.info("voice_bridge_refresh_stopped")
 
     # ------------------------------------------------------------------ probes
 

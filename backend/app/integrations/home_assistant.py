@@ -12,7 +12,7 @@ import logging
 from typing import Any
 import httpx
 
-from app.integrations.base import IntegrationError
+from app.integrations.base import IntegrationError, require_secure_credential_transport
 
 
 logger = logging.getLogger("nyra.homelab.ha")
@@ -88,6 +88,7 @@ class HomeAssistantClient:
         url = f"{self.base_url}{path}"
         headers: dict[str, str] = {"User-Agent": _USER_AGENT}
         if self._token:
+            require_secure_credential_transport(self.base_url)
             headers["Authorization"] = f"Bearer {self._token}"
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:

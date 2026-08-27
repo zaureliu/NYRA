@@ -228,21 +228,38 @@ async def test_identical_command_and_result_stop_no_progress(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_read_only_mode_blocks_mutation(tmp_path: Path):
-    called = False
+    """Semântica PRO: read_only bloqueia ELEVATED+, mas permite LOW_RISK."""
+    calls: list[str] = []
 
     async def action(command: str, approval_id: str | None = None):
-        nonlocal called
-        called = True
+        calls.append("action")
         return {"success": True}
+
+    async def elevated_action(command: str, approval_id: str | None = None):
+        calls.append("elevated_action")
+        return {"success": True}
+
+    async def check_state(command: str = "", approval_id: str | None = None):
+        return {"success": True, "state": "verified"}
 
     controller = AgentController(
         settings(tmp_path, agent_read_only=True), EventBus(),
-        SequenceLLM([call("action", "restart"), LLMResponse(content="A alteração foi bloqueada pelo modo read-only.")]),
-        registry({"action": (RiskLevel.LOW_RISK, action)}),
+        SequenceLLM([
+            call("action", "reinicio seguro"),
+            call("elevated_action", "shutdown"),
+            call("check_state", "estado atual"),
+            LLMResponse(content="Ação LOW_RISK executada e verificada; a alteração elevada foi bloqueada pelo modo read-only."),
+        ]),
+        registry({
+            "action": (RiskLevel.LOW_RISK, action),
+            "elevated_action": (RiskLevel.ELEVATED, elevated_action),
+            "check_state": (RiskLevel.READ_ONLY, check_state),
+        }),
     )
     await controller.initialize()
-    response = await controller.run(messages(), "não alterar")
-    assert called is False and "read-only" in response
+    response = await controller.run(messages(), "executar manutenção")
+    assert "action" in calls and "elevated_action" not in calls
+    assert "read-only" in response
 
 
 @pytest.mark.asyncio

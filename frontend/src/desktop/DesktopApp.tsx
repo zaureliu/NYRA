@@ -15,6 +15,7 @@ import { useStreamingAudioQueue } from '../hooks/useStreamingAudioQueue'
 import { microphoneStatusLabel } from '../hooks/audioDevices'
 import { useGlobalCursorFollow } from './useGlobalCursorFollow'
 import { TurnFilter, extractTurnId } from '../runtime/turns'
+import { sendChat } from '../runtime/conversation'
 import type { ActivityStatus, AvatarControl, EmotionalState } from '../types'
 
 const API = 'http://127.0.0.1:8000'
@@ -224,7 +225,7 @@ export function DesktopApp() {
     if (!text) return
     setDraft(''); setMenu(false); setStatus('THINKING')
     pendingTurnRequests.current += 1
-    await fetch(`${API}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, synthesize: true }) }).catch(() => setStatus('OFFLINE')).finally(() => { pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1) })
+    await sendChat({ message: text, synthesize: true }).catch(() => setStatus('OFFLINE')).finally(() => { pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1) })
   }
 
   return <main className={`desktop-presence state-${state} status-${status.toLowerCase()}`} data-transparent="true" data-live2d={live2dExternal} data-global-cursor={globalCursorAvailable ? 'available' : 'fallback'}>

@@ -15,6 +15,7 @@ Privacy hard rules:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -44,6 +45,40 @@ def _safe_selector(selector: str) -> bool:
         return False
     forbidden = re.compile(r"(?i)(cookie|localstorage|sessionstorage|token|apikey|api_key)")
     return not forbidden.search(selector)
+
+
+def _target_lookup_js(selector: str, x: int = 0, y: int = 0) -> str:
+    """Resolve the approved DOM target inside the guarded JS transaction."""
+    if selector:
+        return f"document.querySelector({json.dumps(selector)})"
+    return f"document.elementFromPoint({int(x)}, {int(y)})"
+
+
+_TARGET_SNAPSHOT_JS = (
+    "const nyraSnapshot = (el) => {"
+    " const r = el.getBoundingClientRect();"
+    " const password = String(el.type || '').toLowerCase() === 'password';"
+    " const form = el.form || null;"
+    " const fields = form ? Array.from(form.elements).map((field) => ({"
+    "   outerHTML: String(field.outerHTML || ''),"
+    "   value: String(field.value || ''), checked: !!field.checked,"
+    "   selectionStart: Number.isInteger(field.selectionStart) ? field.selectionStart : null,"
+    "   selectionEnd: Number.isInteger(field.selectionEnd) ? field.selectionEnd : null"
+    " })) : [];"
+    " const snapshot = JSON.stringify({"
+    "   outerHTML: String(el.outerHTML || ''),"
+    "   value: password ? {passwordLength:String(el.value || '').length} : String(el.value || ''),"
+    "   checked: !!el.checked, disabled: !!el.disabled, readOnly: !!el.readOnly,"
+    "   selectionStart: Number.isInteger(el.selectionStart) ? el.selectionStart : null,"
+    "   selectionEnd: Number.isInteger(el.selectionEnd) ? el.selectionEnd : null,"
+    "   form: form ? {outerHTML:String(form.outerHTML || ''), action:String(form.action || ''),"
+    "     method:String(form.method || ''), enctype:String(form.enctype || ''),"
+    "     target:String(form.target || ''), noValidate:!!form.noValidate, fields:fields} : null,"
+    "   rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]"
+    " });"
+    " return snapshot.length <= 65536 ? snapshot : '__NYRA_TARGET_TOO_COMPLEX__';"
+    "};"
+)
 
 
 def summarize_dom_js(max_nodes: int = 120) -> str:
@@ -138,6 +173,8 @@ class BrowserV2Controller:
             {"expression": expression, "returnByValue": True, "awaitPromise": False}, timeout,
         )
         if not ok or not isinstance(result, dict):
+            return False, None
+        if result.get("exceptionDetails"):
             return False, None
         value = (result.get("result") or {}).get("value")
         return True, value
@@ -328,10 +365,84 @@ class BrowserV2Controller:
                 "elements": found.get("elements", []),
                 "effect_verified": True, "verification_status": "VERIFIED"}
 
+    def _require_interaction_approval(self, approvals, *, action: str, tab_id: str,
+                                      url: str, parameters: dict,
+                                      approval_id: str | None) -> dict | None:
+        """One-use approval for an exact browser interaction at an exact URL."""
+        from app.tools.shell_models import ShellRiskLevel
+
+        params_json = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        params_hash = hashlib.sha256(params_json.encode("utf-8")).hexdigest()
+        url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
+        description = (
+            f"{action} params_sha256={params_hash} tab={tab_id} "
+            f"url_sha256={url_hash}"
+        )
+        if approvals is None:
+            return {"success": False, "error_code": "APPROVAL_REQUIRED",
+                    "approval_required": True}
+        fingerprint = approvals.fingerprint(
+            description, action, url_hash, 20, target=tab_id,
+        )
+        if not approval_id:
+            record = approvals.request(
+                command=description, shell=action, working_directory=url_hash,
+                timeout_seconds=20, risk_level=ShellRiskLevel.ELEVATED,
+                target=tab_id, fingerprint=fingerprint,
+            )
+            return {"success": False, "error_code": "APPROVAL_REQUIRED",
+                    "approval_required": True, "approval_id": record.approval_id}
+        granted, reason = approvals.consume(approval_id, fingerprint)
+        if not granted:
+            return {"success": False, "error_code": "APPROVAL_INVALID", "message": reason}
+        return None
+
+    async def _approval_target(self, port: int, tab_id: str, *, selector: str = "",
+                               x: int = 0, y: int = 0) -> tuple[dict | None, dict | None]:
+        """Capture and later bind a non-secret identity for the DOM target."""
+        lookup = _target_lookup_js(selector, x, y)
+        expression = (
+            "(() => {" + _TARGET_SNAPSHOT_JS +
+            f"const el = {lookup};"
+            "if (!el) return JSON.stringify({guard_error:'ELEMENT_NOT_FOUND'});"
+            "const r = el.getBoundingClientRect();"
+            "return JSON.stringify({snapshot: nyraSnapshot(el),"
+            " x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2)});"
+            "})()"
+        )
+        ok, raw = await self._evaluate(port, tab_id, expression)
+        result = self._parse_json(raw)
+        if not ok or not result.get("snapshot"):
+            return None, operation_result(
+                app="browser", action="interaction", success=False,
+                error_code=str(result.get("guard_error") or "ELEMENT_NOT_FOUND"),
+            )
+        if result["snapshot"] == "__NYRA_TARGET_TOO_COMPLEX__":
+            return None, operation_result(
+                app="browser", action="interaction", success=False,
+                error_code="TARGET_TOO_COMPLEX",
+                message="O estado integral do alvo excede 64 KiB; interação abortada.",
+            )
+        return result, None
+
+    async def _document_url(self, port: int, tab_id: str) -> str:
+        ok, value = await self._evaluate(port, tab_id, "location.href", timeout=3.0)
+        return str(value) if ok and isinstance(value, str) else ""
+
     # --------------------------------------------------------------- interactions
     async def click_element(self, *, selector: str = "", x: int = 0, y: int = 0,
-                            tab_id: str = "") -> dict:
-        """Real input click at element center (Input domain), never JS-synthetic."""
+                            tab_id: str = "", approval_id: str | None = None,
+                            approvals=None) -> dict:
+        """Click an exact target in one URL-and-DOM-guarded transaction."""
+        point_x, point_y = int(x), int(y)
+        if selector and not _safe_selector(selector):
+            return operation_result(app="browser", action="click_element", success=False,
+                                    error_code="INVALID_TARGET")
+        if not selector and not (point_x and point_y):
+            return operation_result(app="browser", action="click_element", success=False,
+                                    error_code="INVALID_TARGET")
         port, failure = await self._ensure()
         if failure:
             return failure
@@ -342,35 +453,56 @@ class BrowserV2Controller:
         visible, failure = await self.ensure_visible_tab(port, resolved)
         if failure:
             return failure
-        point_x, point_y = int(x), int(y)
-        used_selector = ""
-        if not (point_x and point_y):
-            if not selector or not _safe_selector(selector):
-                return operation_result(app="browser", action="click_element", success=False,
-                                        error_code="INVALID_TARGET")
-            used_selector = selector
-            expression = (
-                "(() => { const el = document.querySelector(" + json.dumps(selector) + ");"
-                "if (!el) return 'null';"
-                "const r = el.getBoundingClientRect();"
-                "return JSON.stringify({x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2)}); })()"
-            )
-            ok, value = await self._evaluate(port, resolved, expression)
-            coords = self._parse_json(value)
-            if not ok or not coords:
-                return operation_result(app="browser", action="click_element", success=False,
-                                        error_code="ELEMENT_NOT_FOUND")
-            point_x, point_y = int(coords["x"]), int(coords["y"])
-        url_before = await self._current_url(port, resolved)
-        pressed = await asyncio.to_thread(_ws_command, port, resolved, "Input.dispatchMouseEvent",
-                                          {"type": "mousePressed", "x": point_x, "y": point_y,
-                                           "button": "left", "clickCount": 1})
-        released = await asyncio.to_thread(_ws_command, port, resolved, "Input.dispatchMouseEvent",
-                                           {"type": "mouseReleased", "x": point_x, "y": point_y,
-                                            "button": "left", "clickCount": 1})
+        approved_url = await self._document_url(port, resolved)
+        if not approved_url:
+            return operation_result(app="browser", action="click_element", success=False,
+                                    error_code="BROWSER_ORIGIN_UNAVAILABLE")
+        target, failure = await self._approval_target(
+            port, resolved, selector=selector, x=point_x, y=point_y,
+        )
+        if failure:
+            return failure
+        assert target is not None
+        target_snapshot = str(target["snapshot"])
+        target_hash = hashlib.sha256(target_snapshot.encode("utf-8")).hexdigest()
+        decision = self._require_interaction_approval(
+            approvals,
+            action="browser_click",
+            tab_id=resolved,
+            url=approved_url,
+            parameters={"selector": selector, "x": point_x, "y": point_y,
+                        "target_sha256": target_hash},
+            approval_id=approval_id,
+        )
+        if decision is not None:
+            return decision
+        lookup = _target_lookup_js(selector, point_x, point_y)
+        expression = (
+            "(() => {" + _TARGET_SNAPSHOT_JS +
+            f"const approvedUrl = {json.dumps(approved_url)};"
+            "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
+            f"const el = {lookup};"
+            "if (!el) return JSON.stringify({guard_error:'ELEMENT_NOT_FOUND'});"
+            f"if (nyraSnapshot(el) !== {json.dumps(target_snapshot)}) "
+            "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
+            "const r = el.getBoundingClientRect();"
+            "el.click();"
+            "return JSON.stringify({clicked:true, x:Math.round(r.x+r.width/2),"
+            " y:Math.round(r.y+r.height/2)});"
+            "})()"
+        )
+        url_before = approved_url
+        ok, raw = await self._evaluate(port, resolved, expression)
+        clicked = self._parse_json(raw)
+        if clicked.get("guard_error"):
+            return operation_result(app="browser", action="click_element", success=False,
+                                    error_code=str(clicked["guard_error"]),
+                                    approval_used=True)
         await asyncio.sleep(0.8)
         url_after = await self._current_url(port, resolved)
-        executed = bool(pressed[0] and released[0])
+        point_x = int(clicked.get("x", target.get("x", point_x)))
+        point_y = int(clicked.get("y", target.get("y", point_y)))
+        executed = bool(ok and clicked.get("clicked"))
         navigated = bool(url_before and url_after and url_before != url_after)
         verified = executed  # pixel-level change can't be asserted generically; nav counts extra
         return operation_result(app="browser", action="click_element",
@@ -378,12 +510,17 @@ class BrowserV2Controller:
                                 execution_success=executed,
                                 effect_verified=verified,
                                 verification_status="VERIFIED" if verified else "EXECUTION_FAILED",
+                                approval_used=True,
                                 navigation_detected=navigated,
                                 message=f"Clique enviado em ({point_x},{point_y}).",
-                                detail={"selector_used": used_selector, "at": {"x": point_x, "y": point_y}})
+                                detail={"selector_used": selector, "at": {"x": point_x, "y": point_y}})
 
     async def type_text(self, text: str, *, selector: str = "", submit: bool = False,
-                        secret: bool = False, tab_id: str = "") -> dict:
+                        secret: bool = False, tab_id: str = "",
+                        approval_id: str | None = None, approvals=None) -> dict:
+        if not selector or not _safe_selector(selector):
+            return operation_result(app="browser", action="type_text", success=False,
+                                    error_code="INVALID_SELECTOR")
         port, failure = await self._ensure()
         if failure:
             return failure
@@ -394,55 +531,95 @@ class BrowserV2Controller:
         visible, failure = await self.ensure_visible_tab(port, resolved)
         if failure:
             return failure
-        focus_expression = (
-            "(() => { const el = " + (
-                f"document.querySelector({json.dumps(selector)})" if selector
-                else "document.activeElement"
-            ) + ";"
-            "if (!el || !el.focus) return 'no-focusable';"
-            "el.focus();"
-            "return JSON.stringify({tag: el.tagName.toLowerCase(), password: el.type === 'password'}); })()"
+        approved_url = await self._document_url(port, resolved)
+        if not approved_url:
+            return operation_result(app="browser", action="type_text", success=False,
+                                    error_code="BROWSER_ORIGIN_UNAVAILABLE")
+        target, failure = await self._approval_target(port, resolved, selector=selector)
+        if failure:
+            return failure
+        assert target is not None
+        target_snapshot = str(target["snapshot"])
+        target_hash = hashlib.sha256(target_snapshot.encode("utf-8")).hexdigest()
+        decision = self._require_interaction_approval(
+            approvals,
+            action="browser_type",
+            tab_id=resolved,
+            url=approved_url,
+            parameters={
+                "selector": selector,
+                "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "secret": bool(secret),
+                "submit": bool(submit),
+                "target_sha256": target_hash,
+            },
+            approval_id=approval_id,
         )
-        ok, value = await self._evaluate(port, resolved, focus_expression)
+        if decision is not None:
+            return decision
+        lookup = _target_lookup_js(selector)
+        action_expression = (
+            "(() => {" + _TARGET_SNAPSHOT_JS +
+            f"const approvedUrl = {json.dumps(approved_url)};"
+            "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
+            f"const el = {lookup};"
+            "if (!el || !el.focus) return JSON.stringify({guard_error:'FOCUS_FAILED'});"
+            f"if (nyraSnapshot(el) !== {json.dumps(target_snapshot)}) "
+            "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
+            "const tag = String(el.tagName || '').toLowerCase();"
+            "const password = String(el.type || '').toLowerCase() === 'password';"
+            "const editable = tag === 'input' || tag === 'textarea' || el.isContentEditable;"
+            "if (!editable) return JSON.stringify({guard_error:'FOCUS_FAILED'});"
+            "el.focus();"
+            f"const text = {json.dumps(text[:4000])};"
+            "let inserted = false;"
+            "if (document.execCommand) inserted = document.execCommand('insertText', false, text);"
+            "if (!inserted && 'value' in el) {"
+            " const before = String(el.value || '');"
+            " const start = Number.isInteger(el.selectionStart) ? el.selectionStart : before.length;"
+            " const end = Number.isInteger(el.selectionEnd) ? el.selectionEnd : start;"
+            " const next = before.slice(0,start) + text + before.slice(end);"
+            " const proto = tag === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;"
+            " const setter = Object.getOwnPropertyDescriptor(proto, 'value').set; setter.call(el, next);"
+            " if (el.setSelectionRange) el.setSelectionRange(start + text.length, start + text.length);"
+            " el.dispatchEvent(new InputEvent('input', {bubbles:true, data:text, inputType:'insertText'}));"
+            " inserted = true;"
+            "}"
+            "const stored = 'value' in el ? String(el.value || '') : String(el.textContent || '');"
+            "const nyraResult = JSON.stringify({inserted:!!inserted, tag:tag, password:password, len:stored.length,"
+            + ("masked:true" if secret else "preview:password ? '<password>' : stored.slice(0,60)") +
+            "});"
+            + (
+                "if (el.form && typeof el.form.requestSubmit === 'function') el.form.requestSubmit();"
+                "else { el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));"
+                "el.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',bubbles:true})); }"
+                if submit else ""
+            ) +
+            "return nyraResult;"
+            "})()"
+        )
+        ok, value = await self._evaluate(port, resolved, action_expression)
         focused = self._parse_json(value)
-        if not ok or not focused:
+        if focused.get("guard_error"):
+            return operation_result(app="browser", action="type_text", success=False,
+                                    error_code=str(focused["guard_error"]), approval_used=True)
+        if not ok or not focused.get("inserted"):
             return operation_result(app="browser", action="type_text", success=False,
                                     error_code="FOCUS_FAILED",
                                     message="Nenhum campo focável encontrado (informe selector).")
         is_password_field = bool(focused.get("password"))
-        inserted = await asyncio.to_thread(_ws_command, port, resolved, "Input.insertText",
-                                           {"text": text[:4000]})
-        if submit:
-            for key in ("Enter_down_placeholder",):
-                break
-            await asyncio.to_thread(_ws_command, port, resolved, "Input.dispatchKeyEvent",
-                                    {"type": "rawKeyDown", "key": "Enter", "code": "Enter",
-                                     "windowsVirtualKeyCode": 13})
-            await asyncio.to_thread(_ws_command, port, resolved, "Input.dispatchKeyEvent",
-                                    {"type": "keyUp", "key": "Enter", "code": "Enter",
-                                     "windowsVirtualKeyCode": 13})
-        await asyncio.sleep(0.4)
-        readback_expression = (
-            "(() => { const el = document.activeElement;"
-            "if (!el || !('value' in el)) return '{}';"
-            "const v = String(el.value || '');"
-            "return JSON.stringify({len: v.length,"
-            + ("masked: true});" if is_password_field or secret else "preview: v.slice(0,60)});")
-            + "})()"
-        )
-        _, stored = await self._evaluate(port, resolved, readback_expression)
-        stored_info = self._parse_json(stored)
-        verified = bool(inserted[0]) and int(stored_info.get("len", -1)) >= 0
+        verified = int(focused.get("len", -1)) >= 0
         payload = {
-            "success": bool(inserted[0]),
-            "execution_success": bool(inserted[0]),
+            "success": True,
+            "execution_success": True,
             "effect_verified": verified,
             "verification_status": "VERIFIED" if verified else "EXECUTED",
             "submitted": submit,
+            "approval_used": True,
             "field_tag": focused.get("tag", ""),
         }
         if not is_password_field and not secret:
-            payload["stored_preview"] = str(stored_info.get("preview", ""))[:60]
+            payload["stored_preview"] = str(focused.get("preview", ""))[:60]
         else:
             payload["stored_preview"] = "<password>"
         return payload
@@ -453,7 +630,8 @@ class BrowserV2Controller:
         return str(current.get("url", ""))
 
     # ------------------------------------------------------------ select/check
-    async def select_option(self, selector: str, value: str, *, tab_id: str = "") -> dict:
+    async def select_option(self, selector: str, value: str, *, tab_id: str = "",
+                            approval_id: str | None = None, approvals=None) -> dict:
         if not selector or not _safe_selector(selector):
             return operation_result(app="browser", action="select_option", success=False,
                                     error_code="INVALID_SELECTOR")
@@ -463,9 +641,32 @@ class BrowserV2Controller:
         resolved, failure = await self.resolve_tab(port, tab_id)
         if failure:
             return failure
+        approved_url = await self._document_url(port, resolved)
+        if not approved_url:
+            return operation_result(app="browser", action="select_option", success=False,
+                                    error_code="BROWSER_ORIGIN_UNAVAILABLE")
+        target, failure = await self._approval_target(port, resolved, selector=selector)
+        if failure:
+            return failure
+        assert target is not None
+        snapshot = str(target["snapshot"])
+        decision = self._require_interaction_approval(
+            approvals, action="browser_select", tab_id=resolved, url=approved_url,
+            parameters={"selector": selector,
+                        "value_sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+                        "target_sha256": hashlib.sha256(snapshot.encode("utf-8")).hexdigest()},
+            approval_id=approval_id,
+        )
+        if decision is not None:
+            return decision
         expression = (
-            "(() => { const el = document.querySelector(" + json.dumps(selector) + ");"
+            "(() => {" + _TARGET_SNAPSHOT_JS +
+            f"const approvedUrl = {json.dumps(approved_url)};"
+            "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
+            "const el = document.querySelector(" + json.dumps(selector) + ");"
             "if (!el || el.tagName !== 'SELECT') return 'not-select';"
+            f"if (nyraSnapshot(el) !== {json.dumps(snapshot)}) "
+            "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "const option = Array.from(el.options).find(o => o.value === " + json.dumps(value) +
             " || o.textContent.trim() === " + json.dumps(value) + ");"
             "if (!option) return 'option-missing';"
@@ -476,15 +677,20 @@ class BrowserV2Controller:
         )
         ok, raw = await self._evaluate(port, resolved, expression)
         result = self._parse_json(raw) if isinstance(raw, str) else (raw or {})
+        if result.get("guard_error"):
+            return operation_result(app="browser", action="select_option", success=False,
+                                    error_code=str(result["guard_error"]), approval_used=True)
         verified = ok and result.get("selected") is not None
         return operation_result(app="browser", action="select_option",
                                 success=bool(verified),
                                 effect_verified=bool(verified),
+                                approval_used=True,
                                 verification_status="VERIFIED" if verified else "EXECUTION_FAILED",
                                 message=f"Opção selecionada: {result.get('selected')}" if verified
                                 else f"Falha ao selecionar '{value}' ({raw}).")
 
-    async def set_checked(self, selector: str, checked: bool, *, tab_id: str = "") -> dict:
+    async def set_checked(self, selector: str, checked: bool, *, tab_id: str = "",
+                          approval_id: str | None = None, approvals=None) -> dict:
         if not selector or not _safe_selector(selector):
             return operation_result(app="browser", action="set_checked", success=False,
                                     error_code="INVALID_SELECTOR")
@@ -494,18 +700,44 @@ class BrowserV2Controller:
         resolved, failure = await self.resolve_tab(port, tab_id)
         if failure:
             return failure
+        approved_url = await self._document_url(port, resolved)
+        if not approved_url:
+            return operation_result(app="browser", action="set_checked", success=False,
+                                    error_code="BROWSER_ORIGIN_UNAVAILABLE")
+        target, failure = await self._approval_target(port, resolved, selector=selector)
+        if failure:
+            return failure
+        assert target is not None
+        snapshot = str(target["snapshot"])
+        decision = self._require_interaction_approval(
+            approvals, action="browser_check", tab_id=resolved, url=approved_url,
+            parameters={"selector": selector, "checked": bool(checked),
+                        "target_sha256": hashlib.sha256(snapshot.encode("utf-8")).hexdigest()},
+            approval_id=approval_id,
+        )
+        if decision is not None:
+            return decision
         expression = (
-            "(() => { const el = document.querySelector(" + json.dumps(selector) + ");"
+            "(() => {" + _TARGET_SNAPSHOT_JS +
+            f"const approvedUrl = {json.dumps(approved_url)};"
+            "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
+            "const el = document.querySelector(" + json.dumps(selector) + ");"
             "if (!el || !('checked' in el)) return 'not-checkable';"
+            f"if (nyraSnapshot(el) !== {json.dumps(snapshot)}) "
+            "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "if (el.checked !== " + ("true" if checked else "false") + ") { el.click(); }"
             "return JSON.stringify({checked: el.checked}); })()"
         )
         ok, raw = await self._evaluate(port, resolved, expression)
         result = self._parse_json(raw) if isinstance(raw, str) else (raw or {})
+        if result.get("guard_error"):
+            return operation_result(app="browser", action="set_checked", success=False,
+                                    error_code=str(result["guard_error"]), approval_used=True)
         verified = ok and bool(result.get("checked")) == checked
         return operation_result(app="browser", action="set_checked",
-                                success=bool(ok),
+                                success=bool(verified),
                                 effect_verified=verified,
+                                approval_used=True,
                                 verification_status="VERIFIED" if verified else "EXECUTION_FAILED",
                                 detail={"checked": result.get("checked")})
 
@@ -633,35 +865,53 @@ class BrowserV2Controller:
     # ------------------------------------------------------------------ script
     async def execute_script(self, script: str, *, approval_id=None, approvals=None,
                              tab_id: str = "") -> dict:
-        """§70/§71: only inside the controlled page; dangerous globals gated."""
-        forbidden = re.compile(
-            r"(?i)(document\.cookie|localstorage|sessionstorage|indexeddb|"
-            r"fetch\s*\(|xmlhttprequest|navigator\.sendbeacon|credentials)"
-        )
-        needs_approval = bool(forbidden.search(script))
-        if needs_approval:
-            from app.tools.shell_models import ShellRiskLevel
-
-            if approvals is None:
-                return {"success": False, "error_code": "APPROVAL_REQUIRED"}
-            description = f"Executar script com APIs sensíveis na página controlada"
-            fingerprint = approvals.fingerprint(description, "browser_script", "", 20, target="local")
-            if not approval_id:
-                record = approvals.request(command=description, shell="browser_script",
-                                           working_directory=".", timeout_seconds=20,
-                                           risk_level=ShellRiskLevel.ELEVATED, target="local")
-                return {"success": False, "error_code": "APPROVAL_REQUIRED",
-                        "approval_required": True, "approval_id": record.approval_id}
-            granted, reason = approvals.consume(approval_id, fingerprint)
-            if not granted:
-                return {"success": False, "error_code": "APPROVAL_INVALID", "message": reason}
+        """Execute only after one-use approval bound to script, tab and origin."""
         port, failure = await self._ensure()
         if failure:
             return failure
         resolved, failure = await self.resolve_tab(port, tab_id)
         if failure:
             return failure
-        ok, value = await self._evaluate(port, resolved, script[:8000], timeout=10.0)
+        if len(script) > 8000:
+            return {"success": False, "error_code": "BROWSER_SCRIPT_TOO_LARGE"}
+        origin_ok, origin_value = await self._evaluate(
+            port, resolved, "location.href", timeout=3.0,
+        )
+        if not origin_ok or not isinstance(origin_value, str):
+            return {"success": False, "error_code": "BROWSER_ORIGIN_UNAVAILABLE"}
+        from app.tools.shell_models import ShellRiskLevel
+
+        if approvals is None:
+            return {"success": False, "error_code": "APPROVAL_REQUIRED"}
+        script_hash = hashlib.sha256(script.encode("utf-8")).hexdigest()
+        url_hash = hashlib.sha256(origin_value.encode("utf-8")).hexdigest()
+        description = f"browser_script sha256={script_hash} tab={resolved} url_sha256={url_hash}"
+        fingerprint = approvals.fingerprint(
+            description, "browser_script", url_hash, 20, target=resolved,
+        )
+        if not approval_id:
+            record = approvals.request(
+                command=description,
+                shell="browser_script",
+                working_directory=url_hash,
+                timeout_seconds=20,
+                risk_level=ShellRiskLevel.ELEVATED,
+                target=resolved,
+                fingerprint=fingerprint,
+            )
+            return {"success": False, "error_code": "APPROVAL_REQUIRED",
+                    "approval_required": True, "approval_id": record.approval_id}
+        granted, reason = approvals.consume(approval_id, fingerprint)
+        if not granted:
+            return {"success": False, "error_code": "APPROVAL_INVALID", "message": reason}
+        guarded_script = (
+            "(() => {"
+            f"const approvedUrl={json.dumps(origin_value)};"
+            "if (location.href !== approvedUrl) { throw new Error('NYRA_BROWSER_TARGET_CHANGED'); }"
+            f"return eval({json.dumps(script)});"
+            "})()"
+        )
+        ok, value = await self._evaluate(port, resolved, guarded_script, timeout=10.0)
         output = redact_secrets(json.dumps(value, ensure_ascii=False, default=str)[:2000]) if value is not None else ""
         return {"success": bool(ok), "execution_success": bool(ok),
-                "result_preview": output, "approval_used": bool(needs_approval)}
+                "result_preview": output, "approval_used": True}

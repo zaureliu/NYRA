@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "standard": ["ParamAngleX","ParamAngleY","ParamAngleZ","ParamEyeLOpen","ParamEyeROpen","ParamEyeBallX","ParamEyeBallY","ParamBrowLY","ParamBrowRY","ParamMouthOpenY","ParamMouthForm","ParamBodyAngleX","ParamBodyAngleY","ParamBodyAngleZ","ParamBreath"],
+  "custom": ["ParamNyraNeuralLink","ParamNyraAttention","ParamNyraThinking","ParamNyraConcern","ParamNyraAmused"],
+  "ranges": {"ParamAngleX":[-30,30],"ParamAngleY":[-30,30],"ParamAngleZ":[-30,30],"ParamEyeBallX":[-1,1],"ParamEyeBallY":[-1,1],"ParamMouthOpenY":[0,1],"ParamMouthForm":[-1,1],"ParamBreath":[0,1]},
+  "note": "IDs finais devem ser confirmados por InputParameterListRequest; não injetar IDs ausentes."
+}

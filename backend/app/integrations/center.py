@@ -205,12 +205,14 @@ async def _openwrt_card(services: Any) -> dict[str, Any]:
     overall = str(getattr(host, "overall_state", ""))
     integration_error = getattr(host, "integration_error_code", None)
     # §91: SSH auth failed NÃO vira Offline quando o ping funciona.
+    # HealthState saudável é ONLINE (models.py) — "HEALTHY" nunca existiu;
+    # sem "ONLINE" aqui o card ficava DEGRADED mesmo com ubus respondendo.
     state = {
-        "HEALTHY": "READY", "READY": "READY",
+        "ONLINE": "READY", "HEALTHY": "READY", "READY": "READY",
         "UNREACHABLE": "OFFLINE", "OFFLINE": "OFFLINE",
     }.get(overall, "DEGRADED")
     health = state
-    if reachable and integration_error in {"SSH_AUTH_FAILED", "CAPABILITY_UNAVAILABLE"}:
+    if reachable and integration_error in {"REMOTE_AUTH_FAILED", "CAPABILITY_UNAVAILABLE"}:
         state = "DEGRADED"
         health = f"PING_OK_SSH_FALHOU ({integration_error})"
     return {

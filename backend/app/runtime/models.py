@@ -136,7 +136,8 @@ class ServiceSpec(BaseModel):
         from pathlib import Path
 
         if self.log_path:
-            return Path(self.log_path)
+            configured = Path(self.log_path)
+            return configured if configured.is_absolute() else Path(logs_root) / configured
         return Path(logs_root) / "runtime" / f"{self.id}.log"
 
 

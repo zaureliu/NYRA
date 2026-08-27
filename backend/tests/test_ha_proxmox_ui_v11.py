@@ -115,7 +115,7 @@ class TestHomeAssistantClientAuth:
             return original(*args, **kwargs)
 
         monkeypatch.setattr("app.integrations.home_assistant.httpx.AsyncClient", factory)
-        client = HomeAssistantClient("http://192.168.1.200", "tok-1234567890")
+        client = HomeAssistantClient("https://192.168.1.200", "tok-1234567890")
         payload = await client.config()
 
         assert payload["state"] == "RUNNING"
@@ -170,6 +170,18 @@ class TestHomeAssistantClientAuth:
 
 
 class TestHAProfilesRegression:
+    def test_cleared_token_tombstone_blocks_all_legacy_fallbacks(self, ha_env, monkeypatch):
+        mod, broker, _ = ha_env
+        store = mod.HAProfileSecretStore("ha-vm")
+        store.save("broker-token-1234567890")
+        monkeypatch.setenv("NYRA_HOME_ASSISTANT_TOKEN", "env-legacy-token")
+        store.clear()
+        settings = Settings(home_assistant_token="settings-legacy-token")
+        assert store.load() == ""
+        assert mod.resolve_profile_token("ha-vm", settings) == ""
+        assert broker.store.get("homeassistant_token_ha-vm") is None
+        assert store._tombstone_path().is_file()
+
     def test_status_never_ready_without_auth(self, ha_env):
         """§61 REGRESSÃO: reachable + credencial ausente → status != READY."""
         mod, _, _ = ha_env
@@ -184,6 +196,36 @@ class TestHAProfilesRegression:
         vm = next(p for p in listing["profiles"] if p["profile_id"] == "ha-vm")
         assert vm["status"] == "UNCONFIGURED"
         assert vm["auth_configured"] is False
+
+    def test_endpoint_change_invalidates_bound_token(self, ha_env):
+        mod, broker, _ = ha_env
+        mod.upsert_profile({"profile_id": "ha-vm", "name": "HA VM",
+                            "url": "https://192.168.1.200", "enabled": True})
+        store = mod.HAProfileSecretStore("ha-vm")
+        store.save("bound-token-123456789")
+        assert store.configured() is True
+
+        changed = mod.upsert_profile({
+            "profile_id": "ha-vm", "name": "HA VM",
+            "url": "https://192.168.1.201", "enabled": True,
+        })
+        assert changed["endpoint_changed"] is True
+        assert changed["credentials_reset"] is True
+        assert changed["auth_configured"] is False
+        assert changed["status"] == "UNCONFIGURED"
+        assert broker.store.get("homeassistant_token_ha-vm") is None
+        assert store._tombstone_path().is_file()
+
+    def test_profile_url_rejects_userinfo_paths_and_fragments(self, ha_env):
+        mod, _, _ = ha_env
+        for invalid in (
+            "https://user:secret@192.168.1.200",
+            "https://192.168.1.200/api",
+            "https://192.168.1.200#other",
+        ):
+            with pytest.raises(ValueError):
+                mod.upsert_profile({"profile_id": "ha-vm", "name": "HA VM",
+                                    "url": invalid, "enabled": True})
 
     async def test_probe_without_token_makes_zero_requests(self, ha_env, monkeypatch):
         mod, _, _ = ha_env
@@ -211,7 +253,7 @@ class TestHAProfilesRegression:
 
         monkeypatch.setattr(
             "app.integrations.home_assistant_profiles.httpx.AsyncClient", factory)
-        result = await mod._probe("http://192.168.1.200", "tok-abcdef-123456")
+        result = await mod._probe("https://192.168.1.200", "tok-abcdef-123456")
 
         assert result["ok"] is True
         assert result["authenticated"] is True
@@ -223,7 +265,7 @@ class TestHAProfilesRegression:
     async def test_test_profile_auth_failed_on_401(self, ha_env, monkeypatch):
         mod, broker, _ = ha_env
         mod.upsert_profile({"profile_id": "ha-vm", "name": "HA VM",
-                            "url": "http://192.168.1.200", "enabled": True})
+                            "url": "https://192.168.1.200", "enabled": True})
         broker.store["homeassistant_token_ha-vm"] = "tok-recusado-123456"
 
         original = httpx.AsyncClient
@@ -387,9 +429,9 @@ class TestHAProfilesRegression:
         import time as _time
 
         # Token configurado mas recusado → AUTH_FAILED (§10), nunca OFFLINE.
-        broker.store["homeassistant_token_ha-vm"] = "tok-configurado-mas-recusado"
         mod.upsert_profile({"profile_id": "ha-vm", "name": "HA VM",
                             "url": "http://192.168.1.200", "enabled": True})
+        broker.store["homeassistant_token_ha-vm"] = "tok-configurado-mas-recusado"
         data = mod._load_store()
         data["active_profile"] = "ha-vm"
         data["profiles"][0]["last_test"] = {
@@ -429,7 +471,7 @@ class TestHomelabMonitorAuthorization:
             homelab_overview_cache_seconds=0,
             database_path=tmp_path / "nyra-test.db",
             home_assistant_enabled=True,
-            home_assistant_url="http://192.168.1.200",
+            home_assistant_url="https://192.168.1.200",
             home_assistant_token=token,
         )
         recorder: list[dict] = []
@@ -605,10 +647,12 @@ class StubController:
 
 
 def make_pm_services(settings: Settings, client: StubProxmoxRuntime):
+    from app.tools.shell_approval import ShellApprovalGate
     return type("S", (), {
         "settings": settings,
         "proxmox": client,
         "homelab": StubController(client),
+        "shell": type("Shell", (), {"approvals": ShellApprovalGate()})(),
     })()
 
 
@@ -740,11 +784,17 @@ class TestProxmoxConfig:
         removed = mod.disconnect_credentials()
         assert removed["token_id_removed"] and removed["token_secret_removed"]
         assert broker.store == {}
+        legacy = Settings(
+            proxmox_token_id="legacy@pve!token",
+            proxmox_token_secret="legacy-secret",
+        )
+        assert mod.resolve_credentials(legacy) == ("", "")
+        assert mod.load_config(legacy)["credentials_disabled"] is True
 
     def test_apply_to_runtime_updates_both_clients(self, pm_env):
         mod, broker, _ = pm_env
         mod.save_config({"url": "https://192.168.9.9:8006", "enabled": True,
-                         "verify_ssl": False})
+                         "verify_ssl": True})
         broker.store["proxmox_api_token_id"] = "op@pve!x"
         broker.store["proxmox_api_token_secret"] = "s3cret!"
         settings = Settings(proxmox_enabled=True)
@@ -758,8 +808,13 @@ class TestProxmoxConfig:
         assert client_a.creds[0] == "https://192.168.9.9:8006"
         assert client_b.creds[1] == "op@pve!x"
         assert client_b.creds[2] == "s3cret!"
-        assert client_a.creds[3] is False  # verify_ssl propagado
-        assert client_b.creds[3] is False
+        assert client_a.creds[3] is True  # verify_ssl propagado
+        assert client_b.creds[3] is True
+
+    def test_config_rejects_disabled_tls_verification(self, pm_env):
+        mod, _, _ = pm_env
+        with pytest.raises(ValueError, match="verify_ssl"):
+            mod.save_config({"url": "https://192.168.9.9:8006", "verify_ssl": False})
 
     def test_persistence_survives_restart(self, pm_env):
         """§59: campos não secretos persistem e são recarregados."""
@@ -866,20 +921,65 @@ class TestRoutesV11:
         assert "pair-secret-ui" not in response.text
 
     def test_proxmox_config_put_rejects_partial_pair(self, tmp_path, monkeypatch):
-        self._pm_patched(tmp_path, monkeypatch)
+        pm_mod, _ = self._pm_patched(tmp_path, monkeypatch)
         client = build_route_client(make_pm_services(Settings(), StubProxmoxRuntime()))
-        response = client.put("/api/proxmox/config", json={"token_id": "only-id"})
+        response = client.put("/api/proxmox/config", json={
+            "url": "https://192.168.1.99:8006", "token_id": "only-id",
+        })
         assert response.status_code == 422
         assert response.json()["detail"]["error_code"] == "PROXMOX_TOKEN_PAIR_REQUIRED"
+        assert pm_mod.load_config()["url"] == ""  # nenhuma escrita parcial
+
+    def test_proxmox_endpoint_change_resets_old_credentials(self, tmp_path, monkeypatch):
+        pm_mod, broker = self._pm_patched(tmp_path, monkeypatch)
+        pm_mod.save_config({"url": "https://192.168.1.2:8006", "enabled": True})
+        broker.store["proxmox_api_token_id"] = "old-id"
+        broker.store["proxmox_api_token_secret"] = "old-secret"
+        runtime_client = StubProxmoxRuntime()
+        client = build_route_client(make_pm_services(Settings(), runtime_client))
+
+        response = client.put("/api/proxmox/config", json={
+            "url": "https://192.168.1.3:8006", "enabled": True,
+        })
+        assert response.status_code == 200
+        body = response.json()
+        assert body["endpoint_changed"] is True
+        assert body["credentials"]["credentials_reset"] is True
+        assert body["runtime_applied"]["auth_configured"] is False
+        assert broker.store == {}
+        assert pm_mod.load_config()["credentials_disabled"] is True
+
+    def test_proxmox_endpoint_change_accepts_atomic_new_pair(self, tmp_path, monkeypatch):
+        pm_mod, broker = self._pm_patched(tmp_path, monkeypatch)
+        pm_mod.save_config({"url": "https://192.168.1.2:8006", "enabled": True})
+        broker.store["proxmox_api_token_id"] = "old-id"
+        broker.store["proxmox_api_token_secret"] = "old-secret"
+        client = build_route_client(make_pm_services(Settings(), StubProxmoxRuntime()))
+
+        response = client.put("/api/proxmox/config", json={
+            "url": "https://192.168.1.3:8006",
+            "token_id": "new-id", "token_secret": "new-secret",
+        })
+        assert response.status_code == 200
+        body = response.json()
+        assert body["endpoint_changed"] is True
+        assert body["runtime_applied"]["auth_configured"] is True
+        assert broker.store["proxmox_api_token_id"] == "new-id"
+        assert broker.store["proxmox_api_token_secret"] == "new-secret"
+        assert pm_mod.load_config()["credentials_disabled"] is False
 
     def test_proxmox_disconnect(self, tmp_path, monkeypatch):
         _, broker = self._pm_patched(tmp_path, monkeypatch)
         broker.store["proxmox_api_token_id"] = "id"
         broker.store["proxmox_api_token_secret"] = "sec"
         runtime_client = StubProxmoxRuntime()
-        client = build_route_client(make_pm_services(Settings(proxmox_enabled=True),
-                                                     runtime_client))
-        response = client.post("/api/proxmox/disconnect")
+        services = make_pm_services(Settings(proxmox_enabled=True), runtime_client)
+        client = build_route_client(services)
+        pending = client.post("/api/proxmox/disconnect").json()
+        assert pending["error_code"] == "APPROVAL_REQUIRED"
+        services.shell.approvals.grant(pending["approval_id"])
+        response = client.post("/api/proxmox/disconnect",
+                               json={"approval_id": pending["approval_id"]})
         assert response.status_code == 200
         assert broker.store == {}
 

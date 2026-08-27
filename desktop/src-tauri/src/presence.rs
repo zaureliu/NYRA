@@ -5,8 +5,7 @@
 //! deliberate app launch, and every visibility transition flows through one
 //! state machine so the backend/UI always agree.
 
-use serde::{Deserialize, Serialize};
-
+#[cfg(test)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PresenceState {
     Starting,
@@ -16,6 +15,7 @@ pub enum PresenceState {
     Error,
 }
 
+#[cfg(test)]
 impl PresenceState {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -113,6 +113,7 @@ mod tests {
     #[test]
     fn presence_states_have_stable_names() {
         assert_eq!(PresenceState::Starting.as_str(), "STARTING");
+        assert_eq!(PresenceState::Ready.as_str(), "READY");
         assert_eq!(PresenceState::Visible.as_str(), "VISIBLE");
         assert_eq!(PresenceState::Hidden.as_str(), "HIDDEN");
         assert_eq!(PresenceState::Error.as_str(), "ERROR");

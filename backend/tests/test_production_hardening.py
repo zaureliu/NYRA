@@ -54,7 +54,8 @@ class FakeRegistry:
     def set(self, tool: str, outcomes: list):
         self.scripts[tool] = list(outcomes)
 
-    async def execute(self, name: str, payload: dict):
+    async def execute(self, name: str, payload: dict, *, exposure: str = "internal"):
+        assert exposure in {"internal", "llm", "api"}
         self.calls.append((name, dict(payload)))
         queue = self.scripts.get(name)
         if not queue:
@@ -248,7 +249,8 @@ def test_run_fails_fast_on_missing_parameters_before_any_execution(tmp_path):
 
 def test_run_timeout_isolated_per_step(tmp_path):
     class SlowRegistry(FakeRegistry):
-        async def execute(self, name, payload):
+        async def execute(self, name, payload, *, exposure="internal"):
+            assert exposure in {"internal", "llm", "api"}
             self.calls.append((name, dict(payload)))
             await asyncio.sleep(5)
             return FakeResult(True)
@@ -348,7 +350,8 @@ def test_double_run_same_workflow_is_blocked(tmp_path):
             super().__init__()
             self.gate = asyncio.Event()
 
-        async def execute(self, name, payload):
+        async def execute(self, name, payload, *, exposure="internal"):
+            assert exposure in {"internal", "llm", "api"}
             await self.gate.wait()
             return FakeResult(True)
 

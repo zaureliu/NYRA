@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.errors import unhandled_exception_handler
 from app.core.release_info import APP_VERSION
 from app.core.logging import configure_logging
+from app.core.local_transport import LocalRequestSecurityMiddleware
 from app.core.paths import ensure_runtime_directories
 from app.core.turn import TurnRegistry
 from app.conversation import ConversationEngine
@@ -259,13 +260,54 @@ async def lifespan(app: FastAPI):
         event_bus,
         apps_path=settings.desktop_apps_path,
         dynamic_discovery=settings.desktop_dynamic_app_discovery,
+        approvals=shell.approvals,
     )
     await desktop.initialize()
+    orchestrator.desktop = desktop
     register_desktop_tools(
         tools, desktop,
         uia_enabled=settings.desktop_ui_automation_enabled,
         input_fallback_enabled=settings.desktop_input_fallback_enabled,
     )
+
+    # nyra-7c: pipeline de autonomia do computador (7 camadas, §75).
+    from app.computer import (
+        ComputerAutonomyService,
+        ComputerPerceptionService,
+        ComputerStateService,
+        EffectVerificationService,
+        IntentUnderstandingService,
+        SkillMemoryService,
+        UsageLearningService,
+    )
+
+    computer_state = ComputerStateService(desktop=desktop)
+    computer_state.load_context()
+    computer_perception = ComputerPerceptionService(
+        event_bus,
+        homelab_summary_fn=homelab.status,
+        network_status_fn=network_watch.status,
+        snapshot_consumer=computer_state.refresh_from_perception,
+    )
+    computer_intents = IntentUnderstandingService(computer_state)
+    effect_verifier = EffectVerificationService()
+    usage_learning = UsageLearningService()
+    skill_memory = SkillMemoryService(event_bus=event_bus)
+    computer = ComputerAutonomyService(
+        state=computer_state,
+        intent_service=computer_intents,
+        perception=computer_perception,
+        verifier=effect_verifier,
+        usage=usage_learning,
+        skills=skill_memory,
+        desktop=desktop,
+    )
+    orchestrator.computer = computer
+    await computer.start_background()
+
+    # nyra-full §6/§42: Universal Application Registry — startup leve e
+    # refresh periódico em background (nunca bloqueia o event loop).
+    universal_refresh_task = asyncio.create_task(_universal_refresh_loop(desktop), name="nyra-universal-apps")
     operator = None
     browser_controller = None
     if settings.local_operator_enabled:
@@ -312,6 +354,26 @@ async def lifespan(app: FastAPI):
     await vtube_studio.start()
     voice_hunter = VoiceHunterService(stt=stt, tts_catalog=catalog)
     monitor = HomelabMonitor(settings, tools, event_bus, memory)
+    from app.core.lifecycle import coordinate_full_restart
+    from app.selfdev import SelfDevelopmentService
+
+    async def selfdev_post_restart_health() -> bool:
+        """Use the same essential liveness contract as the root health route."""
+        try:
+            llm_ok, memory_ok = await asyncio.gather(llm.health(), memory.health())
+            return bool(llm_ok and memory_ok)
+        except Exception:  # noqa: BLE001 - failed probe must trigger rollback
+            return False
+
+    selfdev = SelfDevelopmentService(
+        settings,
+        event_bus,
+        shell,
+        llm,
+        restart_request=coordinate_full_restart,
+        health_check=selfdev_post_restart_health,
+    )
+    await selfdev.start()
     app.state.services = Services(
         settings=settings,
         event_bus=event_bus,
@@ -350,15 +412,26 @@ async def lifespan(app: FastAPI):
         warm_manager=warm_manager,
         conversation=conversation,
         runtime_supervisor=runtime_supervisor,
+        selfdev=selfdev,
         desktop=desktop,
         operator=operator,
         operator_v2=operator_v2,
         turns=turn_registry,
+        computer=computer,
+        computer_state=computer_state,
+        computer_perception=computer_perception,
+        usage_learning=usage_learning,
+        skill_memory=skill_memory,
     )
     # VoiceProcessorBridge (prompt11 §120): lazy-friendly singleton no estado.
     from app.speech.external_bridge import VoiceProcessorBridge
 
-    app.state.services.voice_bridge = VoiceProcessorBridge(settings)
+    voice_bridge = VoiceProcessorBridge(settings)
+    app.state.services.voice_bridge = voice_bridge
+    if settings.voice_processor_bridge_enabled:
+        # Refresh periódico: cached_status acompanha o processor externo de
+        # verdade (READY quando o Satellite sobe, OFFLINE + fallback quando cai).
+        voice_bridge.start_background_refresh()
     # prompt11_1 §59: após restart, perfil HA ativo + credenciais Proxmox são
     # restaurados a partir das fontes persistentes (perfil/Broker), sem secrets
     # em settings e sem nova implementação para validar contra o real depois.
@@ -394,6 +467,27 @@ async def lifespan(app: FastAPI):
 _SHUTDOWN_STEP_TIMEOUT_SECONDS = 15.0
 
 
+_UNIVERSAL_REFRESH_INTERVAL_SECONDS = 6 * 3600
+
+
+async def _universal_refresh_loop(desktop) -> None:
+    """nyra-full §42: load → lightweight verification → periodic background refresh."""
+    try:
+        await asyncio.to_thread(desktop.universal.refresh, True)
+    except Exception as error:  # noqa: BLE001 - índice nunca derruba o backend
+        logger.warning(
+            "universal_registry_initial_refresh_failed type=%s", type(error).__name__
+        )
+    while True:
+        await asyncio.sleep(_UNIVERSAL_REFRESH_INTERVAL_SECONDS)
+        try:
+            await asyncio.to_thread(desktop.universal.refresh, True)
+        except Exception as error:  # noqa: BLE001
+            logger.warning(
+                "universal_registry_periodic_refresh_failed type=%s", type(error).__name__
+            )
+
+
 async def _bounded_step(label: str, operation) -> None:
     """Run one shutdown step without ever blocking the whole shutdown.
 
@@ -414,10 +508,24 @@ async def _bounded_step(label: str, operation) -> None:
 async def _graceful_shutdown(scope: dict) -> None:
     operator_v2 = scope["operator_v2"]
     runtime_supervisor = scope["runtime_supervisor"]
+    selfdev = scope.get("selfdev")
     conversation = scope["conversation"]
     warm_manager = scope.get("warm_manager")
     stt_preload_task = scope.get("stt_preload_task")
     voice_hunter = scope["voice_hunter"]
+    universal_refresh_task = scope.get("universal_refresh_task")
+    computer = scope.get("computer")
+    if computer is not None:
+        # nyra-7c §83: persistência atômica de contexto/usage/skills.
+        await _bounded_step("computer_autonomy_shutdown", computer.shutdown)
+
+    async def _cancel_universal() -> None:
+        if universal_refresh_task and not universal_refresh_task.done():
+            universal_refresh_task.cancel()
+            try:
+                await universal_refresh_task
+            except asyncio.CancelledError:
+                pass
 
     async def _cancel_preload() -> None:
         if stt_preload_task and not stt_preload_task.done():
@@ -432,12 +540,16 @@ async def _graceful_shutdown(scope: dict) -> None:
             await voice_hunter.cancel()
 
     steps = [
+        ("selfdev.stop", selfdev.stop if selfdev else None),
         ("operator_v2.stop", operator_v2.stop),
         ("runtime_supervisor.shutdown", runtime_supervisor.shutdown),
         ("conversation.stop", conversation.stop),
         ("warm_manager.stop", warm_manager.stop if warm_manager else None),
         ("stt_preload.cancel", _cancel_preload),
         ("voice_hunter.cancel", _cancel_voice_hunter),
+        ("voice_bridge.refresh.stop",
+         scope["voice_bridge"].stop_background_refresh
+         if "voice_bridge" in scope else None),
         ("perception.stop", scope["perception"].stop),
         ("vtube_studio.stop", scope["vtube_studio"].stop),
         ("reactions.stop", scope["reactions"].stop),
@@ -479,6 +591,11 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
+)
+app.add_middleware(
+    LocalRequestSecurityMiddleware,
+    frontend_port=settings.frontend_port,
+    backend_port=settings.backend_port,
 )
 app.include_router(router)
 app.add_exception_handler(Exception, unhandled_exception_handler)

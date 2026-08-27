@@ -131,7 +131,8 @@ class FakeDesktopRegistry:
     def resolve_remote_target(self, text: str) -> dict[str, str] | None:
         return None
 
-    async def execute(self, name: str, payload: dict) -> ToolResult:
+    async def execute(self, name: str, payload: dict, *, exposure: str = "internal") -> ToolResult:
+        assert exposure in {"internal", "llm", "api"}
         key = str(payload.get("app", ""))
         data = self.results.get(key) or next(iter(self.results.values()))
         self.executed.append((name, dict(payload)))

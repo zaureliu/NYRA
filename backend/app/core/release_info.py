@@ -20,17 +20,16 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.core.paths import DATA_ROOT, PROJECT_ROOT
+from app.core.paths import DATA_ROOT, LOG_ROOT, PROJECT_ROOT, RUNTIME_ROOT
 
 logger = logging.getLogger("nyra.release_info")
 
 DAILY_CHECK_HISTORY = DATA_ROOT / "daily-check-history.jsonl"
-RELEASE_GATE_REPORT = PROJECT_ROOT / ".tmp" / "release-health.json"
-GATE_PROGRESS = PROJECT_ROOT / ".tmp" / "release-gate-progress.json"
+RELEASE_GATE_REPORT = RUNTIME_ROOT / "reports" / "release-health.json"
+GATE_PROGRESS = RUNTIME_ROOT / "reports" / "release-gate-progress.json"
 
-# Versão oficial do produto.  O desktop Tauri já estava em 0.2.0; backend,
-# frontend e metadados foram unificados nesta referência (§209).
-APP_VERSION = "0.2.0"
+# Versão oficial unificada do produto.
+APP_VERSION = "0.3.0"
 APP_NAME = "NYRA"
 
 # Artefatos mais antigos que isso não representam o build atual (closure §20):
@@ -251,7 +250,7 @@ async def start_release_revalidation() -> dict[str, Any]:
         _revalidation.clear()
         _revalidation.update(state="FAILED", error="RUNTIME_RESOLVER_MISSING")
         return dict(_revalidation)
-    log_path = PROJECT_ROOT / "logs" / "release-gate-revalidate.log"
+    log_path = LOG_ROOT / "release-gate-revalidate.log"
     _revalidation.clear()
     _revalidation.update(
         state="RUNNING", started_at=time.time(), started_iso=time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -404,10 +403,22 @@ async def world_state_snapshot(services: Any) -> dict[str, Any]:
     try:
         network_status = services.network_watch.status()
         enabled = bool(network_status.get("enabled"))
+        snapshot = network_status.get("snapshot") or {}
+        snapshot_ts = str(snapshot.get("timestamp") or "")
+        fresh_seconds = 0
+        if snapshot_ts:
+            try:
+                from datetime import datetime as _dt
+
+                parsed = _dt.fromisoformat(snapshot_ts.replace("Z", "+00:00"))
+                fresh_seconds = max(0.0, time.time() - parsed.timestamp())
+            except ValueError:
+                fresh_seconds = 0
         observe("Network", "Network Watch",
                 "READY" if enabled else "DISABLED",
                 "network_watch.monitor", "probes",
-                detail=str(network_status.get("target_summary", ""))[:120])
+                detail=str(network_status.get("target_summary", ""))[:120],
+                fresh_seconds=fresh_seconds)
     except Exception as error:  # noqa: BLE001
         observe("Network", "Network Watch", "OFFLINE",
                 "network_watch.monitor", "failed", detail=type(error).__name__)
@@ -416,10 +427,12 @@ async def world_state_snapshot(services: Any) -> dict[str, Any]:
         overview = await services.homelab.overview(force=False)
         summary = getattr(overview, "summary", {}) or {}
         reachable = int(summary.get("reachable", summary.get("online", 0)) or 0)
+        generated_at = float(getattr(overview, "generated_at", 0.0) or 0.0)
         observe("Homelab", "Hosts registrados",
                 "READY" if reachable else "OFFLINE",
                 "homelab.controller", "icmp/tcp probes",
-                detail=f"{reachable} alcançáveis")
+                detail=f"{reachable} alcançáveis",
+                fresh_seconds=max(0.0, time.time() - generated_at) if generated_at else 0)
     except Exception as error:  # noqa: BLE001
         observe("Homelab", "Hosts registrados", "OFFLINE",
                 "homelab.controller", "failed", detail=type(error).__name__)

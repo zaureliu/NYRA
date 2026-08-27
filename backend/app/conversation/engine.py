@@ -84,7 +84,11 @@ class ConversationEngine:
             response_id, transcription = await self.transcribe(path, speech_end=speech_end)
             if not transcription.text.strip():
                 return {"accepted": False, "reason": "empty_transcription", "transcription": transcription.model_dump(mode="json")}
-            turn = TurnContext(transcription.text, conversation_id="voice")
+            turn = TurnContext(
+                transcription.text,
+                conversation_id="voice",
+                approval_capable=False,
+            )
             if turn.turn_id != response_id and response_id.startswith("turn_"):
                 turn.turn_id = response_id
             chat = await self.orchestrator.converse(
@@ -134,7 +138,11 @@ class ConversationEngine:
                         "transcription": transcription.model_dump(mode="json"),
                         "decision": decision.model_dump(mode="json"),
                     }
-                turn = TurnContext(decision.text, conversation_id="always_listening")
+                turn = TurnContext(
+                    decision.text,
+                    conversation_id="always_listening",
+                    approval_capable=False,
+                )
                 if turn.turn_id != response_id and response_id.startswith("turn_"):
                     turn.turn_id = response_id
                 chat = await self.orchestrator.converse(

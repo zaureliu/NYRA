@@ -19,6 +19,7 @@ Start-Process -Verb RunAs (same legitimate path as tools.elevated_broker).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import secrets
 import subprocess
@@ -31,6 +32,7 @@ from pathlib import Path
 from app.tools.shell_executor import decode_output
 from app.tools.shell_risk import ShellRiskClassifier
 from app.tools.shell_models import ShellRiskLevel
+from app.tools.redaction import redact_secrets
 
 _HOST_SCRIPT_TEMPLATE = r"""
 param($PipeName, $Token, $TtlSeconds)
@@ -275,18 +277,25 @@ class ElevatedSessionManager:
             return session
         assessment = self.classifier.classify(command, shell)
         level = ShellRiskLevel(assessment.level.value)
+        effective_timeout = max(1, min(int(timeout_seconds), 600))
         if level in {ShellRiskLevel.DESTRUCTIVE, ShellRiskLevel.CRITICAL}:
             # §112: broker elevado NÃO remove policies.
             decision = self._require_approval(
-                description=f"[sessão {session_id}] comando destrutivo: {command[:160]}",
+                description=(
+                    f"[sessão {session_id}] comando destrutivo: "
+                    f"{redact_secrets(command[:160])}"
+                ),
                 risk=level.value, approval_id=approval_id,
+                binding_digest=self._binding_digest(
+                    session_id, command, shell, effective_timeout,
+                ),
             )
             if decision is not None:
                 return decision
         response = await asyncio.to_thread(
             self._send_request, session,
-            {"command": command, "shell": shell, "timeout_seconds": min(int(timeout_seconds), 600)},
-            timeout=min(float(timeout_seconds) + 20.0, 640.0),
+            {"command": command, "shell": shell, "timeout_seconds": effective_timeout},
+            timeout=min(float(effective_timeout) + 20.0, 640.0),
         )
         if not response.get("_transport_ok"):
             return {"success": False, "error_code": response.get("error", "PIPE_UNAVAILABLE"),
@@ -379,17 +388,26 @@ class ElevatedSessionManager:
         thread.join(timeout=max(5.0, min(timeout, 700.0)))
         return result
 
+    @staticmethod
+    def _binding_digest(*values) -> str:
+        material = json.dumps(values, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
     def _require_approval(self, *, description: str, risk: str,
-                          approval_id: str | None) -> dict | None:
+                          approval_id: str | None, binding_digest: str = "") -> dict | None:
         from app.tools.shell_models import ShellRiskLevel as _SRL
 
         if self.approvals is None:
             return {"success": False, "error_code": "APPROVAL_REQUIRED"}
-        fingerprint = self.approvals.fingerprint(description, "elevated_broker", "", 300, target="local")
+        approval_command = f"{description} params_sha256={binding_digest or 'none'}"
+        fingerprint = self.approvals.fingerprint(
+            approval_command, "elevated_broker", "", 300, target="local",
+        )
         if not approval_id:
             record = self.approvals.request(
-                command=description, shell="elevated_broker", working_directory=".",
+                command=approval_command, shell="elevated_broker", working_directory="",
                 timeout_seconds=300, risk_level=_SRL(risk), target="local",
+                fingerprint=fingerprint,
             )
             return {"success": False, "error_code": "APPROVAL_REQUIRED",
                     "approval_required": True, "approval_id": record.approval_id}

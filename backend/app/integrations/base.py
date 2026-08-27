@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any
+from urllib.parse import urlsplit
 
 
 class IntegrationError(Exception):
@@ -20,6 +22,33 @@ class IntegrationError(Exception):
 
     def to_dict(self) -> dict[str, Any]:
         return {"error_code": self.code, "message": self.message}
+
+
+def require_secure_credential_transport(base_url: str) -> str:
+    """Allow plaintext credentials only to a literal loopback IP.
+
+    Hostnames are rejected for HTTP so validation and the network client cannot
+    resolve the same name to different addresses (DNS rebinding/TOCTOU).
+    """
+    value = (base_url or "").strip().rstrip("/")
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise IntegrationError("INSECURE_CREDENTIAL_TRANSPORT", "URL de integração inválida.")
+    if parsed.scheme == "https":
+        return value
+    try:
+        address = ipaddress.ip_address(parsed.hostname)
+    except ValueError as exc:
+        raise IntegrationError(
+            "INSECURE_CREDENTIAL_TRANSPORT",
+            "Credenciais em HTTP exigem IP loopback literal; use HTTPS para nomes de host.",
+        ) from exc
+    if not address.is_loopback:
+        raise IntegrationError(
+            "INSECURE_CREDENTIAL_TRANSPORT",
+            "Credenciais em HTTP só podem ser enviadas para loopback; configure HTTPS.",
+        )
+    return value
 
 
 class RemoteHostAdapter:

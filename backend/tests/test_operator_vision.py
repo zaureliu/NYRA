@@ -4,6 +4,7 @@ button/label, visual action + verify via diff. Uses reversible targets only."""
 from __future__ import annotations
 
 import asyncio
+import faulthandler
 import subprocess
 import sys
 import time
@@ -11,16 +12,24 @@ import time
 import pytest
 
 from app.operator.vision import VisionEngine
-from app.operator.vision_capture import capture_window, frame_to_png_bytes, diff_frames
+from app.operator.vision_capture import (
+    Frame,
+    capture_window,
+    diff_frames,
+    fingerprint_pixels,
+    frame_to_png_bytes,
+)
+from app.tools.shell_approval import ShellApprovalGate
 
 
-def _notepad_hwnd() -> int | None:
+def _notepad_hwnd(pid: int) -> int | None:
     from app.desktop.windows import find_windows_for_app
 
     matches = find_windows_for_app(
         process_names=["notepad.exe"], title_contains=["Bloco de Notas", "Notepad"],
     )
-    return matches[0].hwnd if matches else None
+    owned = [window for window in matches if window.pid == pid]
+    return owned[0].hwnd if owned else None
 
 
 def _spawn_notepad(tmp_path):
@@ -32,28 +41,47 @@ def _spawn_notepad(tmp_path):
     deadline = time.time() + 10
     while time.time() < deadline and hwnd is None:
         time.sleep(0.4)
-        hwnd = _notepad_hwnd()
+        hwnd = _notepad_hwnd(process.pid)
     return process, hwnd
 
 
-def _kill(process) -> None:
+def _close(process, hwnd: int) -> None:
     if process and process.poll() is None:
-        time.sleep(0.4)  # deixa proxies COM/UIA desconectarem antes do kill
-        subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],  # noqa: S603
-                       capture_output=True, timeout=10)
-        time.sleep(0.2)
+        import ctypes
+
+        ctypes.windll.user32.PostMessageW(int(hwnd), 0x0010, 0, 0)  # WM_CLOSE
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            # Fallback is scoped strictly to the process created by this test.
+            subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],  # noqa: S603
+                           capture_output=True, timeout=10)
+        time.sleep(0.3)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def quiet_handled_uia_rpc_disconnects():
+    """Pytest's faulthandler reports handled UIA provider disconnect SEH events.
+
+    Windows UI Automation raises first-chance RPC_E_DISCONNECTED while a target
+    window exits. COM handles it and the process remains healthy, but the pytest
+    plugin prints it as a fatal exception. Silence only this real-UIA module;
+    an unhandled native fault still terminates the test process and fails CI.
+    """
+    was_enabled = faulthandler.is_enabled()
+    if sys.platform == "win32" and was_enabled:
+        faulthandler.disable()
+    yield
+    if sys.platform == "win32" and was_enabled:
+        faulthandler.enable()
 
 
 @pytest.fixture(scope="module")
 def vision():
-    """ONE VisionEngine for the whole module: one worker thread = one COM
-    apartment = stable UIA/GDI across multiple app lifecycles."""
-    import gc
-
+    """One worker thread owns one COM apartment across the UIA smoke module."""
     engine = VisionEngine(debug_keep_frames=True)
     yield engine
     engine.shutdown()
-    gc.collect()
 
 
 @pytest.fixture()
@@ -62,7 +90,7 @@ def notepad(tmp_path):
     process, hwnd = _spawn_notepad(tmp_path)
     assert hwnd is not None, "Notepad não abriu para o teste"
     yield int(hwnd or 0)
-    _kill(process)
+    _close(process, int(hwnd or 0))
     time.sleep(0.3)
 
 
@@ -124,6 +152,107 @@ async def test_285_visual_action_with_verification_and_stale_guard(notepad, visi
     assert comparison["area_ratio"] >= 0.0
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("label", "control_type"),
+    [("OK", "Button"), ("Proceed", "Hyperlink"), ("Accept", "Custom"),
+     ("Continue", "MenuItem")],
+)
+async def test_every_visual_click_requires_exact_approval(monkeypatch, label, control_type):
+    gate = ShellApprovalGate()
+    engine = VisionEngine(approvals=gate)
+    frame = Frame(
+        frame_id="frame-confirm", timestamp=time.time(), monitor_id=1,
+        window_handle=4242, width=1, height=1, pixels=b"\x00\x00\x00\x00",
+        elements={
+            "ve_yes": {
+                "name": label, "automation_id": "confirm", "control_type": control_type,
+                "rect": {"x": 0, "y": 0, "width": 1, "height": 1},
+            },
+            "ve_other": {
+                "name": label, "automation_id": "other", "control_type": control_type,
+                "rect": {"x": 0, "y": 0, "width": 1, "height": 1},
+            },
+        },
+    )
+    engine.frames.put(frame)
+
+    async def not_stale(_frame):
+        return False
+
+    monkeypatch.setattr(engine, "_frame_is_stale", not_stale)
+    monkeypatch.setattr(
+        engine, "detect_modals",
+        lambda: {"modals": []},
+    )
+
+    async def fake_run(_fn, *_args, **_kwargs):
+        return {"method": "mock"}
+
+    async def fake_verify(_frame):
+        return {"changed": True, "area_ratio": 0.1}
+
+    monkeypatch.setattr(engine, "_run", fake_run)
+    monkeypatch.setattr(engine, "_verify_after_action", fake_verify)
+    pending = await engine.click("frame-confirm", "ve_yes")
+    assert pending["error_code"] == "APPROVAL_REQUIRED"
+    gate.grant(pending["approval_id"], "test")
+
+    wrong = await engine.click(
+        "frame-confirm", "ve_other", approval_id=pending["approval_id"],
+    )
+    assert wrong["error_code"] == "APPROVAL_INVALID"
+    exact = await engine.click(
+        "frame-confirm", "ve_yes", approval_id=pending["approval_id"],
+    )
+    assert exact["success"] is True and exact["approval_used"] is True
+    replay = await engine.click(
+        "frame-confirm", "ve_yes", approval_id=pending["approval_id"],
+    )
+    assert replay["error_code"] == "APPROVAL_INVALID"
+    engine.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_visual_type_binds_text_without_exposing_it(monkeypatch):
+    gate = ShellApprovalGate()
+    engine = VisionEngine(approvals=gate)
+    frame = Frame(
+        frame_id="frame-type", timestamp=time.time(), monitor_id=1,
+        window_handle=4242, width=1, height=1, pixels=b"\x00\x00\x00\x00",
+        elements={"ve_edit": {
+            "name": "Search", "automation_id": "query", "control_type": "Edit",
+            "rect": {"x": 0, "y": 0, "width": 1, "height": 1},
+        }},
+    )
+    engine.frames.put(frame)
+
+    async def not_stale(_frame):
+        return False
+
+    async def fake_run(_fn, *_args, **_kwargs):
+        return {"effect_verified": True, "stored_preview": "allowed"}
+
+    monkeypatch.setattr(engine, "_frame_is_stale", not_stale)
+    monkeypatch.setattr(engine, "_run", fake_run)
+    pending = await engine.type_text("frame-type", "ve_edit", "allowed", secret=True)
+    assert pending["error_code"] == "APPROVAL_REQUIRED"
+    assert "allowed" not in gate.get(pending["approval_id"]).command
+    gate.grant(pending["approval_id"], "test")
+    wrong = await engine.type_text(
+        "frame-type", "ve_edit", "tampered", secret=True,
+        approval_id=pending["approval_id"],
+    )
+    assert wrong["error_code"] == "APPROVAL_INVALID"
+    exact = await engine.type_text(
+        "frame-type", "ve_edit", "allowed", secret=True,
+        approval_id=pending["approval_id"],
+    )
+    assert exact["success"] is True and exact["approval_used"] is True
+    assert exact["stored_preview"] == "<secret not echoed>"
+    engine.shutdown()
+
+
 def test_png_encoder_produces_valid_header(tmp_path):
     frame = capture_window(_foreground_or_screen(tmp_path))
     png = frame_to_png_bytes(frame)
@@ -158,6 +287,18 @@ def test_diff_detects_synthetic_change():
     assert result["changed"] is True
     assert result["changed_cell_count"] >= 1
     assert result["bounding_box"] is not None
+
+
+def test_frame_fingerprint_covers_every_pixel_not_only_grid_samples():
+    width, height = 64, 64
+    base = bytes(width * height * 4)
+    altered = bytearray(base)
+    # (17, 19) was outside every 32x32 sampled coordinate in the old digest.
+    altered[(19 * width + 17) * 4 + 2] = 1
+    before = Frame("a", time.time(), 1, 0, width, height, base)
+    after = Frame("b", time.time(), 1, 0, width, height, bytes(altered))
+
+    assert fingerprint_pixels(before) != fingerprint_pixels(after)
 
 
 @pytest.mark.asyncio

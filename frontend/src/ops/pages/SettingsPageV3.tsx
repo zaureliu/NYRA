@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { apiSend } from '../../runtime/api'
+import { ModelSelectorCard } from '../components/ModelSelectorCard'
+import { SelfDevPanel } from '../components/SelfDevPanel'
 import { usePolling } from '../hooks'
 import { ActionButton, Card, ErrorAlert, Toggle } from '../ui'
 import type { SettingEntry, SettingsV3Response } from '../types'
@@ -14,6 +16,7 @@ const CATEGORY_META: Record<string, { label: string; icon: string }> = {
   integrations: { label: 'Integrações', icon: 'IN' },
   privacy: { label: 'Privacidade', icon: 'PV' },
   developer: { label: 'Developer', icon: 'DV' },
+  selfdev: { label: 'Self-Dev', icon: 'SD' },
 }
 
 export function SettingsPageV3() {
@@ -23,24 +26,48 @@ export function SettingsPageV3() {
   const [actionError, setActionError] = useState('')
   const [notice, setNotice] = useState('')
   const [powerConfirm, setPowerConfirm] = useState<'shutdown' | 'restart' | null>(null)
+  const [powerApproval, setPowerApproval] = useState<string | null>(null)
 
-  const requestPower = async (action: 'shutdown' | 'restart') => {
+  const requestPower = async (action: 'shutdown' | 'restart', approvalId?: string) => {
     setBusyKey(`__power_${action}`)
     setActionError('')
     try {
-      await apiSend(`/api/runtime/power/${action}`, 'POST', { reason: 'settings_ui' })
+      const response = await apiSend<{ approval_required?: boolean; approval_id?: string }>(
+        `/api/runtime/power/${action}`, 'POST',
+        { reason: 'settings_ui', ...(approvalId ? { approval_id: approvalId } : {}) },
+      )
+      if (response.approval_required && response.approval_id && !approvalId) {
+        setPowerApproval(response.approval_id)
+        setNotice('Approval crítico criado. Revise a ação e confirme uma segunda vez.')
+        return
+      }
       setNotice(
         action === 'shutdown'
           ? 'Encerramento completo solicitado. A NYRA vai desligar todos os componentes dela.'
           : 'Reinício completo solicitado. Uma nova sessão vai iniciar após o encerramento validado.',
       )
       setPowerConfirm(null)
+      setPowerApproval(null)
     } catch (issue) {
       setActionError(issue instanceof Error ? issue.message : String(issue))
       setPowerConfirm(null)
     } finally {
       setBusyKey('')
     }
+  }
+
+  const decidePower = async (approved: boolean) => {
+    if (!powerConfirm || !powerApproval) return
+    const action = powerConfirm
+    const approvalId = powerApproval
+    if (!approved) {
+      await apiSend(`/api/shell/approvals/${encodeURIComponent(approvalId)}`, 'POST', { approved: false })
+      setPowerApproval(null)
+      setPowerConfirm(null)
+      return
+    }
+    await apiSend(`/api/shell/approvals/${encodeURIComponent(approvalId)}`, 'POST', { approved: true })
+    await requestPower(action, approvalId)
   }
 
   const entriesByCategory = useMemo(() => {
@@ -123,6 +150,9 @@ export function SettingsPageV3() {
 
       {!data && loading && <div className="ops-empty"><span className="ops-loading" /> Carregando schema de settings…</div>}
 
+      {activeCategory === 'ai' && <ModelSelectorCard />}
+      {activeCategory === 'selfdev' && <SelfDevPanel />}
+
       {(entriesByCategory.get(activeCategory) ?? []).length > 0 && (
         <Card title={CATEGORY_META[activeCategory]?.label ?? activeCategory}
           sub={`${entriesByCategory.get(activeCategory)?.length ?? 0} settings`}>
@@ -153,12 +183,13 @@ export function SettingsPageV3() {
               {powerConfirm === 'shutdown'
                 ? 'Encerrar NYRA completamente? Todos os processos dela serão finalizados e a porta 8000 liberada.'
                 : 'Reiniciar NYRA completamente? A sessão atual termina e uma nova inicia com novo session_id.'}
+              {powerApproval && <div style={{ marginTop: 6 }}>Approval crítico pendente: confirme para consumir uma única vez.</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <ActionButton small variant="danger" busy={busyKey === `__power_${powerConfirm}`}
-                  onClick={() => void requestPower(powerConfirm)}>
-                  Confirmar
+                  onClick={() => void (powerApproval ? decidePower(true) : requestPower(powerConfirm))}>
+                  {powerApproval ? 'Aprovar e executar' : 'Solicitar approval'}
                 </ActionButton>
-                <ActionButton small onClick={() => setPowerConfirm(null)}>Cancelar</ActionButton>
+                <ActionButton small onClick={() => void (powerApproval ? decidePower(false) : setPowerConfirm(null))}>Cancelar</ActionButton>
               </div>
             </div>
           )}

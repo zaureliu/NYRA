@@ -27,6 +27,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -115,7 +116,42 @@ def load_config(settings: Any = None) -> dict[str, Any]:
         "timeout_seconds": max(4.0, min(timeout, 60.0)),
         "last_test": stored.get("last_test") or {},
         "updated_at": stored.get("updated_at"),
+        "credentials_disabled": bool(stored.get("credentials_disabled", False)),
     }
+
+
+def _validated_url(value: Any) -> str:
+    url = str(value or "").strip().rstrip("/")
+    if not url:
+        return ""
+    parsed = urlsplit(url)
+    try:
+        parsed_port = parsed.port
+    except ValueError as error:
+        raise ValueError("porta da URL inválida") from error
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("URL Proxmox inválida; use somente a origem http(s)://host:porta")
+    _ = parsed_port
+    return url
+
+
+def endpoint_identity(url: str) -> tuple[str, str, int] | None:
+    if not url:
+        return None
+    try:
+        parsed = urlsplit(url)
+        default_port = 443 if parsed.scheme.lower() == "https" else 80
+        return parsed.scheme.lower(), (parsed.hostname or "").lower(), parsed.port or default_port
+    except ValueError:
+        return "invalid", "", -1
 
 
 def save_config(payload: dict[str, Any]) -> dict[str, Any]:
@@ -126,10 +162,7 @@ def save_config(payload: dict[str, Any]) -> dict[str, Any]:
     """
     updates: dict[str, Any] = {}
     if "url" in payload:
-        url = str(payload.get("url") or "").strip().rstrip("/")
-        if url and not url.lower().startswith(("http://", "https://")):
-            raise ValueError("url deve começar com http:// ou https://")
-        updates["url"] = url
+        updates["url"] = _validated_url(payload.get("url"))
     if "timeout_seconds" in payload:
         try:
             timeout = float(payload.get("timeout_seconds") or 8.0)
@@ -137,7 +170,11 @@ def save_config(payload: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("timeout_seconds inválido") from None
         updates["timeout_seconds"] = max(4.0, min(timeout, 60.0))
     if "verify_ssl" in payload:
-        updates["verify_ssl"] = bool(payload.get("verify_ssl"))
+        if not bool(payload.get("verify_ssl")):
+            raise ValueError(
+                "verify_ssl não pode ser desativado; instale a CA local do Proxmox no host NYRA"
+            )
+        updates["verify_ssl"] = True
     if "preferred_node" in payload:
         updates["preferred_node"] = str(payload.get("preferred_node") or "")[:64]
     if "enabled" in payload:
@@ -168,6 +205,8 @@ def resolve_credentials(settings: Any) -> tuple[str, str]:
     Valores legados encontrados nas settings (.env/config yaml) são migrados
     silenciosamente para o Broker sem nunca serem impressos (§7/§31).
     """
+    if load_config(settings).get("credentials_disabled"):
+        return "", ""
     token_id = ""
     token_secret = ""
     try:
@@ -210,18 +249,37 @@ def save_credentials(token_id: str, token_secret: str) -> dict[str, bool]:
                   description="Proxmox API Token ID", operator_direct=True)
     broker.create(_TOKEN_SECRET_CREDENTIAL, cleaned_secret, kind="proxmox_token_secret",
                   description="Proxmox API Token Secret", operator_direct=True)
+    stored = _load_file()
+    stored["credentials_disabled"] = False
+    stored["updated_at"] = time.time()
+    _save_file(stored)
     return {"token_id_configured": True, "token_secret_configured": True}
 
 
 def disconnect_credentials() -> dict[str, bool]:
-    """'Disconnect': esquece credenciais do Broker (não toca no legado .env)."""
+    """Forget Broker credentials and suppress all legacy fallback."""
     removed = {"token_id_removed": False, "token_secret_removed": False}
     try:
         broker = _broker()
-        removed["token_id_removed"] = bool(broker.delete(_TOKEN_ID_CREDENTIAL))
-        removed["token_secret_removed"] = bool(broker.delete(_TOKEN_SECRET_CREDENTIAL))
+        try:
+            token_id_result = broker.delete(_TOKEN_ID_CREDENTIAL, operator_direct=True)
+            token_secret_result = broker.delete(_TOKEN_SECRET_CREDENTIAL, operator_direct=True)
+        except TypeError:  # compatibility with narrow test/legacy broker adapters
+            token_id_result = broker.delete(_TOKEN_ID_CREDENTIAL)
+            token_secret_result = broker.delete(_TOKEN_SECRET_CREDENTIAL)
+        removed["token_id_removed"] = bool(
+            token_id_result.get("success") if isinstance(token_id_result, dict) else token_id_result
+        )
+        removed["token_secret_removed"] = bool(
+            token_secret_result.get("success") if isinstance(token_secret_result, dict) else token_secret_result
+        )
     except Exception as error:  # noqa: BLE001
         logger.warning("proxmox_disconnect_failed type=%s", type(error).__name__)
+    stored = _load_file()
+    stored["credentials_disabled"] = True
+    stored["updated_at"] = time.time()
+    _save_file(stored)
+    removed["credentials_disabled"] = True
     return removed
 
 

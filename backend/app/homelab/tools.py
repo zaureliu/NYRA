@@ -119,6 +119,7 @@ def register_homelab_tools(registry, control_plane: HomelabControlPlane) -> None
             input_model=ProxmoxVmActionInput,
             function=guarded(run),
             preflight=preflight,
+            llm_enabled=control_plane.settings.homelab_mutations_enabled,
         )
         registry.register(definition)
 
@@ -238,7 +239,7 @@ def register_homelab_tools(registry, control_plane: HomelabControlPlane) -> None
             if _HA_SAFE.fullmatch(f"{domain}.{service}")
             else "ELEVATED"
         )
-        requires_approval = risk == "ELEVATED"
+        requires_approval = True
         return {
             "risk_level": risk,
             "resource_key": f"ha:{entity}.{service}",
@@ -278,6 +279,7 @@ def register_homelab_tools(registry, control_plane: HomelabControlPlane) -> None
         RiskLevel.LOW_RISK, HaServiceCallInput, guarded(ha_call_service),
         dynamic_risk=True,
         preflight=ha_service_preflight,
+        llm_enabled=control_plane.settings.homelab_mutations_enabled,
     ))
 
     # ---------------- OpenWrt

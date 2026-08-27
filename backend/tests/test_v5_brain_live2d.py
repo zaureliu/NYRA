@@ -105,7 +105,9 @@ def test_brain_selection_requires_confirmation_and_preserves_fallback():
     brain.use_temporarily("qwen3.5:9b")
     assert brain.active_model=="qwen3.5:9b" and brain.fallback_model=="qwen3:8b"
     brain.restore_official(); assert brain.active_model==brain.official_model
-    with pytest.raises(ValueError): brain.use_temporarily("arbitrary:latest")
+    # whitelist removida: qualquer nome sintaticamente válido é aceito no
+    # runtime; a existência REAL é validada contra /api/tags na camada de API.
+    with pytest.raises(ValueError): brain.use_temporarily("")
 
 
 @pytest.mark.asyncio
@@ -133,6 +135,8 @@ async def test_ollama_complete_retries_single_empty_message(monkeypatch):
     mode = {"empty": False}
 
     class FakeResponse:
+        status_code = 200
+
         def raise_for_status(self): pass
         def json(self):
             calls["count"] += 1

@@ -32,7 +32,7 @@ from app.homelab.models import (
 )
 from app.homelab.policies import decide, normalize_action
 from app.homelab.registry import HomelabHostRegistry
-from app.integrations.base import IntegrationError
+from app.integrations.base import IntegrationError, require_secure_credential_transport
 from app.integrations.home_assistant import HomeAssistantClient
 from app.integrations.proxmox.client import ProxmoxReadOnlyClient
 from app.tools.registry import ToolRegistry
@@ -47,12 +47,13 @@ from pydantic import ValidationError
 def make_settings(tmp_path: Path) -> Settings:
     return Settings(
         homelab_enabled=True,
+        homelab_mutations_enabled=True,
         homelab_registry_path=tmp_path / "registry.yaml",
         homelab_default_timeout_seconds=2.0,
         homelab_overview_cache_seconds=0,
         database_path=tmp_path / "nyra-test.db",
         home_assistant_enabled=True,
-        home_assistant_url="http://192.168.1.200",
+        home_assistant_url="https://192.168.1.200",
         home_assistant_token="test-token-nyra",
         proxmox_enabled=True,
         proxmox_url="https://192.168.1.2:8006",
@@ -201,7 +202,7 @@ def fake_ha_client(states: list | None = None, token: str = "token-test") -> Hom
             raise IntegrationError("HA_ENTITY_NOT_FOUND", f"Entidade não encontrada: {entity_id}")
         raise IntegrationError("HA_API_UNAVAILABLE", f"Endpoint não suportado no fake: {path}")
 
-    client = HomeAssistantClient("http://192.168.1.200", token)
+    client = HomeAssistantClient("https://192.168.1.200", token)
     client._request = fake_request  # type: ignore[method-assign]
     return client
 
@@ -548,7 +549,7 @@ def ha_factory(monkeypatch):
             return pristine_async_client(transport=transport, timeout=kwargs.pop("timeout", 5))
 
         monkeypatch.setattr(hmod.httpx, "AsyncClient", factory)
-        return HomeAssistantClient("http://192.168.1.200", token)
+        return HomeAssistantClient("https://192.168.1.200", token)
 
     return make
 
@@ -645,9 +646,27 @@ class TestHomeAssistantClient:
 
 
 class TestPolicies:
-    def test_vm_start_auto_authorized_low_risk(self):
+    def test_credential_transport_requires_https_or_literal_loopback(self):
+        assert require_secure_credential_transport("https://ha.internal:8123")
+        assert require_secure_credential_transport("http://127.0.0.1:8123")
+        assert require_secure_credential_transport("http://[::1]:8123")
+        for url in ("http://localhost:8123", "http://192.168.1.200:8123"):
+            with pytest.raises(IntegrationError) as excinfo:
+                require_secure_credential_transport(url)
+            assert excinfo.value.code == "INSECURE_CREDENTIAL_TRANSPORT"
+
+    @pytest.mark.asyncio
+    async def test_proxmox_refuses_token_when_tls_verification_is_disabled(self):
+        client = ProxmoxReadOnlyClient(
+            "https://192.168.1.2:8006", "user@pve!nyra", "secret", verify_ssl=False,
+        )
+        with pytest.raises(IntegrationError) as excinfo:
+            await client.nodes()
+        assert excinfo.value.code == "PROXMOX_TLS_VERIFICATION_REQUIRED"
+
+    def test_vm_start_requires_approval_even_when_low_risk(self):
         decision = decide("vm_start")
-        assert decision.risk_level == "LOW_RISK" and decision.requires_approval is False
+        assert decision.risk_level == "LOW_RISK" and decision.requires_approval is True
 
     def test_shutdown_requires_approval(self):
         decision = decide("vm_shutdown")
@@ -674,11 +693,59 @@ class TestPolicies:
 
 class TestControllerActions:
     @pytest.mark.asyncio
+    async def test_ha_approval_binds_entire_target_and_service_payload(self, tmp_path: Path):
+        plane = build_plane(make_settings(tmp_path))
+        await plane.history.initialize()
+
+        class RecordingHA:
+            def __init__(self):
+                self.calls = []
+
+            async def call_service(self, domain, service, target, service_data):
+                self.calls.append((domain, service, target, service_data))
+
+            async def verify_effect(self, entity_id, expected_state):
+                return entity_id == "notify.phone" and expected_state == "sent"
+
+        recorder = RecordingHA()
+        plane.home_assistant = recorder
+        target = {"entity_id": ["notify.phone"], "device_id": "device-a"}
+        service_data = {"message": "hello", "title": "NYRA", "_expected_state": "sent"}
+        pending = await plane.ha_call_service(
+            "notify", "mobile_app", target=target, service_data=service_data,
+        )
+        assert pending["error_code"] == "APPROVAL_REQUIRED"
+        plane.approvals.grant(pending["approval_id"], "operator_test")
+
+        tampered = await plane.ha_call_service(
+            "notify", "mobile_app",
+            target={**target, "device_id": "device-b"},
+            service_data=service_data,
+            approval_id=pending["approval_id"],
+        )
+        assert tampered["error_code"] == "APPROVAL_REJECTED"
+        assert recorder.calls == []
+
+        exact = await plane.ha_call_service(
+            "notify", "mobile_app", target=target, service_data=service_data,
+            approval_id=pending["approval_id"],
+        )
+        assert exact["success"] is True
+        assert recorder.calls == [
+            ("notify", "mobile_app", target, {"message": "hello", "title": "NYRA"})
+        ]
+        assert service_data["_expected_state"] == "sent"
+
+    @pytest.mark.asyncio
     async def test_vm_start_act_verify_reported(self, tmp_path: Path):
         settings = make_settings(tmp_path)
         plane = build_plane(settings)
         await plane.history.initialize()
-        result = await plane.proxmox_vm_action("vm_start", "103")
+        pending = await plane.proxmox_vm_action("vm_start", "103")
+        plane.approvals.grant(pending["approval_id"], "operator_test")
+        result = await plane.proxmox_vm_action(
+            "vm_start", "103", approval_id=pending["approval_id"],
+        )
         assert result["success"] is True
         assert result["effect_verified"] is True
         assert result["guest_status"] == "running"
@@ -858,7 +925,11 @@ class TestTurnScope:
         await plane.history.initialize()
         token = set_current_turn_id("turn_deadbeef01")
         try:
-            result = await plane.proxmox_vm_action("vm_start", "120")
+            pending = await plane.proxmox_vm_action("vm_start", "120")
+            plane.approvals.grant(pending["approval_id"], "operator_test")
+            result = await plane.proxmox_vm_action(
+                "vm_start", "120", approval_id=pending["approval_id"],
+            )
         finally:
             current_turn_id.reset(token)
         assert result["turn_id"] == "turn_deadbeef01"

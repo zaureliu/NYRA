@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import ipaddress
 import json
 from pathlib import Path
-import socket
 from urllib.parse import urlsplit
 
 import httpx
@@ -38,7 +37,7 @@ class SentinelDiscovery:
         last = self.load_last_known()
         if last:
             values.append(last)
-        values.extend([f"http://127.0.0.1:{config.port}", f"http://localhost:{config.port}"])
+        values.append(f"http://127.0.0.1:{config.port}")
         if config.host and not config.prefer_manual_host:
             values.append(self._base_url(config.host, config.port))
         return list(dict.fromkeys(values))
@@ -74,7 +73,7 @@ class SentinelDiscovery:
             if found.is_set():
                 return None
             async with semaphore:
-                result = await self.probe(f"http://{host}:{config.port}")
+                result = await self.probe(f"https://{host}:{config.port}")
                 if result:
                     found.set()
                 return result
@@ -110,7 +109,16 @@ class SentinelDiscovery:
     def load_last_known(self) -> str:
         try:
             value = json.loads(self.last_known_path.read_text(encoding="utf-8"))
-            return str(value.get("base_url") or "").rstrip("/")
+            base_url = str(value.get("base_url") or "").strip().rstrip("/")
+            parsed = urlsplit(base_url)
+            try:
+                address = ipaddress.ip_address(parsed.hostname or "")
+            except ValueError:
+                return ""
+            if parsed.scheme == "http" and not address.is_loopback:
+                # Migração fail-closed de registros antigos: LAN só via HTTPS.
+                base_url = parsed._replace(scheme="https").geturl().rstrip("/")
+            return base_url if self._is_local_url(base_url) else ""
         except (OSError, ValueError, TypeError):
             return ""
 
@@ -125,33 +133,49 @@ class SentinelDiscovery:
     def _base_url(host: str, port: int) -> str:
         if host.startswith(("http://", "https://")):
             parsed = urlsplit(host)
+            scheme = parsed.scheme
+            try:
+                if scheme == "http" and not ipaddress.ip_address(parsed.hostname or "").is_loopback:
+                    scheme = "https"
+            except ValueError:
+                scheme = "https"
             if parsed.port:
-                return host.rstrip("/")
-            return f"{parsed.scheme}://{parsed.hostname}:{port}"
+                authority = f"[{parsed.hostname}]" if parsed.hostname and ":" in parsed.hostname else parsed.hostname
+                return f"{scheme}://{authority}:{parsed.port}"
+            return f"{scheme}://{parsed.hostname}:{port}"
         if ":" in host and not host.startswith("["):
             try:
-                ipaddress.ip_address(host)
-                return f"http://[{host}]:{port}"
+                address = ipaddress.ip_address(host)
+                scheme = "http" if address.is_loopback else "https"
+                return f"{scheme}://[{host}]:{port}"
             except ValueError:
                 pass
-        return f"http://{host}:{port}"
+        try:
+            address = ipaddress.ip_address(host)
+            scheme = "http" if address.is_loopback else "https"
+        except ValueError:
+            scheme = "https"
+        return f"{scheme}://{host}:{port}"
 
     @staticmethod
     def _is_local_url(base_url: str) -> bool:
         parsed = urlsplit(base_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
             return False
         try:
-            addresses = {
-                item[4][0]
-                for item in socket.getaddrinfo(parsed.hostname, parsed.port or 80, type=socket.SOCK_STREAM)
-            }
-        except OSError:
+            address = ipaddress.ip_address(parsed.hostname)
+            _ = parsed.port
+        except ValueError:
             return False
-        if not addresses:
-            return False
-        for raw in addresses:
-            address = ipaddress.ip_address(raw)
-            if not (address.is_private or address.is_loopback or address.is_link_local):
-                return False
-        return True
+        is_local = address.is_private or address.is_loopback or address.is_link_local
+        if parsed.scheme == "http":
+            return is_local and address.is_loopback
+        return is_local

@@ -34,11 +34,19 @@ def _window_class(hwnd: wintypes.HWND) -> str:
 
 
 def list_visible_windows() -> list[WindowInfo]:
-    """Enumerate visible top-level APPLICATION windows of the interactive desktop."""
+    return list_application_windows(include_invisible=False)
+
+
+def list_application_windows(include_invisible: bool = False) -> list[WindowInfo]:
+    """Enumerate top-level APPLICATION windows of the interactive desktop.
+
+    include_invisible=True captura também janelas ocultas (apps em tray como
+    Discord/Steam), necessárias para detectar instância já aberta (§17/§26).
+    """
     collected: list[WindowInfo] = []
 
     def _on_window(hwnd: wintypes.HWND, _lparam: wintypes.LPARAM) -> bool:
-        if not _user32.IsWindowVisible(hwnd):
+        if not include_invisible and not _user32.IsWindowVisible(hwnd):
             return True
         length = _user32.GetWindowTextLengthW(hwnd)
         buffer = ctypes.create_unicode_buffer(max(1, length + 1))
@@ -53,7 +61,7 @@ def list_visible_windows() -> list[WindowInfo]:
             hwnd=int(hwnd),
             pid=int(pid_value.value),
             title=buffer.value,
-            visible=True,
+            visible=bool(_user32.IsWindowVisible(hwnd)),
             window_class=class_buffer.value,
         ))
         return True

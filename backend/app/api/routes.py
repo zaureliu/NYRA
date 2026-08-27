@@ -145,10 +145,42 @@ async def health(request: Request) -> dict:
 async def chat(payload: ChatRequest, request: Request):
     services = request.app.state.services
     if not await services.llm.ready():
-        raise HTTPException(
-            status_code=503,
-            detail="IA local inicializando. Aguarde o warmup automático.",
+        # nyra-full §41 / nyra-7c: comandos universais locais (abrir/fechar
+        # app, pastas, arquivos, plano canônico do bloco de notas e skills
+        # aprendidas) rodam no fast path SEM LLM e não ficam bloqueados pelo
+        # warmup.
+        from app.desktop.intents import parse_notepad_multistep, parse_universal_intent
+
+        desktop = getattr(services, "desktop", None)
+        computer = getattr(services, "computer", None)
+        intent = (
+            computer.can_handle_without_llm(
+                payload.message, conversation_id="default",
+                turn_id=payload.turn_id or None, channel="text")
+            if computer is not None else None
         )
+        if not intent:
+            intent = parse_universal_intent(payload.message) if desktop is not None else None
+        if intent is None and desktop is not None:
+            intent = parse_notepad_multistep(payload.message)
+        if intent is None:
+            skill_memory = getattr(services, "skill_memory", None)
+            usage = getattr(services, "usage_learning", None)
+            has_skill_route = bool(skill_memory and skill_memory.match(payload.message))
+            has_alias_route = False
+            if not has_skill_route and usage is not None:
+                words = payload.message.casefold().split()
+                has_alias_route = bool(words and usage.resolve_alias(" ".join(words[:3])))
+                has_alias_route = has_alias_route or (
+                    payload.message.casefold().strip()
+                    in {a.alias for a in usage.aliases.values()})
+            if has_skill_route or has_alias_route:
+                intent = True  # sentinel: existe rota determinística pós-warmup
+        if intent is None:
+            raise HTTPException(
+                status_code=503,
+                detail="IA local inicializando. Aguarde o warmup automático.",
+            )
     turn = TurnContext(
         payload.message,
         conversation_id="default",
@@ -441,6 +473,13 @@ async def brain_models(request: Request):
 @router.post("/brain/use-temporarily")
 async def brain_use_temporarily(payload: BrainSelectionRequest, request: Request):
     services = request.app.state.services
+    _guard_model_operation(request)
+    if not await services.brain.is_installed(payload.model):
+        raise HTTPException(status_code=422, detail={
+            "error_code": "MODEL_NOT_INSTALLED",
+            "message": f"Modelo '{payload.model}' não está instalado no Ollama local.",
+            "stage": "llm", "recoverable": True,
+        })
     try:
         services.brain.use_temporarily(payload.model)
     except ValueError as exc:
@@ -450,9 +489,144 @@ async def brain_use_temporarily(payload: BrainSelectionRequest, request: Request
     return await services.brain.inventory()
 
 
+async def _validated_selection(payload: BrainSelectionRequest, request: Request):
+    """Validações compartilhadas por salvar/carregar/restaurar modelo."""
+    services = request.app.state.services
+    _guard_model_operation(request)
+    if not await services.brain.is_installed(payload.model):
+        raise HTTPException(status_code=422, detail={
+            "error_code": "MODEL_NOT_INSTALLED",
+            "message": f"Modelo '{payload.model}' não está instalado no Ollama local.",
+            "stage": "llm", "recoverable": True,
+        })
+    return services
+
+
+def _guard_model_operation(request: Request) -> None:
+    """Concorrência §16: uma troca por vez e nunca no meio de um turno."""
+    app_state = request.app.state
+    lock = getattr(app_state, "model_op_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        app_state.model_op_lock = lock
+    if lock.locked():
+        raise HTTPException(status_code=409, detail={
+            "error_code": "MODEL_CHANGE_IN_PROGRESS",
+            "message": "Já existe uma troca de modelo em andamento.",
+            "stage": "llm", "recoverable": True,
+        })
+    conversation = getattr(app_state.services, "conversation", None)
+    busy = str(getattr(conversation, "state", "")) in {
+        "USER_SPEAKING", "TRANSCRIBING", "THINKING", "TOOL_EXECUTION", "SPEAKING",
+    }
+    if busy:
+        raise HTTPException(status_code=409, detail={
+            "error_code": "TURN_ACTIVE",
+            "message": "Existe um turno de conversa em andamento; tente novamente ao concluir.",
+            "stage": "llm", "recoverable": True,
+        })
+
+
+async def _load_and_confirm(services, model: str) -> dict:
+    """Cadeia real §8/§10: preload → warm-up isolado → residency /api/ps."""
+    brain = services.brain
+    brain.use_temporarily(model)
+    if services.warm_manager:
+        warm = await services.warm_manager.preload(force=True)
+    else:
+        await brain.warmup()
+        warm = {"state": "OLLAMA_READY" if await brain.ready() else "OLLAMA_ERROR",
+                "ready": await brain.ready(), "model": model}
+    if str(warm.get("state")) == "OLLAMA_OFFLINE":
+        raise HTTPException(status_code=503, detail={
+            "error_code": "OLLAMA_OFFLINE",
+            "message": "Ollama indisponível durante o carregamento do modelo.",
+            "stage": "llm", "recoverable": True,
+        })
+    if not warm.get("ready") or not await brain.ready():
+        raise HTTPException(status_code=502, detail={
+            "error_code": "MODEL_NOT_RESIDENT",
+            "message": f"Modelo '{model}' concluiu o preload mas não ficou residente.",
+            "stage": "llm", "recoverable": True,
+            "details": {"metrics": warm.get("metrics"), "last_error": warm.get("last_error")},
+        })
+    return {"state": "MODEL_READY", "active_model": model,
+            "resident": True, "warm": warm}
+
+
+@router.post("/brain/model/load")
+async def brain_model_load(payload: BrainSelectionRequest, request: Request):
+    """§8 Carregar modelo: valida existência real, aplica no runtime e confirma."""
+    services = await _validated_selection(payload, request)
+    try:
+        return await _load_and_confirm(services, payload.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/brain/status")
+async def brain_status(request: Request):
+    """Estados reais §4 para a seção IA da UI."""
+    services = request.app.state.services
+    brain = services.brain
+    inventory = await brain.inventory()
+    warm = services.warm_manager.status() if services.warm_manager else None
+    active_model = inventory.get("active_model")
+    if inventory.get("ollama_state") == "OFFLINE":
+        state = "OLLAMA_OFFLINE"
+    elif not inventory["ollama_ready"]:
+        state = "OLLAMA_ERROR"
+    elif inventory.get("inventory_error_code"):
+        state = "OLLAMA_ERROR"
+    elif not inventory["models"]:
+        state = "NO_MODELS_INSTALLED"
+    elif warm and warm.get("state") == "OLLAMA_LOADING":
+        state = "MODEL_LOADING"
+    elif active_model:
+        state = "MODEL_READY"
+    elif warm and warm.get("state") == "OLLAMA_ERROR":
+        state = "MODEL_FAILED"
+    else:
+        state = "MODEL_AVAILABLE"
+    return {
+        "state": state,
+        "ollama_ready": inventory["ollama_ready"],
+        "ollama_state": inventory.get("ollama_state"),
+        "active_model": active_model,
+        "selected_model": brain.official_model,
+        "resident_models": inventory.get("resident_models", []),
+        "residency_known": inventory.get("residency_known", False),
+        "configured_model_not_installed": inventory["configured_model_not_installed"],
+        "models_installed": len(inventory["models"]),
+        "error_code": inventory.get("inventory_error_code") or inventory.get("residency_error_code"),
+        "last_error": (warm or {}).get("last_error"),
+        "metrics": (warm or {}).get("metrics", {}),
+    }
+
+
+@router.post("/brain/reset-default")
+async def brain_reset_default(request: Request):
+    """§13 Restaurar padrão oficial (qwen3:8b): salvar → carregar → confirmar."""
+    default_model = "qwen3:8b"
+    services = request.app.state.services
+    _guard_model_operation(request)
+    if not await services.brain.is_installed(default_model):
+        raise HTTPException(status_code=422, detail={
+            "error_code": "DEFAULT_MODEL_NOT_INSTALLED",
+            "message": f"O padrão oficial '{default_model}' não está instalado no Ollama local.",
+            "stage": "llm", "recoverable": True,
+        })
+    try:
+        services.brain.select_official(default_model, confirmed=True)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    services.settings.llm_model = default_model
+    return await _load_and_confirm(services, default_model)
+
+
 @router.post("/brain/select")
 async def brain_select(payload: BrainSelectionRequest, request: Request):
-    services = request.app.state.services
+    services = await _validated_selection(payload, request)
     try:
         services.brain.select_official(payload.model, payload.confirmed)
     except (ValueError, PermissionError) as exc:
@@ -544,9 +718,13 @@ async def list_tools(request: Request):
 @router.post("/tools/{tool_name}")
 async def execute_tool(tool_name: str, payload: ToolExecutionRequest, request: Request):
     try:
-        return await request.app.state.services.tools.execute(tool_name, payload.parameters)
+        return await request.app.state.services.tools.execute(
+            tool_name, payload.parameters, exposure="api",
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1230,7 +1408,7 @@ async def import_voice_reference(file: UploadFile = File(...)):
     temp = DATA_ROOT / "voices" / f".upload-{uuid4().hex}.wav"
     temp.parent.mkdir(parents=True, exist_ok=True)
     try:
-        content = await file.read()
+        content = await file.read(50 * 1024 * 1024 + 1)
         if len(content) > 50 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Referência excede 50 MB")
         await asyncio.to_thread(temp.write_bytes, content)
@@ -1355,21 +1533,27 @@ async def runtime_service_logs(request: Request, service_id: str, lines: int = 1
 async def runtime_service_start(request: Request, service_id: str, payload: RuntimeActionRequest | None = None):
     body = payload or RuntimeActionRequest()
     supervisor = request.app.state.services.runtime_supervisor
-    return await supervisor.start(service_id, origin="api", approval_id=body.approval_id or None)
+    from app.runtime.tools import _mutate
+    return await _mutate(supervisor, request.app.state.services.shell.approvals,
+                         supervisor.event_bus, "start", service_id, body.approval_id or None)
 
 
 @router.post("/runtime/services/{service_id}/stop")
 async def runtime_service_stop(request: Request, service_id: str, payload: RuntimeActionRequest | None = None):
     body = payload or RuntimeActionRequest()
     supervisor = request.app.state.services.runtime_supervisor
-    return await supervisor.stop(service_id, origin="api", approval_id=body.approval_id or None)
+    from app.runtime.tools import _mutate
+    return await _mutate(supervisor, request.app.state.services.shell.approvals,
+                         supervisor.event_bus, "stop", service_id, body.approval_id or None)
 
 
 @router.post("/runtime/services/{service_id}/restart")
 async def runtime_service_restart(request: Request, service_id: str, payload: RuntimeActionRequest | None = None):
     body = payload or RuntimeActionRequest()
     supervisor = request.app.state.services.runtime_supervisor
-    return await supervisor.restart(service_id, origin="api", approval_id=body.approval_id or None)
+    from app.runtime.tools import _mutate
+    return await _mutate(supervisor, request.app.state.services.shell.approvals,
+                         supervisor.event_bus, "restart", service_id, body.approval_id or None)
 
 
 @router.get("/runtime/history")
@@ -1385,7 +1569,9 @@ async def desktop_apps(request: Request):
 
 @router.get("/desktop/apps/find")
 async def desktop_apps_find(request: Request, q: str, limit: int = 8):
-    return request.app.state.services.desktop.find(q, limit=max(1, min(limit, 20)))
+    return await asyncio.to_thread(
+        request.app.state.services.desktop.find, q, max(1, min(limit, 20))
+    )
 
 
 @router.post("/desktop/apps/open")
@@ -1419,23 +1605,203 @@ async def desktop_app_launch(request: Request, app_id: str):
     return await request.app.state.services.desktop.launch(app_id, origin="api")
 
 
+# ============================== Universal Operator (nyra-full §29/§34) =======
+
+# nyra-7c: observabilidade das camadas de autonomia (sem UI nova).
+
+@router.get("/computer/state")
+async def computer_state_route(request: Request):
+    services = request.app.state.services
+    state = getattr(services, "computer_state", None)
+    if state is None:
+        raise HTTPException(status_code=503, detail="ComputerState indisponível")
+    slots = {}
+    for key, slot in state.slots.items():
+        if key.startswith(("last_target", "foreground_app", "open_apps",
+                           "last_successful_action", "last_foreground_window")):
+            slots[key] = {"value": slot.value, "freshness": slot.freshness(state.clock()).value,
+                          "source": slot.source}
+    return {"slots": slots, "user_activity": state.user_activity(),
+            "world_summary": state.world_summary()}
+
+
+@router.get("/computer/usage/stats")
+async def computer_usage_stats(request: Request):
+    services = request.app.state.services
+    usage = getattr(services, "usage_learning", None)
+    if usage is None:
+        raise HTTPException(status_code=503, detail="UsageLearning indisponível")
+    return {
+        "events_recent": usage.recent_events(limit=20),
+        "aliases": {k: v.model_dump() for k, v in usage.aliases.items()},
+        "preferences": {k: v.model_dump() for k, v in usage.preferences.items()},
+        "workflow_candidates": {k: v.model_dump() for k, v in usage.workflows.items()},
+    }
+
+
+@router.get("/computer/skills")
+async def computer_skills_list(request: Request, q: str | None = None):
+    services = request.app.state.services
+    memory = getattr(services, "skill_memory", None)
+    if memory is None:
+        raise HTTPException(status_code=503, detail="SkillMemory indisponível")
+    probe = None
+    if q:
+        matched = memory.match(q)
+        probe = None if matched is None else {"id": matched[0].skill_id,
+                                              "name": matched[0].name,
+                                              "by": matched[1]}
+    return {"skills": memory.list_skills(include_candidates=True),
+            "match_probe": probe, "memory_is_none": memory is None}
+
+
+@router.post("/computer/skills/explicit")
+async def computer_skill_explicit(request: Request):
+    """Fixture/E2E: 'aprende isso' explícito (nyra-7c §68) sem LLM."""
+    services = request.app.state.services
+    memory = getattr(services, "skill_memory", None)
+    if memory is None:
+        raise HTTPException(status_code=503, detail="SkillMemory indisponível")
+    try:
+        body = json.loads((await request.body()).decode() or "{}")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="JSON inválido")
+    name_hint = str(body.get("name_hint") or "").strip()
+    raw_steps = body.get("steps") or []
+    aliases = [str(a) for a in body.get("aliases") or []]
+    preconditions = [dict(p) for p in body.get("preconditions") or []
+                     if isinstance(p, dict)]
+    if not name_hint or not isinstance(raw_steps, list) or len(raw_steps) < 1:
+        raise HTTPException(status_code=422,
+                            detail="name_hint e steps são obrigatórios")
+    parsed_steps = []
+    for item in raw_steps[:8]:
+        if isinstance(item, dict) and item.get("capability"):
+            parsed_steps.append((str(item["capability"]), str(item.get("target", ""))))
+    if not parsed_steps:
+        raise HTTPException(status_code=422, detail="steps inválidos")
+    skill = memory.explicit_learn(parsed_steps, name_hint=name_hint, aliases=aliases)
+    if preconditions:
+        skill.preconditions = preconditions
+        memory.persist()
+    return skill.model_dump(mode="json")
+
+
+@router.post("/computer/skills/{skill_id}/promote")
+async def computer_skill_promote(skill_id: str, request: Request):
+    services = request.app.state.services
+    memory = getattr(services, "skill_memory", None)
+    if memory is None:
+        raise HTTPException(status_code=503, detail="SkillMemory indisponível")
+    skill = memory.promote(skill_id, force=True)
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill não encontrada")
+    return skill.model_dump(mode="json")
+
+
+@router.get("/apps/registry/status")
+async def apps_registry_status(request: Request):
+    services = request.app.state.services
+    desktop = getattr(services, "desktop", None)
+    if desktop is None:
+        raise HTTPException(status_code=503, detail="Desktop controller indisponível")
+    return desktop.universal_status()
+
+
+@router.post("/apps/registry/refresh")
+async def apps_registry_refresh(request: Request):
+    services = request.app.state.services
+    desktop = getattr(services, "desktop", None)
+    if desktop is None:
+        raise HTTPException(status_code=503, detail="Desktop controller indisponível")
+    return await asyncio.to_thread(desktop.refresh_universal, True)
+
+
+@router.get("/apps/registry/diagnostics")
+async def apps_registry_diagnostics(request: Request, query: str):
+    """Diagnóstico de resolução (somente Developer): candidatos e scores."""
+    services = request.app.state.services
+    desktop = getattr(services, "desktop", None)
+    if desktop is None:
+        raise HTTPException(status_code=503, detail="Desktop controller indisponível")
+    fast = desktop.universal.resolve_fast(query)
+    resolution = desktop.discovery.resolve(query)
+    return {
+        "query": query,
+        "fast_hit": fast.public_dict() if fast else None,
+        "discovery": {
+            "status": resolution.get("status"),
+            "candidate": resolution.get("candidate"),
+            "candidates": (resolution.get("candidates") or [])[:5],
+        },
+        "last_controlled": desktop.last_controlled,
+    }
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """Event bus broadcast + contrato de voz nyra.voice.v1 (Apêndice PRO E).
+
+    Mensagens aceitas do cliente: hello → hello_ack; voice.barge_in e tts.stop →
+    cancelam SOMENTE o TTS atual (sem derrubar Agent Run); heartbeat → ack.
+    Texto não-JSON é ignorado por compatibilidade.
+    """
     await websocket.accept()
-    event_bus = websocket.app.state.services.event_bus
+    services = websocket.app.state.services
+    event_bus = services.event_bus
+    outbound_lock = asyncio.Lock()
+    hello_state = {"handshake": False}
+
+    async def _send(payload: dict) -> None:
+        async with outbound_lock:
+            await websocket.send_json(payload)
 
     async def forward(event: Event) -> None:
-        await websocket.send_json(event.model_dump(mode="json"))
+        await _send(event.model_dump(mode="json"))
 
+    async def receiver() -> None:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                message = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(message, dict):
+                continue
+            message_type = str(message.get("type") or "")
+            if message_type == "hello":
+                hello_state["handshake"] = True
+                logger.info("voice_hello", extra={
+                    "protocol": str(message.get("protocol_version") or "nyra.voice.v1"),
+                    "satellite_id": str(message.get("satellite_id") or "unknown"),
+                })
+                await _send({
+                    "type": "hello_ack",
+                    "protocol": "nyra.voice.v1",
+                    "accepted": True,
+                    "character": "NYRA",
+                })
+            elif message_type in {"voice.barge_in", "tts.stop"}:
+                orchestrator = getattr(services, "orchestrator", None)
+                if orchestrator is not None and hasattr(orchestrator, "cancel_speech"):
+                    await orchestrator.cancel_speech(reason="satellite_barge_in")
+            elif message_type == "heartbeat":
+                await _send({"type": "heartbeat_ack"})
+
+    receiver_task = asyncio.create_task(receiver(), name="nyra-ws-receiver")
     await event_bus.subscribe(forward)
     try:
-        await websocket.send_json({"type": "CONNECTED", "payload": {"character": "NYRA"}})
-        while True:
-            await websocket.receive_text()
+        await _send({"type": "CONNECTED", "payload": {"character": "NYRA"}})
+        await receiver_task
     except WebSocketDisconnect:
         pass
     finally:
         await event_bus.unsubscribe(forward)
+        receiver_task.cancel()
+        try:
+            await receiver_task
+        except asyncio.CancelledError:
+            pass
 
 
 # ===================================================================== Operator V2
@@ -1563,12 +1929,13 @@ async def credential_status(request: Request, credential_id: str) -> dict:
 async def credential_upsert(request: Request, credential_id: str) -> dict:
     """Criação/rotação SOMENTE via API local pelo operador — o LLM nunca envia o
     segredo (§86/§90). Body: {secret, kind?, description?}."""
-    from pydantic import BaseModel as _BaseModel
+    from pydantic import BaseModel as _BaseModel, Field as _Field
 
     class _CredentialUpsert(_BaseModel):
-        secret: str
-        kind: str = "generic"
-        description: str = ""
+        secret: str = _Field(min_length=1, max_length=4096)
+        kind: str = _Field(default="generic", max_length=80)
+        description: str = _Field(default="", max_length=240)
+        approval_id: str | None = _Field(default=None, max_length=128)
 
         model_config = {"extra": "forbid"}
 
@@ -1580,12 +1947,13 @@ async def credential_upsert(request: Request, credential_id: str) -> dict:
     if broker is None:
         raise HTTPException(status_code=503, detail="Credential Broker desabilitado")
     existing = broker.status(credential_id)
+    approval_id = payload.approval_id or request.headers.get("x-approval-id")
     if existing.get("success"):
         result = broker.rotate(credential_id, payload.secret,
-                               approval_id=request.headers.get("x-approval-id"))
+                               approval_id=approval_id)
     else:
         result = broker.create(credential_id, payload.secret, kind=payload.kind,
-                               description=payload.description, operator_direct=True)
+                               description=payload.description, approval_id=approval_id)
     if not result.get("success") and result.get("error_code") == "APPROVAL_REQUIRED":
         return result  # 200 com approval_required para o fluxo de duas fases do painel
     if not result.get("success"):
@@ -1638,17 +2006,10 @@ async def elevated_session_close(request: Request, payload: dict) -> dict:
 # --------------------------------------------------------------- jobs (Parte F/Q)
 @router.post("/jobs")
 async def job_start(request: Request, payload: dict) -> dict:
-    jobs = _v2(request).jobs
-    if jobs is None:
-        raise HTTPException(status_code=503, detail="Persistent Jobs desabilitado")
-    try:
-        return await jobs.start(str(payload.get("name") or "job"),
-                                [str(part) for part in (payload.get("argv") or [])],
-                                working_directory=str(payload.get("working_directory") or ""),
-                                resource_key=str(payload.get("resource_key") or ""))
-    except Exception as exc:  # JobError
-        code = getattr(exc, "code", "JOB_START_FAILED")
-        raise HTTPException(status_code=400, detail={"error_code": code, "message": str(exc)})
+    raise HTTPException(
+        status_code=403,
+        detail="Criação arbitrária de jobs exige autorização emitida por system_shell",
+    )
 
 
 @router.get("/jobs")
@@ -1692,13 +2053,23 @@ for _action in ("cancel", "pause", "resume"):
 # -------------------------------------------------------------- tasks (Parte G/Q)
 @router.post("/tasks")
 async def task_create(request: Request, payload: dict) -> dict:
+    from app.operator.tasks import TaskValidationError
+
     tasks = _v2(request).tasks
-    outcome = await tasks.create_task(
-        str(payload.get("goal") or ""),
-        [dict(step) for step in (payload.get("steps") or [])],
-        verification_plan=str(payload.get("verification_plan") or ""),
-        deadline_seconds=payload.get("deadline_seconds"),
-    )
+    try:
+        outcome = await tasks.create_task(
+            str(payload.get("goal") or ""),
+            [dict(step) for step in (payload.get("steps") or [])],
+            verification_plan=str(payload.get("verification_plan") or ""),
+            deadline_seconds=payload.get("deadline_seconds"),
+        )
+    except TaskValidationError as error:
+        raise HTTPException(status_code=422, detail={
+            "error_code": error.code,
+            "message": str(error),
+            "stage": "operator_tasks",
+            "recoverable": True,
+        }) from error
     if outcome.get("success") and payload.get("auto_run", True):
         await tasks.run_task(outcome["task"]["task_id"])
     return outcome
@@ -2144,7 +2515,11 @@ class SettingUpdateRequest(BaseModel):
 @router.put("/settings/v3")
 async def setting_update_v3(request: Request, payload: SettingUpdateRequest) -> dict:
     try:
-        return update_setting(_v3_services(request).settings, payload.key, payload.value)
+        services = _v3_services(request)
+        result = update_setting(services.settings, payload.key, payload.value)
+        if payload.key.startswith("selfdev_") and getattr(services, "selfdev", None) is not None:
+            await services.selfdev.refresh_settings()
+        return result
     except KeyError as error:
         raise HTTPException(status_code=404, detail={
             "error_code": "SETTING_UNKNOWN",
@@ -2169,6 +2544,109 @@ async def config_export(request: Request) -> dict:
     services = _v3_services(request)
     about = about_payload(services)
     return export_config(services.settings, about)
+
+
+# ------------------------------------------------------- self-development v1
+def _selfdev(request: Request):
+    service = getattr(_v3_services(request), "selfdev", None)
+    if service is None:
+        raise HTTPException(status_code=503, detail={
+            "error_code": "SELFDEV_NOT_READY",
+            "message": "Self-Development Service ainda não está disponível.",
+            "stage": "selfdev", "recoverable": True,
+        })
+    return service
+
+
+class SelfDevIssueRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=180)
+    description: str = Field(min_length=3, max_length=2000)
+    components: list[str] = Field(default_factory=list, max_length=30)
+
+
+class SelfDevRunRequest(BaseModel):
+    issue_id: str | None = Field(default=None, pattern=r"^SELFDEV-[A-Z0-9-]{4,64}$")
+
+
+class SelfDevRevertRequest(BaseModel):
+    approval_id: str | None = Field(default=None, max_length=200)
+
+
+@router.get("/selfdev/status")
+async def selfdev_status(request: Request) -> dict:
+    return _selfdev(request).status()
+
+
+@router.get("/selfdev/issues")
+async def selfdev_issues(request: Request) -> dict:
+    values = _selfdev(request).issues()
+    return {"issues": values, "count": len(values)}
+
+
+@router.post("/selfdev/issues")
+async def selfdev_issue_submit(request: Request, payload: SelfDevIssueRequest) -> dict:
+    return _selfdev(request).submit_explicit_issue(payload.title, payload.description, payload.components)
+
+
+@router.get("/selfdev/issues/{issue_id}")
+async def selfdev_issue_details(request: Request, issue_id: str) -> dict:
+    value = _selfdev(request).issue_details(issue_id)
+    if value is None:
+        raise HTTPException(status_code=404, detail={"error_code": "SELFDEV_ISSUE_NOT_FOUND"})
+    return value
+
+
+@router.get("/selfdev/issues/{issue_id}/diff")
+async def selfdev_issue_diff(request: Request, issue_id: str) -> dict:
+    value = await _selfdev(request).issue_diff(issue_id)
+    if value is None:
+        raise HTTPException(status_code=404, detail={"error_code": "SELFDEV_ISSUE_NOT_FOUND"})
+    return value
+
+
+@router.post("/selfdev/issues/{issue_id}/revert")
+async def selfdev_issue_revert(request: Request, issue_id: str, payload: SelfDevRevertRequest) -> dict:
+    return await _selfdev(request).revert(issue_id, approval_id=payload.approval_id)
+
+
+@router.post("/selfdev/run-once")
+async def selfdev_run_once(request: Request, payload: SelfDevRunRequest) -> dict:
+    return await _selfdev(request).run_once(issue_id=payload.issue_id, bypass_idle=True)
+
+
+@router.get("/selfdev/repository/query")
+async def selfdev_repository_query(request: Request, q: str) -> dict:
+    question = q.strip()
+    if not 2 <= len(question) <= 500:
+        raise HTTPException(status_code=422, detail={"error_code": "SELFDEV_QUERY_INVALID"})
+    return _selfdev(request).repository_query(question)
+
+
+@router.get("/selfdev/models")
+async def selfdev_models(request: Request) -> dict:
+    try:
+        values = await _selfdev(request).installed_models()
+    except (PermissionError, RuntimeError) as error:
+        raise HTTPException(status_code=409, detail={
+            "error_code": str(error)[:120],
+            "message": "O SelfDev aceita somente modelos Ollama locais já instalados.",
+            "stage": "selfdev", "recoverable": True,
+        }) from error
+    return {"models": values, "selected": _selfdev(request).settings.model}
+
+
+@router.get("/selfdev/notifications")
+async def selfdev_notifications(request: Request, unread_only: bool = False, limit: int = 100) -> dict:
+    service = _selfdev(request)
+    values = service.notification_items(unread_only=unread_only, limit=limit)
+    return {"notifications": values, "unread": service.notifications.unread_count()}
+
+
+@router.post("/selfdev/notifications/{notification_id}/read")
+async def selfdev_notification_read(request: Request, notification_id: str) -> dict:
+    if not _selfdev(request).mark_notification_read(notification_id):
+        raise HTTPException(status_code=404, detail={"error_code": "SELFDEV_NOTIFICATION_NOT_FOUND"})
+    return {"success": True, "notification_id": notification_id}
 
 
 # ----------------------------------------------------------- integration center
@@ -2213,6 +2691,27 @@ async def integrations_action(request: Request, integration_id: str, action: str
 
 
 # ------------------------------------------------------------------ ha profiles
+def _require_api_approval(request: Request, *, command: str, resource: str,
+                          risk: str = "DESTRUCTIVE", approval_id: str | None = None) -> dict | None:
+    """One-use approval for explicit local API mutations."""
+    from app.tools.shell_models import ShellRiskLevel
+
+    gate = request.app.state.services.shell.approvals
+    fingerprint = gate.fingerprint(command, "local_api", "", 30, target=resource)
+    if approval_id:
+        granted, reason = gate.consume(approval_id, fingerprint)
+        if granted:
+            return None
+        return {"success": False, "error_code": "APPROVAL_INVALID", "message": reason}
+    record = gate.request(
+        command=command, shell="local_api", working_directory="",
+        timeout_seconds=30, risk_level=ShellRiskLevel(risk), target=resource,
+        fingerprint=fingerprint,
+    )
+    return {"success": False, "error_code": "APPROVAL_REQUIRED",
+            "approval_required": True, "approval_id": record.approval_id}
+
+
 @router.get("/home-assistant/profiles")
 async def ha_profiles() -> dict:
     return list_profiles()
@@ -2228,9 +2727,9 @@ class HAProfileUpsertRequest(BaseModel):
 
 
 @router.put("/home-assistant/profiles")
-async def ha_profile_upsert(payload: HAProfileUpsertRequest) -> dict:
+async def ha_profile_upsert(request: Request, payload: HAProfileUpsertRequest) -> dict:
     try:
-        record = upsert_profile(payload.model_dump())
+        record = upsert_profile(payload.model_dump(), _v3_services(request).settings)
     except ValueError as error:
         raise HTTPException(status_code=422, detail={
             "error_code": "HA_PROFILE_INVALID",
@@ -2240,7 +2739,14 @@ async def ha_profile_upsert(payload: HAProfileUpsertRequest) -> dict:
 
 
 @router.delete("/home-assistant/profiles/{profile_id}")
-async def ha_profile_remove(request: Request, profile_id: str) -> dict:
+async def ha_profile_remove(request: Request, profile_id: str,
+                            approval_id: str | None = None) -> dict:
+    pending = _require_api_approval(
+        request, command=f"remove_home_assistant_profile {profile_id}",
+        resource=f"credential:home_assistant:{profile_id}", approval_id=approval_id,
+    )
+    if pending is not None:
+        return pending
     try:
         return remove_profile(profile_id)
     except KeyError as error:
@@ -2278,11 +2784,20 @@ async def ha_profile_activate(request: Request, profile_id: str) -> dict:
 
 class HATokenRequest(BaseModel):
     token: str = ""
+    approval_id: str | None = Field(default=None, max_length=128)
 
 
 @router.post("/home-assistant/profiles/{profile_id}/token")
 async def ha_profile_token(request: Request, profile_id: str,
                            payload: HATokenRequest) -> dict:
+    if not payload.token.strip():
+        pending = _require_api_approval(
+            request, command=f"clear_home_assistant_token {profile_id}",
+            resource=f"credential:home_assistant:{profile_id}",
+            approval_id=payload.approval_id,
+        )
+        if pending is not None:
+            return pending
     try:
         return set_profile_token(_v3_services(request), profile_id, payload.token)
     except KeyError as error:
@@ -2368,6 +2883,7 @@ async def ha_entity_detail(request: Request, entity_id: str) -> dict:
 class HAEntityServiceRequest(BaseModel):
     service: str = Field(pattern="^(turn_on|turn_off|toggle|trigger|run_scene)$")
     expected_state: str = Field(default="", max_length=40)
+    approval_id: str | None = Field(default=None, max_length=128)
 
 
 @router.post("/home-assistant/entities/{entity_id:path}/service")
@@ -2385,6 +2901,7 @@ async def ha_entity_service(request: Request, entity_id: str,
     result = await services.homelab.ha_call_service(
         domain, payload.service, target={"entity_id": entity_id},
         service_data=service_data,
+        approval_id=payload.approval_id,
     )
     status_code = 200 if result.get("success") else (
         202 if result.get("approval_required") else 502)
@@ -2412,21 +2929,36 @@ class ProxmoxConfigUpdate(BaseModel):
 async def proxmox_config_put(request: Request, payload: ProxmoxConfigUpdate) -> dict:
     services = _v3_services(request)
     try:
-        # exclude_unset: campos ausentes NÃO sobrescrevem o que já está salvo
-        # (prompt11_2 §11 — toggle de enabled não pode apagar a URL).
-        config = proxmox_ui_config.save_config(
-            payload.model_dump(exclude_none=True, exclude_unset=True))
-        credentials = {}
         token_id = (payload.token_id or "").strip()
         token_secret = (payload.token_secret or "").strip()
-        if token_id and token_secret:
-            credentials = proxmox_ui_config.save_credentials(token_id, token_secret)
-        elif token_id or token_secret:
+        if bool(token_id) != bool(token_secret):
+            # Validar antes de qualquer persistência mantém a atualização atômica.
             raise HTTPException(status_code=422, detail={
                 "error_code": "PROXMOX_TOKEN_PAIR_REQUIRED",
                 "message": "Informe Token ID e Token Secret juntos.",
                 "stage": "integrations", "recoverable": True,
             })
+        # exclude_unset: campos ausentes NÃO sobrescrevem o que já está salvo
+        # (prompt11_2 §11 — toggle de enabled não pode apagar a URL).
+        updates = payload.model_dump(exclude_none=True, exclude_unset=True)
+        previous = proxmox_ui_config.load_config(services.settings)
+        config = proxmox_ui_config.save_config(updates)
+        endpoint_changed = bool(
+            "url" in updates
+            and proxmox_ui_config.endpoint_identity(previous.get("url", ""))
+            != proxmox_ui_config.endpoint_identity(config.get("url", ""))
+        )
+        credentials = {}
+        if token_id and token_secret:
+            credentials = proxmox_ui_config.save_credentials(token_id, token_secret)
+        elif endpoint_changed:
+            # O par existente foi vinculado à origem anterior; não o envie ao
+            # novo endpoint até o operador fornecer um par novo explicitamente.
+            credentials = {
+                "credentials_reset": True,
+                **proxmox_ui_config.disconnect_credentials(),
+            }
+        config = proxmox_ui_config.load_config(services.settings)
         applied = proxmox_ui_config.apply_to_runtime(services)
     except ValueError as error:
         raise HTTPException(status_code=422, detail={
@@ -2435,12 +2967,20 @@ async def proxmox_config_put(request: Request, payload: ProxmoxConfigUpdate) -> 
         }) from error
     return {"success": True, "config": {key: value for key, value in config.items()
                                         if key != "last_test"},
+            "endpoint_changed": endpoint_changed,
             "credentials": credentials, "runtime_applied": applied}
 
 
 @router.post("/proxmox/disconnect")
-async def proxmox_disconnect(request: Request) -> dict:
+async def proxmox_disconnect(request: Request,
+                             payload: RuntimeActionRequest | None = None) -> dict:
     services = _v3_services(request)
+    pending = _require_api_approval(
+        request, command="disconnect_proxmox_credentials",
+        resource="credential:proxmox", approval_id=(payload.approval_id if payload else None),
+    )
+    if pending is not None:
+        return pending
     removed = proxmox_ui_config.disconnect_credentials()
     applied = proxmox_ui_config.apply_to_runtime(services)
     return {"success": True, **removed, "runtime_applied": applied,
@@ -2722,10 +3262,12 @@ async def release_revalidate_endpoint() -> dict:
 
 class PowerActionRequest(BaseModel):
     reason: str = Field(default="operator_settings", max_length=200)
+    approval_id: str | None = Field(default=None, max_length=128)
 
 
 @router.post("/runtime/power/{action}")
-async def runtime_power_endpoint(action: str, payload: PowerActionRequest | None = None) -> dict:
+async def runtime_power_endpoint(request: Request, action: str,
+                                 payload: PowerActionRequest | None = None) -> dict:
     """Closure §12/§13: Encerrar NYRA completamente / Reiniciar NYRA completamente.
 
     Ação iniciada pelo operador na UI (confirmação de uso único no clique) —
@@ -2736,6 +3278,13 @@ async def runtime_power_endpoint(action: str, payload: PowerActionRequest | None
     from app.core import lifecycle
 
     reason = (payload.reason if payload else "") or "operator_settings"
+    if action in {"shutdown", "restart"}:
+        pending = _require_api_approval(
+            request, command=f"runtime_power {action}", resource=f"power:{action}",
+            risk="CRITICAL", approval_id=(payload.approval_id if payload else None),
+        )
+        if pending is not None:
+            return pending
     if action == "shutdown":
         return await lifecycle.coordinate_full_shutdown(reason)
     if action == "restart":

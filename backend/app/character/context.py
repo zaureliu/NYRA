@@ -62,6 +62,24 @@ def is_standalone_greeting(value: str) -> bool:
     return bool(_STANDALONE_GREETING.fullmatch(value or ""))
 
 
+_SIMPLE_CONVERSATION = re.compile(
+    r"(?i)^\s*(?:"
+    r"(?:ei|ol[aá]|oi|opa)(?:[,!.\s]+(?:tudo\s+(?:bem|bom|certo)|(?:tudo\s+)?beleza|e\s+a[ií]|como\s+vai|[aé]\s+a[ií]))?[?,!.\s]*(?:nyra)?[?,!.\s]*"
+    r"|(?:bom\s+dia|boa\s+tarde|boa\s+noite|(?:muito\s+)?obrigad[oa]|valeu|brigad[oa]|"
+    r"de\s+nada|por\s+nada|sem\s+problemas|tudo\s+bom|tudo\s+[oó]timo|comigo\s+tudo\s+bem|legal|show|perfeito|"
+    r"entendi|entendo|certo|ok|okay|blz|haha+|rs+|kkk+|boa!?|isso\s+memo|isso\s+a[ií])[.,!?\s]*(?:nyra)?[.,!?\s]*"
+    r"|como\s+(?:você|vc)\s+est[aá][?!,.]*|como\s+vai[?!,.]*|e\s+a[ií][?!,.]*|tudo\s+bem[?!,.]*|tudo\s+certo[?!,.]*|beleza[?!,.]*|de\s+boa[?!,.]*"
+    r"|me\s+(?:explica|explicar|conta|conte|fala)\s+(?:mais|melhor)?\s*(?:disso|isso)[.,!?\s]*"
+    r")\s*$"
+)
+
+
+def is_simple_conversation(value: str) -> bool:
+    """True para conversa trivial que não precisa de contexto operacional/tools."""
+    text = (value or "").strip()
+    return bool(text) and len(text) <= 80 and bool(_SIMPLE_CONVERSATION.fullmatch(text))
+
+
 class ContextBuilder:
     def __init__(self, memory: MemoryRepository) -> None:
         self.memory = memory

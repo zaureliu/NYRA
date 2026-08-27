@@ -14,6 +14,7 @@ import socketio
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.integrations.base import IntegrationError, require_secure_credential_transport
 from app.core.runtime_settings import save_runtime_settings
 from app.events import EventBus, EventType
 from app.integrations.sentinel.auth import SentinelSecretStore
@@ -322,6 +323,7 @@ class SentinelConnector:
             attempt += 1
 
     async def _connect(self, candidate: SentinelCandidate) -> None:
+        require_secure_credential_transport(candidate.base_url)
         client = socketio.AsyncClient(reconnection=False, logger=False, engineio_logger=False)
 
         @client.on("sentinel_event", namespace=NAMESPACE)
@@ -350,18 +352,20 @@ class SentinelConnector:
 
     async def _authenticated_status(self, candidate: SentinelCandidate) -> tuple[dict[str, Any], int]:
         try:
+            require_secure_credential_transport(candidate.base_url)
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(
                     f"{candidate.base_url}/api/integrations/nyra/status",
                     headers={"Authorization": f"Bearer {self.secrets.load()}"},
                 )
             return (response.json() if response.content else {}, response.status_code)
-        except (httpx.HTTPError, ValueError):
+        except (httpx.HTTPError, IntegrationError, ValueError):
             return {}, 0
 
     async def _replay(self, candidate: SentinelCandidate) -> None:
         since = self._last_event.timestamp.isoformat() if self._last_event else ""
         try:
+            require_secure_credential_transport(candidate.base_url)
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(
                     f"{candidate.base_url}/api/integrations/nyra/alerts/recent",
@@ -372,7 +376,7 @@ class SentinelConnector:
                 events = response.json().get("events", [])
                 for item in reversed(events):
                     await self._receive_event(item, replay=True)
-        except (httpx.HTTPError, ValueError, TypeError):
+        except (httpx.HTTPError, IntegrationError, ValueError, TypeError):
             logger.warning("sentinel_replay_unavailable")
 
     async def _receive_event(self, payload: Any, replay: bool = False) -> None:

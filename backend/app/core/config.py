@@ -11,7 +11,7 @@ import yaml
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.core.paths import CONFIG_ROOT, DATA_ROOT, PROJECT_ROOT
+from app.core.paths import CONFIG_ROOT, DATA_ROOT, PROJECT_ROOT, resolve_packaged_path
 
 
 def _yaml_defaults() -> dict[str, Any]:
@@ -164,6 +164,21 @@ class Settings(BaseSettings):
     agent_max_identical_repeats: int = Field(2, ge=1, le=10)
     agent_max_consecutive_failures: int = Field(3, ge=1, le=10)
 
+    # Self-Development Engine V1. Publicação permanece OFF durante o bootstrap
+    # da 0.3.0 e só pode ser habilitada depois dos gates de release.
+    selfdev_mode: Literal["OFF", "OBSERVE_ONLY", "AUTONOMOUS_SAFE", "AUTONOMOUS_ADVANCED"] = "AUTONOMOUS_SAFE"
+    selfdev_model: str = "qwen3:8b"
+    selfdev_workspace: Path = PROJECT_ROOT.parent / "nyra-selfdev"
+    selfdev_canonical_root: Path = PROJECT_ROOT
+    selfdev_public_snapshot: Path = PROJECT_ROOT.parent / "NYRA-GitHub-Public"
+    selfdev_run_when_idle: bool = True
+    selfdev_auto_publish_github: bool = False
+    selfdev_max_auto_promotions_per_day: int = Field(3, ge=0, le=20)
+    selfdev_max_candidate_runtime_minutes: int = Field(30, ge=1, le=240)
+    selfdev_max_files_low_risk: int = Field(8, ge=1, le=100)
+    selfdev_max_diff_lines_low_risk: int = Field(500, ge=1, le=20_000)
+    selfdev_cooldown_minutes: int = Field(15, ge=0, le=1440)
+
     runtime_supervisor_enabled: bool = True
     runtime_services_path: Path = PROJECT_ROOT / "config" / "runtime_services.yaml"
     runtime_health_interval_seconds: int = Field(15, ge=5, le=600)
@@ -236,6 +251,7 @@ class Settings(BaseSettings):
     memory_max_short_term: int = Field(40, ge=4, le=500)
 
     homelab_enabled: bool = True
+    homelab_mutations_enabled: bool = False
     homelab_registry_path: Path = CONFIG_ROOT / "homelab_hosts.yaml"
     homelab_default_timeout_seconds: float = Field(5, ge=1, le=30)
     homelab_overview_cache_seconds: float = Field(5, ge=0, le=60)
@@ -274,13 +290,13 @@ class Settings(BaseSettings):
     @field_validator("database_path")
     @classmethod
     def resolve_database_path(cls, value: Path) -> Path:
-        return value if value.is_absolute() else PROJECT_ROOT / value
+        if value.is_absolute():
+            return value
+        parts = value.parts[1:] if value.parts and value.parts[0].casefold() == "data" else value.parts
+        return DATA_ROOT.joinpath(*parts)
 
     @field_validator(
-        "tts_model_path",
-        "tts_voices_path",
         "chatterbox_python",
-        "chatterbox_reference",
         "shell_default_working_directory",
         "trusted_hosts_path",
         "homelab_registry_path",
@@ -288,6 +304,36 @@ class Settings(BaseSettings):
     @classmethod
     def resolve_model_path(cls, value: Path) -> Path:
         return value if value.is_absolute() else PROJECT_ROOT / value
+
+    @field_validator("chatterbox_reference")
+    @classmethod
+    def resolve_private_audio_path(cls, value: Path) -> Path:
+        if value.is_absolute():
+            return value
+        parts = value.parts[1:] if value.parts and value.parts[0].casefold() == "data" else value.parts
+        return DATA_ROOT.joinpath(*parts)
+
+    @field_validator("selfdev_workspace", "selfdev_canonical_root", "selfdev_public_snapshot")
+    @classmethod
+    def resolve_selfdev_path(cls, value: Path) -> Path:
+        return value if value.is_absolute() else PROJECT_ROOT / value
+
+    @field_validator("tts_model_path", "tts_voices_path")
+    @classmethod
+    def resolve_tts_asset_path(cls, value: Path) -> Path:
+        # Assets do Kokoro são somente-leitura: no instalado vêm do resource
+        # embutido (backend-runtime/_internal), nunca de cwd/repo/.venv.
+        if value.is_absolute():
+            return value
+        if value.parts and value.parts[0].casefold() == "data":
+            local_asset = DATA_ROOT.joinpath(*value.parts[1:])
+            if local_asset.exists():
+                return local_asset
+            packaged_asset = resolve_packaged_path(value)
+            if packaged_asset.exists():
+                return packaged_asset
+            return local_asset
+        return resolve_packaged_path(value)
 
     @model_validator(mode="after")
     def validate_shell_limits(self) -> "Settings":
@@ -301,8 +347,8 @@ class Settings(BaseSettings):
     def from_sources(cls, **overrides: Any) -> "Settings":
         values = _yaml_defaults()
         for state_path in (
-            PROJECT_ROOT / "data" / "settings-adult.json",
-            PROJECT_ROOT / "data" / "settings-v33.json",
+            DATA_ROOT / "settings-adult.json",
+            DATA_ROOT / "settings-v33.json",
         ):
             if not state_path.is_file():
                 continue

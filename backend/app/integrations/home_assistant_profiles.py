@@ -28,10 +28,12 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 from app.core.paths import DATA_ROOT
+from app.integrations.base import IntegrationError, require_secure_credential_transport
 
 logger = logging.getLogger("nyra.ha_profiles")
 
@@ -116,10 +118,18 @@ class HAProfileSecretStore:
             logger.warning("ha_token_broker_store_failed type=%s", type(error).__name__)
         if not stored:
             self._write_legacy_file(cleaned)
+        self._tombstone_path().unlink(missing_ok=True)
 
     def clear(self) -> None:
+        tombstone = self._tombstone_path()
+        tombstone.parent.mkdir(parents=True, exist_ok=True)
+        tombstone.write_text("credentials disabled by operator\n", encoding="utf-8")
         try:
-            _broker().delete(_credential_id(self.profile_id))
+            broker = _broker()
+            try:
+                broker.delete(_credential_id(self.profile_id), operator_direct=True)
+            except TypeError:  # compatibility with narrow legacy/test adapters
+                broker.delete(_credential_id(self.profile_id))
         except Exception:  # noqa: BLE001 - best-effort
             pass
         try:
@@ -129,6 +139,8 @@ class HAProfileSecretStore:
 
     # ------------------------------------------------------------------- read
     def load(self) -> str:
+        if self._tombstone_path().is_file():
+            return ""
         env_value = (os.environ.get("NYRA_HOME_ASSISTANT_TOKEN") or "").strip()
         if env_value:
             return env_value
@@ -142,6 +154,9 @@ class HAProfileSecretStore:
 
     def configured(self) -> bool:
         return bool(self.load())
+
+    def _tombstone_path(self) -> Path:
+        return SECRETS_DIR / f"home-assistant-{self.profile_id}.disabled"
 
     # ------------------------------------------------------------------ legacy
     def _legacy_file_value(self) -> str:
@@ -194,10 +209,11 @@ def resolve_profile_token(profile_id: str, settings: Any = None) -> str:
     pydantic). O valor das settings NÃO é duplicado em disco: continua sendo
     apenas uma fonte de resolução da mesma função autoritativa (§7).
     """
-    token = HAProfileSecretStore(profile_id).load()
+    store = HAProfileSecretStore(profile_id)
+    token = store.load()
     if token:
         return token
-    if settings is not None:
+    if settings is not None and not store._tombstone_path().is_file():
         return str(getattr(settings, "home_assistant_token", "") or "").strip()
     return ""
 
@@ -305,7 +321,41 @@ def get_profile(profile_id: str) -> dict[str, Any]:
     raise KeyError(profile_id)
 
 
-def upsert_profile(payload: dict[str, Any]) -> dict[str, Any]:
+def _validated_profile_url(value: Any) -> str:
+    url = str(value or "").strip().rstrip("/")
+    if not url:
+        return ""
+    parsed = urlsplit(url)
+    try:
+        parsed_port = parsed.port
+    except ValueError as error:
+        raise ValueError("porta da URL inválida") from error
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("URL Home Assistant inválida; use somente a origem http(s)://host:porta")
+    _ = parsed_port
+    return url
+
+
+def _endpoint_identity(url: str) -> tuple[str, str, int] | None:
+    if not url:
+        return None
+    try:
+        parsed = urlsplit(url)
+        default_port = 443 if parsed.scheme.lower() == "https" else 80
+        return parsed.scheme.lower(), (parsed.hostname or "").lower(), parsed.port or default_port
+    except ValueError:
+        return "invalid", "", -1
+
+
+def upsert_profile(payload: dict[str, Any], settings: Any = None) -> dict[str, Any]:
     profile_id = str(payload.get("profile_id") or "").strip()
     if not profile_id or len(profile_id) > 64 or not all(
         c.isalnum() or c in "-_" for c in profile_id
@@ -314,12 +364,16 @@ def upsert_profile(payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name") or "").strip()
     if not name or len(name) > 120:
         raise ValueError("nome inválido")
-    url = str(payload.get("url") or "").strip().rstrip("/")
-    if url and not url.lower().startswith(("http://", "https://")):
-        raise ValueError("url deve começar com http:// ou https://")
+    url = _validated_profile_url(payload.get("url"))
 
     data = _load_store()
     existing = next((p for p in data["profiles"] if p.get("profile_id") == profile_id), None)
+    had_credentials = bool(resolve_profile_token(profile_id, settings)) if existing is not None else False
+    endpoint_changed = bool(
+        existing is not None
+        and _endpoint_identity(str(existing.get("url") or "")) != _endpoint_identity(url)
+    )
+    credentials_reset = endpoint_changed and had_credentials
     record = existing or {
         "profile_id": profile_id, "status": "", "last_test": None,
     }
@@ -334,7 +388,18 @@ def upsert_profile(payload: dict[str, Any]) -> dict[str, Any]:
     if existing is None:
         data["profiles"].append(record)
     _save_store(data)
-    return _public(record)
+    if endpoint_changed:
+        # A credencial pertence à origem anterior. Exigir um novo fornecimento
+        # impede que uma simples edição de URL redirecione o Bearer existente.
+        if credentials_reset:
+            HAProfileSecretStore(profile_id).clear()
+        record["status"] = "UNCONFIGURED"
+        record["last_test"] = None
+        _save_store(data)
+    public = _public(record)
+    public["endpoint_changed"] = endpoint_changed
+    public["credentials_reset"] = credentials_reset
+    return public
 
 
 def remove_profile(profile_id: str) -> dict[str, Any]:
@@ -416,6 +481,10 @@ async def _probe(url: str, token: str, timeout: float = 6.0) -> dict[str, Any]:
     if not token:
         # §9: nenhuma chamada autenticada sai sem Bearer — nem para "verificar".
         return {"ok": False, "error_code": "HA_UNCONFIGURED"}
+    try:
+        require_secure_credential_transport(url)
+    except IntegrationError as error:
+        return {"ok": False, "error_code": error.code}
     headers = _probe_headers(token)
     started = time.perf_counter()
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
@@ -576,9 +645,16 @@ async def unified_ha_state(services: Any) -> dict[str, Any]:
              if p.get("enabled") and p.get("url")), None
         )
     url = str((profile or {}).get("url") or getattr(settings, "home_assistant_url", "") or "")
-    auth_configured = bool((profile or {}).get("auth_configured")) \
-        or bool(getattr(settings, "home_assistant_token", ""))
     last_test = (profile or {}).get("last_test") or {}
+    # A persisted authenticated probe is literal evidence that credentials were
+    # configured for that profile. Token removal clears the profile probe; this
+    # fallback also keeps restart/UI state coherent when the broker is injected
+    # after the public profile snapshot is assembled.
+    auth_configured = (
+        bool((profile or {}).get("auth_configured"))
+        or bool(getattr(settings, "home_assistant_token", ""))
+        or bool(last_test.get("ok") and last_test.get("authenticated"))
+    )
 
     if not enabled:
         state, detail = "DISABLED", "Integração desabilitada"

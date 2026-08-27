@@ -45,6 +45,7 @@ class TurnContext:
         "tool_calls", "tool_results", "observations",
         "agent_run_id", "grounding_ledger",
         "tts_queue", "final_response", "status", "error",
+        "approval_capable",
         "_finished",
     )
 
@@ -54,10 +55,12 @@ class TurnContext:
         *,
         conversation_id: str = "default",
         turn_id: str | None = None,
+        approval_capable: bool = True,
     ) -> None:
         self.turn_id = turn_id or new_turn_id()
         self.conversation_id = conversation_id
         self.user_input = user_input
+        self.approval_capable = bool(approval_capable)
         self.created_at = datetime.now(timezone.utc)
         self.content_buffer: list[str] = []
         self.thinking_buffer: list[str] = []

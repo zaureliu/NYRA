@@ -138,8 +138,14 @@ async def test_empty_command_invalid_cwd_and_feature_flag_are_structured(tmp_pat
 async def test_valid_cwd_and_output_truncation_preserve_head_and_tail(tmp_path: Path):
     shell = await service(tmp_path)
     location = await shell.execute("Get-Location", working_directory=str(tmp_path))
-    output = await shell.execute("Write-Output ('HEAD' + ('x' * 4000) + 'TAIL')")
+    command = "Write-Output ('HEAD' + ('x' * 4000) + 'TAIL')"
+    pending = await shell.execute(command)
+    assert pending["error_code"] == ShellErrorCode.APPROVAL_REQUIRED.value
+    shell.approvals.grant(pending["approval_id"], "test")
+    output = await shell.execute(command, approval_id=pending["approval_id"])
     assert str(tmp_path).casefold() in location["stdout"].casefold()
+    assert output["success"] is True
+    assert output["approval_granted"] is True
     assert output["stdout_truncated"] is True
     assert "HEAD" in output["stdout"] and "TAIL" in output["stdout"]
     assert "NYRA OUTPUT TRUNCATED" in output["stdout"]

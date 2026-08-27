@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -160,13 +161,15 @@ class RecoveryEngine:
                     "message": "Transação confirmada; rollback exige nova transação."}
         if record.get("state") == RecoveryState.RECOVERED.value:
             return {"success": True, "transaction_id": transaction_id, "state": record["state"]}
-        if not auto:
-            decision = self._require_approval(
-                description=f"Rollback de '{record['action'][:120]}'",
-                risk="ELEVATED", approval_id=approval_id,
-            )
-            if decision is not None:
-                return decision
+        decision = self._require_approval(
+            description=f"Rollback de '{record['action'][:120]}'",
+            risk="ELEVATED", approval_id=approval_id,
+            binding_digest=self._rollback_binding(record),
+        )
+        if decision is not None:
+            if auto:
+                decision["auto_rollback_blocked"] = True
+            return decision
         record["state"] = RecoveryState.RECOVERING.value
         await self._save(record)
         try:
@@ -343,17 +346,33 @@ class RecoveryEngine:
         return await asyncio.to_thread(work)
 
     # ------------------------------------------------------------------ helpers
+    @staticmethod
+    def _rollback_binding(record: dict[str, Any]) -> str:
+        material = {
+            key: record.get(key)
+            for key in (
+                "transaction_id", "kind", "target", "backup_path", "action",
+                "previous_hash", "post_action_hash",
+            )
+        }
+        serialized = json.dumps(material, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
     def _require_approval(self, *, description: str, risk: str,
-                          approval_id: str | None) -> dict | None:
+                          approval_id: str | None, binding_digest: str = "") -> dict | None:
         from app.tools.shell_models import ShellRiskLevel
 
         if self.approvals is None:
             return {"success": False, "error_code": "APPROVAL_REQUIRED"}
-        fingerprint = self.approvals.fingerprint(description, "recovery", "", 60, target="local")
+        approval_command = f"{description} params_sha256={binding_digest or 'none'}"
+        fingerprint = self.approvals.fingerprint(
+            approval_command, "recovery", "", 60, target="local",
+        )
         if not approval_id:
             record = self.approvals.request(
-                command=description, shell="recovery", working_directory=".",
+                command=approval_command, shell="recovery", working_directory="",
                 timeout_seconds=60, risk_level=ShellRiskLevel(risk), target="local",
+                fingerprint=fingerprint,
             )
             return {"success": False, "error_code": "APPROVAL_REQUIRED",
                     "approval_required": True, "approval_id": record.approval_id}

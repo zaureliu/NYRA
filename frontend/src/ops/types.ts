@@ -47,6 +47,41 @@ export interface SettingsV3Response {
   categories: string[]
 }
 
+export interface SelfDevStatus {
+  state: string
+  mode: string
+  active_issue_id: string | null
+  queue_size: number
+  unread_notifications: number
+  repository_files: number
+  workspace_ready: boolean
+  github_status: string
+  last_error_code: string | null
+}
+
+export interface SelfDevIssue {
+  issue_id: string
+  type: string
+  title: string
+  description: string
+  status: string
+  risk: string
+  priority: number
+  occurrences: number
+  last_seen: string
+  failure_reasons: string[]
+}
+
+export interface SelfDevNotification {
+  notification_id: string
+  type: string
+  issue_id: string | null
+  title: string
+  message: string
+  created_at: string
+  read: boolean
+}
+
 export interface IntegrationCard {
   id: string
   name: string

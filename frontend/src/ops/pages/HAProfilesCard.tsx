@@ -43,13 +43,14 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
   const [newName, setNewName] = useState('')
   const [newUrl, setNewUrl] = useState('')
   const [diagnostics, setDiagnostics] = useState<HADiagnostics | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ profile: HAProfile; approvalId: string } | null>(null)
 
   const activeProfile = useMemo(
     () => (data?.profiles ?? []).find((p) => p.profile_id === data?.active_profile) ?? null,
     [data],
   )
 
-  const run = async (profile: HAProfile, action: 'activate' | 'test' | 'enable' | 'disable' | 'delete') => {
+  const run = async (profile: HAProfile, action: 'activate' | 'test' | 'enable' | 'disable' | 'delete', approvalId?: string) => {
     setBusyId(`${profile.profile_id}:${action}`)
     setActionError('')
     try {
@@ -61,7 +62,16 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
         setLastTest(result)
         onNotify(result.ok ? `Teste OK (${result.latency_ms}ms)` : `Teste falhou: ${result.error_code}`)
       } else if (action === 'delete') {
-        await apiSend(`/api/home-assistant/profiles/${profile.profile_id}`, 'DELETE')
+        const suffix = approvalId ? `?approval_id=${encodeURIComponent(approvalId)}` : ''
+        const result = await apiSend<{ approval_required?: boolean; approval_id?: string }>(
+          `/api/home-assistant/profiles/${profile.profile_id}${suffix}`, 'DELETE',
+        )
+        if (result.approval_required && result.approval_id && !approvalId) {
+          setPendingDelete({ profile, approvalId: result.approval_id })
+          onNotify('A exclusão do perfil exige approval destrutivo de uso único.')
+          return
+        }
+        setPendingDelete(null)
         onNotify(`Perfil removido: ${profile.name}`)
       } else {
         await apiSend('/api/home-assistant/profiles', 'PUT', {
@@ -82,12 +92,24 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
     }
   }
 
+  const confirmDelete = async (approved: boolean) => {
+    if (!pendingDelete) return
+    const pending = pendingDelete
+    if (!approved) setPendingDelete(null)
+    try {
+      await apiSend(`/api/shell/approvals/${encodeURIComponent(pending.approvalId)}`, 'POST', { approved })
+      if (approved) await run(pending.profile, 'delete', pending.approvalId)
+    } catch (issue) {
+      setActionError(issue instanceof Error ? issue.message : String(issue))
+    }
+  }
+
   const saveEditor = async () => {
     if (!editing) return
     setBusyId(`${editing.profile_id}:save`)
     setActionError('')
     try {
-      await apiSend('/api/home-assistant/profiles', 'PUT', {
+      const saved = await apiSend<{ profile: HAProfile & { credentials_reset?: boolean } }>('/api/home-assistant/profiles', 'PUT', {
         profile_id: editing.profile_id,
         name: editing.name,
         url: editing.url,
@@ -102,7 +124,13 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
           token: editing.token.trim(),
         })
       }
-      onNotify(`Perfil salvo: ${editing.name}`)
+      if (saved.profile.credentials_reset && !editing.token.trim()) {
+        onNotify(`Perfil salvo: ${editing.name}. O endpoint mudou; forneça um novo token.`)
+      } else if (saved.profile.credentials_reset) {
+        onNotify(`Perfil salvo e credencial vinculada ao novo endpoint: ${editing.name}`)
+      } else {
+        onNotify(`Perfil salvo: ${editing.name}`)
+      }
       setEditing(null)
       refresh()
     } catch (issue) {
@@ -287,6 +315,16 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
           {lastTest.ok
             ? `Conexão OK · Core ${lastTest.core_version ?? '?'} · estado ${lastTest.state ?? '?'} · ${lastTest.entity_count ?? 0} entidades · ${formatMs(lastTest.latency_ms)}`
             : `Falha no teste: ${lastTest.error_code ?? 'desconhecida'}`}
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div className="ops-alert warn" style={{ marginTop: 10 }}>
+          Excluir o perfil {pendingDelete.profile.name} e sua credencial local?
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <ActionButton small variant="danger" onClick={() => void confirmDelete(true)}>Aprovar exclusão</ActionButton>
+            <ActionButton small onClick={() => void confirmDelete(false)}>Recusar</ActionButton>
+          </div>
         </div>
       )}
 

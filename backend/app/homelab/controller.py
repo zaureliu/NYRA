@@ -14,6 +14,8 @@ Central capability layer used by both the Agent tools and the HTTP API:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import re
 import time
@@ -494,6 +496,12 @@ class HomelabControlPlane:
         reason: str = "",
         graceful_timeout: int = 90,
     ) -> dict[str, Any]:
+        if not self.settings.homelab_mutations_enabled:
+            return self._action_error(
+                "HOMELAB_MUTATIONS_DISABLED",
+                "Mutações de homelab estão desabilitadas; ative-as explicitamente nas configurações.",
+                risk="ELEVATED",
+            )
         normalized = normalize_action(action)
         if not normalized:
             return self._action_error(action.upper(), "Ação de VM desconhecida.", risk="ELEVATED")
@@ -708,16 +716,45 @@ class HomelabControlPlane:
         approval_id: str | None = None,
         reason: str = "",
     ) -> dict[str, Any]:
+        if not self.settings.homelab_mutations_enabled:
+            return self._action_error(
+                "HOMELAB_MUTATIONS_DISABLED",
+                "Mutações de homelab estão desabilitadas; ative-as explicitamente nas configurações.",
+                risk="ELEVATED",
+            )
         safe_domain = (domain or "").strip().casefold()
         safe_service = (service or "").strip().casefold()
         if not re_ok_domain(safe_domain) or not re_ok_domain(safe_service):
             return self._action_error("HA_SERVICE_FAILED", "Domínio ou serviço inválido.", risk="ELEVATED")
+        safe_target = dict(target) if isinstance(target, dict) else {}
+        raw_service_data = dict(service_data) if isinstance(service_data, dict) else {}
+        expected_state = raw_service_data.pop("_expected_state", None)
+        safe_service_data = raw_service_data
+        try:
+            approval_document = json.dumps(
+                {
+                    "domain": safe_domain,
+                    "service": safe_service,
+                    "target": safe_target,
+                    "service_data": safe_service_data,
+                    "expected_state": expected_state,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        except (TypeError, ValueError):
+            return self._action_error(
+                "HA_SERVICE_FAILED", "Target ou dados do servico nao sao JSON valido.", risk="ELEVATED",
+            )
+        action_hash = hashlib.sha256(approval_document.encode("utf-8")).hexdigest()
         primary_entity = ""
-        if isinstance(target, dict):
-            values = target.get("entity_id")
+        if safe_target:
+            values = safe_target.get("entity_id")
             items = values if isinstance(values, list) else ([values] if isinstance(values, str) else [])
             primary_entity = next((str(v) for v in items if v), "")
-        resource_key = f"ha:{primary_entity or safe_domain}.{safe_service}"
+        resource_key = f"ha:{safe_domain}.{safe_service}:{action_hash[:16]}"
         decision = decide("ha_call_service", self._host_policy_for("home_assistant"))
         if not _HA_SAFE_SERVICES.match(f"{safe_domain}.{safe_service}"):
             decision = ActionDecision(action="ha_call_service", risk_level="ELEVATED", requires_approval=True, reason="Serviço fora da allowlist de baixo risco.")
@@ -725,13 +762,14 @@ class HomelabControlPlane:
         lock = self._lock_for(resource_key)
         async with lock:
             if decision.requires_approval:
-                description = f"ha_call_service {safe_domain}.{safe_service}" + (f" target={primary_entity}" if primary_entity else "")
+                description = f"ha_call_service {safe_domain}.{safe_service} sha256={action_hash}"
                 approved = await self._require_approval(decision, description, resource_key, turn_id, agent_run_id, approval_id)
                 if approved is not True:
                     return approved
-            await self._guarded(self.home_assistant.call_service(safe_domain, safe_service, target, service_data))
+            await self._guarded(self.home_assistant.call_service(
+                safe_domain, safe_service, safe_target or None, safe_service_data or None,
+            ))
             effect_verified: bool | None = None
-            expected_state = service_data.pop("_expected_state", None) if isinstance(service_data, dict) else None
             if primary_entity and isinstance(expected_state, str):
                 effect_verified = await self.home_assistant.verify_effect(primary_entity, expected_state)
             elif primary_entity and safe_service in {"turn_on", "turn_off", "toggle"}:

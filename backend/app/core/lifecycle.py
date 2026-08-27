@@ -23,7 +23,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from app.core.paths import DATA_ROOT, PROJECT_ROOT
+from app.core.paths import DATA_ROOT, LOG_ROOT, PROJECT_ROOT
 
 logger = logging.getLogger("nyra.lifecycle")
 
@@ -160,7 +160,7 @@ def spawn_restart_launcher(timeout_seconds: int = 120) -> bool:
             "-TimeoutSeconds", str(timeout_seconds),
         ]
     creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    log_dir = PROJECT_ROOT / "logs"
+    log_dir = LOG_ROOT
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         handle = open(log_dir / "restart-session.log", "ab")  # noqa: SIM115

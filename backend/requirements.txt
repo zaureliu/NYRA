@@ -16,3 +16,4 @@ num2words>=0.5.14,<1
 edge-tts>=7.2,<8
 python-socketio[client]>=5.11,<6
 websockets>=14,<18
+asyncssh>=2.14,<3

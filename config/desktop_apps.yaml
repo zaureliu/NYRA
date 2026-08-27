@@ -44,3 +44,15 @@ apps:
     startup_timeout_seconds: 8
     notes: "Abrir nova janela do Explorer; nunca encerrar o processo explorer existente."
     risk: LOW_RISK
+
+  - id: vscode
+    display_name: Visual Studio Code
+    enabled: true
+    executable: "%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe"
+    process_names: [Code.exe]
+    window_title_contains: ["Visual Studio Code"]
+    single_instance: false
+    startup_timeout_seconds: 15
+    notes: "Aliases PT-BR aceitos no discovery (vs code, vscode); caminho expandido via %LOCALAPPDATA%."
+    aliases: ["vs code", "vscode", "code"]
+    risk: LOW_RISK

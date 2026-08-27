@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from app.core.paths import PROJECT_ROOT
+from app.core.paths import LOG_ROOT, PROJECT_ROOT
 from app.core.turn import current_turn_id
 from app.events import EventBus, EventType
 from app.runtime.health import run_health_check
@@ -346,7 +346,7 @@ class RuntimeSupervisor:
         if not spec.start_command:
             return fail(OperationErrorCodes.INVALID_CONFIGURATION, "start_command ausente.")
 
-        log_path = spec.resolved_log_path(Path(str(PROJECT_ROOT)) / "logs")
+        log_path = spec.resolved_log_path(LOG_ROOT)
         rotate_log_file(log_path, spec.log_max_bytes, spec.log_backup_count)
         await self._set_state(service_id, RuntimeState.STARTING)
         try:
@@ -566,7 +566,7 @@ class RuntimeSupervisor:
         if spec is None:
             return {"success": False, "service": service_id, "error_code": OperationErrorCodes.UNKNOWN_SERVICE.value}
         tail = read_log_tail(
-            spec.resolved_log_path(Path(str(PROJECT_ROOT)) / "logs"),
+            spec.resolved_log_path(LOG_ROOT),
             lines=int(lines or getattr(self.settings, "runtime_log_tail_lines", 100)),
             max_chars=int(getattr(self.settings, "runtime_log_max_chars", 50_000)),
         )

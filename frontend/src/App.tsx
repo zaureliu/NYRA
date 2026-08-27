@@ -9,7 +9,9 @@ import { useStreamingAudioQueue } from './hooks/useStreamingAudioQueue'
 import type { ActivityStatus, AvatarControl, ChatMessage, ChatResponse, EmotionalState, Health, ToolActivity } from './types'
 import { dashboardOwnsRealtimeAudio } from './runtime/audioOwnership'
 import { TurnFilter, extractTurnId } from './runtime/turns'
-import { BACKEND_SOCKET, backendUrl, isTauriRuntime } from './runtime/backend'
+import { backendUrl, isTauriRuntime } from './runtime/backend'
+import { sendChat } from './runtime/conversation'
+import { readHeaderStatus } from './runtime/headerStatus'
 
 import { OPS_VIEWS, Sidebar, type OpsView } from './ops/Sidebar'
 import { TopStatusBar } from './ops/TopStatusBar'
@@ -211,17 +213,14 @@ export default function App() {
     setState: useCallback((value) => setState(value), []),
     setConnected: useCallback((value) => setConnected(value), []),
     onEvent: onRealtimeEvent,
-    url: isTauriRuntime() ? BACKEND_SOCKET : undefined,
   })
 
   const loadHealth = useCallback(async () => {
     try {
-      const response = await fetch('/api/health')
-      if (!response.ok) throw new Error('health')
-      const value: Health = await response.json()
+      const value = await readHeaderStatus<Health>('/api/health')
       setHealth(value)
       if (value.status === 'online') setStatus((current) => current === 'OFFLINE' ? 'IDLE' : current)
-    } catch { setHealth(null); setConnected(false); setStatus('OFFLINE') }
+    } catch { setHealth(null); setStatus('OFFLINE') }
   }, [])
 
   useEffect(() => { void loadHealth(); const timer = setInterval(() => void loadHealth(), 10000); return () => clearInterval(timer) }, [loadHealth])
@@ -249,13 +248,7 @@ export default function App() {
     setStatus('THINKING')
     pendingTurnRequests.current += 1
     try {
-      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, synthesize: true }) })
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        const detail = error.detail
-        throw new Error(typeof detail === 'string' ? detail : detail?.error_code ? `${detail.error_code} (${detail.exception_type ?? 'erro'})` : 'Falha no backend')
-      }
-      const value: ChatResponse = await response.json()
+      const value = await sendChat({ message: text, synthesize: true })
       if (value.turn_id) turnFilter.current.begin(value.turn_id)
       setState(value.state)
       const assistantId = value.response_id ? `assistant-${value.response_id}` : crypto.randomUUID()
@@ -381,7 +374,7 @@ export default function App() {
 
   return (
     <div className="ops-shell">
-      <TopStatusBar connected={connected} health={health} />
+      <TopStatusBar />
       <div className="ops-main">
         <Sidebar active={view} collapsed={navCollapsed} onNavigate={navigate} onToggleCollapse={toggleCollapse} />
         <div className="ops-content" key={view}>

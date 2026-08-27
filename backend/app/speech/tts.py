@@ -668,6 +668,13 @@ async def create_tts_provider(
         if model_path is not None and voices_path is not None
         else None
     )
+    if provider == "kokoro" and kokoro is not None and not (model_path.is_file() and voices_path.is_file()):
+        # Falha de packaging nunca pode ficar silenciosa: sem assets válidos o
+        # Kokoro NÃO fica READY e a ausência é reportada com os caminhos reais.
+        logger.error(
+            "tts_kokoro_assets_missing",
+            extra={"model": str(model_path), "voices": str(voices_path)},
+        )
     chatterbox = (
         ChatterboxTTSProvider(chatterbox_python, chatterbox_device, chatterbox_reference, chatterbox_model_id, "chatterbox_multilingual_v3", chatterbox_resident, chatterbox_timeout_seconds)
         if chatterbox_python is not None
@@ -723,6 +730,11 @@ async def create_tts_provider(
                     extra={"requested": provider, "selected": candidate.name},
                 )
             return candidate
+    if provider != "disabled":
+        logger.error(
+            "tts_provider_unavailable",
+            extra={"requested": provider, "model": str(model_path), "voices": str(voices_path)},
+        )
     return DisabledTTS()
 
 

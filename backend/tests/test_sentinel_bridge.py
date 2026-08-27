@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import tempfile
 from unittest.mock import AsyncMock, patch
@@ -49,18 +50,47 @@ def test_settings_restrict_discovery_to_small_private_ipv4_ranges():
     with pytest.raises(ValidationError):
         SentinelSettingsUpdate(discovery_allowlist=["10.0.0.0/16"])
     assert SentinelDiscovery._is_local_url("http://127.0.0.1:5000")
+    assert SentinelDiscovery._is_local_url("https://192.168.1.10:5000")
+    assert not SentinelDiscovery._is_local_url("http://192.168.1.10:5000")
+    assert not SentinelDiscovery._is_local_url("https://sentinel.lan:5000")
     assert not SentinelDiscovery._is_local_url("http://8.8.8.8:5000")
+    with pytest.raises(ValidationError):
+        SentinelSettingsUpdate(host="sentinel.lan")
+    with pytest.raises(ValidationError):
+        SentinelSettingsUpdate(host="http://192.168.1.10:5000")
+    assert SentinelSettingsUpdate(host="https://192.168.1.10:5000").host \
+        == "https://192.168.1.10:5000"
 
 
 @pytest.mark.asyncio
 async def test_discovery_known_hosts_first_and_no_lan_without_allowlist(tmp_path: Path):
     discovery = SentinelDiscovery(last_known_path=tmp_path / "last.json")
-    config = SentinelSettingsUpdate(host="sentinel.lan", port=5000, discovery_allowlist=[])
-    expected = SentinelCandidate("http://sentinel.lan:5000", fingerprint())
+    config = SentinelSettingsUpdate(host="192.168.1.10", port=5000, discovery_allowlist=[])
+    expected = SentinelCandidate("https://192.168.1.10:5000", fingerprint())
     discovery.probe = AsyncMock(side_effect=lambda url: expected if url == expected.base_url else None)
     result = await discovery.discover(config)
     assert result == expected
-    assert discovery.probe.await_args_list[0].args[0] == "http://sentinel.lan:5000"
+    assert discovery.probe.await_args_list[0].args[0] == "https://192.168.1.10:5000"
+
+
+@pytest.mark.asyncio
+async def test_probe_rejects_hostname_and_plaintext_lan_before_network_io(tmp_path: Path):
+    discovery = SentinelDiscovery(last_known_path=tmp_path / "last.json")
+    with patch(
+        "app.integrations.sentinel.discovery.httpx.AsyncClient",
+        side_effect=AssertionError("network client must not be created"),
+    ):
+        assert await discovery.probe("https://sentinel.lan:5000") is None
+        assert await discovery.probe("http://192.168.1.10:5000") is None
+
+
+def test_last_known_plaintext_lan_is_upgraded_and_hostname_is_discarded(tmp_path: Path):
+    path = tmp_path / "last.json"
+    discovery = SentinelDiscovery(last_known_path=path)
+    path.write_text(json.dumps({"base_url": "http://192.168.1.10:5000"}), encoding="utf-8")
+    assert discovery.load_last_known() == "https://192.168.1.10:5000"
+    path.write_text(json.dumps({"base_url": "https://sentinel.lan:5000"}), encoding="utf-8")
+    assert discovery.load_last_known() == ""
 
 
 def test_secret_store_does_not_expose_or_version_token(tmp_path: Path):

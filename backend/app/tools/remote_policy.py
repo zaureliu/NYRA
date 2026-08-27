@@ -71,24 +71,24 @@ class RemoteCommandPolicy:
     @staticmethod
     def _normalized_action(command: str) -> tuple[str | None, str | None, str | None]:
         value = command.strip()
-        match = re.search(r"(?i)\bsystemctl\s+(?:try-)?restart\s+([A-Za-z0-9_.@-]+)", value)
+        match = re.fullmatch(r"(?i)systemctl\s+(?:try-)?restart\s+([A-Za-z0-9_.@-]+)", value)
         if match:
             return "restart_known_service", "services", match.group(1)
-        match = re.search(r"(?i)\bservice\s+([A-Za-z0-9_.@-]+)\s+restart\b", value)
+        match = re.fullmatch(r"(?i)service\s+([A-Za-z0-9_.@-]+)\s+restart", value)
         if match:
             return "restart_known_service", "services", match.group(1)
-        match = re.search(r"(?i)/etc/init\.d/([A-Za-z0-9_.@-]+)\s+restart\b", value)
+        match = re.fullmatch(r"(?i)/etc/init\.d/([A-Za-z0-9_.@-]+)\s+restart", value)
         if match:
             return "restart_known_service", "services", match.group(1)
-        match = re.search(r"(?i)\b(?:docker|podman)(?:\s+compose)?\s+restart\s+([A-Za-z0-9_.@/-]+)", value)
+        match = re.fullmatch(r"(?i)(?:docker|podman)(?:\s+compose)?\s+restart\s+([A-Za-z0-9_.@/-]+)", value)
         if match:
             return "restart_known_container", "containers", match.group(1)
-        match = re.search(r"(?i)\bqm\s+start\s+(\d+)\b", value)
+        match = re.fullmatch(r"(?i)qm\s+start\s+(\d+)", value)
         if match:
             return "start_known_vm", "vms", match.group(1)
-        match = re.search(r"(?i)\bpct\s+start\s+(\d+)\b", value)
+        match = re.fullmatch(r"(?i)pct\s+start\s+(\d+)", value)
         if match:
             return "start_known_container", "containers", match.group(1)
-        if re.search(r"(?i)(?:^|[;&|]\s*)wifi\s+reload\b", value):
+        if re.fullmatch(r"(?i)wifi\s+reload", value):
             return "reload_known_wifi", "network", "wifi"
         return None, None, None

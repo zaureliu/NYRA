@@ -211,10 +211,10 @@ def register_operator_tools(registry, controller: OperatorController) -> None:
     ))
     registry.register(ToolDefinition(
         "process_start",
-        "Inicia um executável resolvido pelo PATH (sem shell intermediário) e confirma que segue vivo.",
-        RiskLevel.LOW_RISK, ProcessStartInput,
+        "Compatibilidade de API: inicialização arbitrária está bloqueada; use system_shell.",
+        RiskLevel.ELEVATED, ProcessStartInput,
         lambda executable, arguments="", **_: controller.process_start(executable, arguments),
-        dynamic_risk=False, llm_enabled=True, preflight=_preflight("proc", "LOW_RISK"),
+        dynamic_risk=False, llm_enabled=False, preflight=_preflight("proc", "ELEVATED"),
     ))
     registry.register(ToolDefinition(
         "process_stop",

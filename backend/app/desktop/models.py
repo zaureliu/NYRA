@@ -28,6 +28,7 @@ class DesktopAppSpec(BaseModel):
     working_directory: str | None = None
     process_names: list[str] = Field(default_factory=list)
     window_title_contains: list[str] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
     single_instance: bool = False
     startup_timeout_seconds: float = Field(8.0, ge=1.0, le=60)
     risk: str = "LOW_RISK"

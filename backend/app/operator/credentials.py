@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes
+import hashlib
 import json
 import logging
 import os
@@ -293,6 +294,7 @@ class CredentialBroker:
             decision = self._require_approval(
                 description=f"Criar credencial '{credential_id}'", resource_key=f"credential:create:{credential_id}",
                 risk="ELEVATED", approval_id=approval_id,
+                binding_digest=self._binding_digest(secret, kind, description),
             )
             if decision is not None:
                 return decision
@@ -303,13 +305,15 @@ class CredentialBroker:
         }
         return {"success": True, "credential_id": credential_id, "backend": self.vault.backend}
 
-    def delete(self, credential_id: str, approval_id: str | None = None) -> dict:
-        decision = self._require_approval(
-            description=f"Excluir credencial '{credential_id}'",
-            resource_key=f"credential:delete:{credential_id}", risk="DESTRUCTIVE", approval_id=approval_id,
-        )
-        if decision is not None:
-            return decision
+    def delete(self, credential_id: str, approval_id: str | None = None,
+               *, operator_direct: bool = False) -> dict:
+        if not operator_direct:
+            decision = self._require_approval(
+                description=f"Excluir credencial '{credential_id}'",
+                resource_key=f"credential:delete:{credential_id}", risk="DESTRUCTIVE", approval_id=approval_id,
+            )
+            if decision is not None:
+                return decision
         existed = self.vault.delete(credential_id)
         self._index.pop(credential_id, None)
         return {"success": existed, "error_code": None if existed else "CREDENTIAL_NOT_FOUND"}
@@ -321,6 +325,7 @@ class CredentialBroker:
         decision = self._require_approval(
             description=f"Rotacionar credencial '{credential_id}'",
             resource_key=f"credential:rotate:{credential_id}", risk="ELEVATED", approval_id=approval_id,
+            binding_digest=self._binding_digest(new_secret, current.get("metadata") or {}),
         )
         if decision is not None:
             return decision
@@ -367,16 +372,25 @@ class CredentialBroker:
         return {header: f"{scheme} {secret}"}
 
     # ------------------------------------------------------------------ internals
+    @staticmethod
+    def _binding_digest(*values: Any) -> str:
+        material = json.dumps(values, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
     def _require_approval(self, *, description: str, resource_key: str, risk: str,
-                          approval_id: str | None) -> dict | None:
+                          approval_id: str | None, binding_digest: str = "") -> dict | None:
         """Returns an APPROVAL_REQUIRED payload when no valid approval is bound."""
         if self.approvals is None:
             return {"success": False, "error_code": "APPROVAL_REQUIRED", "approval_required": True}
-        fingerprint = self.approvals.fingerprint(description, "credential_broker", "", 30, target="local")
+        approval_command = f"{description} params_sha256={binding_digest or 'none'}"
+        fingerprint = self.approvals.fingerprint(
+            approval_command, "credential_broker", "", 30, target="local",
+        )
         if not approval_id:
             record = self.approvals.request(
-                command=description, shell="credential_broker", working_directory=".",
+                command=approval_command, shell="credential_broker", working_directory="",
                 timeout_seconds=30, risk_level=ShellRiskLevel(risk), target="local",
+                fingerprint=fingerprint,
             )
             return {"success": False, "error_code": "APPROVAL_REQUIRED", "approval_required": True,
                     "approval_id": record.approval_id}

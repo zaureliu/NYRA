@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import hashlib
+import json
 import logging
 import os
 import re
@@ -21,8 +23,11 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from app.core.paths import CONFIG_ROOT
+import psutil
+
+from app.core.paths import CONFIG_ROOT, DATA_ROOT, PROJECT_ROOT
 from app.core.turn import get_current_turn_id
 from app.desktop.apps import DesktopAppsRegistry, load_desktop_apps
 from app.desktop.discovery import (
@@ -38,12 +43,30 @@ from app.desktop.models import (
     WindowInfo,
     operation_result,
 )
-from app.desktop.windows import annotate_process_names, find_windows_for_app, list_visible_windows
+from app.desktop.windows import (
+    annotate_process_names,
+    find_windows_for_app,
+    list_application_windows,
+    list_visible_windows,
+)
 from app.events import EventBus, EventType
 
 logger = logging.getLogger("nyra.desktop")
 
 _BACKGROUND_HINTS = {"steam", "discord", "onedrive", "dropbox"}
+
+# ShellExecute dispatches by file association and can start executables,
+# scripts and shortcuts. Only inert document/media types may use the default
+# association; every other target must name a trusted registry application or
+# go through system_shell.
+_SAFE_ASSOCIATION_SUFFIXES = {
+    ".bmp", ".cfg", ".conf", ".csv", ".doc", ".docx", ".flac", ".gif",
+    ".htm", ".html", ".ini", ".jpeg", ".jpg", ".json", ".log", ".md",
+    ".mkv", ".mov", ".mp3", ".mp4", ".odp", ".ods", ".odt", ".ogg",
+    ".pdf", ".png", ".ppt", ".pptx", ".rtf", ".svg", ".toml", ".tsv",
+    ".txt", ".wav", ".webm", ".webp", ".xls", ".xlsx", ".xml", ".yaml",
+    ".yml",
+}
 
 
 def redact_query(query: str) -> str:
@@ -65,14 +88,62 @@ def _is_protected_window(window: WindowInfo) -> bool:
 def _window_relevant(window: WindowInfo, candidate: ApplicationCandidate) -> bool:
     """Match a window to a discovery candidate by process name or display tokens."""
     process_name = (window.process_name or "").casefold().removesuffix(".exe")
+    expected_processes = {
+        name.casefold().removesuffix(".exe")
+        for name in candidate.process_names
+        if name
+    }
+    if process_name and process_name in expected_processes:
+        return True
     target_stem = Path(expand_launch_target(candidate.target)).stem.casefold() if candidate.launch_method == LaunchMethod.EXE else ""
     if target_stem and process_name == target_stem:
         return True
     title = (window.title or "").casefold()
     if not title:
         return False
-    tokens = [token for token in re_split_tokens(candidate.display_name) if len(token) >= 3]
-    return any(token in title for token in tokens)
+    # comparação sem acento: "Configurações" casa com "configuracoes"
+    norm_title = normalize(title)
+    tokens = [normalize(token) for token in re_split_tokens(candidate.display_name)]
+    return any(len(token) >= 3 and token in norm_title for token in tokens)
+
+
+def _matching_process_pids(candidate: ApplicationCandidate) -> set[int]:
+    """Snapshot real process identities advertised by the Application Registry."""
+    names = {
+        name.casefold().removesuffix(".exe")
+        for name in candidate.process_names
+        if name
+    }
+    if not names:
+        return set()
+    matches: set[int] = set()
+    for process in psutil.process_iter(["pid", "name"]):
+        try:
+            name = str(process.info.get("name") or "").casefold().removesuffix(".exe")
+            if name in names:
+                matches.add(int(process.info["pid"]))
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, TypeError):
+            continue
+    return matches
+
+
+def _is_console_exe(path: str) -> bool:
+    """True para executáveis de console (subsystem 3): Popen DETACHED não cria janela."""
+    try:
+        with open(path, "rb") as handle:
+            dos = handle.read(64)
+            if len(dos) < 64 or dos[:2] != b"MZ":
+                return False
+            e_lfanew = int.from_bytes(dos[0x3C:0x40], "little")
+            handle.seek(e_lfanew)
+            if handle.read(4) != b"PE\x00\x00":
+                return False
+            # optional header começa em e_lfanew + 24; subsystem no offset 68
+            handle.seek(e_lfanew + 24 + 68)
+            subsystem = int.from_bytes(handle.read(2), "little")
+            return subsystem == 3
+    except OSError:
+        return False
 
 
 def re_split_tokens(value: str) -> list[str]:
@@ -103,12 +174,75 @@ class DesktopController:
         apps_path: Path | None = None,
         *,
         dynamic_discovery: bool = True,
+        universal=None,
+        approvals=None,
     ) -> None:
         self.event_bus = event_bus
         self.apps_path = Path(apps_path) if apps_path else CONFIG_ROOT / "desktop_apps.yaml"
         self.registry = DesktopAppsRegistry()
         self._launched_pids: dict[str, set[int]] = {}
         self.discovery = ApplicationDiscovery(enabled=dynamic_discovery)
+        # Universal Application Registry (nyra-full §2/§3): índice persistente +
+        # aprendizado de aliases verificados.
+        from app.desktop.universal_registry import UniversalAppRegistry
+
+        self.universal = universal or UniversalAppRegistry(discovery=self.discovery)
+        self.approvals = approvals
+        self.last_controlled: dict[str, str] | None = None
+        self.last_operation_result: dict | None = None
+        self._universal_dedup: dict[tuple, str] = {}
+
+    def _note_controlled(
+        self,
+        display_name: str,
+        *,
+        kind: str = "app",
+        process_names: list[str] | tuple[str, ...] | None = None,
+        title_tokens: list[str] | tuple[str, ...] | None = None,
+        path: str | None = None,
+    ) -> None:
+        """Contexto para referências como 'fecha ele'/'abre de novo' (§18).
+
+        kind distingue app/pasta/arquivo para que pronomes resolvam o alvo
+        correto (fechar a janela do Explorer aberta por 'abre Downloads').
+        """
+        if not display_name:
+            return
+        context: dict[str, str] = {"display_name": display_name, "kind": kind}
+        if process_names:
+            context["process_names"] = "|".join(dict.fromkeys(process_names))
+        if title_tokens:
+            context["title_tokens"] = "|".join(dict.fromkeys(title_tokens))
+        if path:
+            context["path"] = path
+        self.last_controlled = context
+
+    def _context_hints(self) -> dict[str, list[str]]:
+        """Dicas de resolução derivadas do último alvo controlado."""
+        hints: dict[str, list[str]] = {}
+        if not self.last_controlled:
+            return hints
+        process_names = self.last_controlled.get("process_names")
+        if process_names:
+            hints["process_names"] = [name for name in process_names.split("|") if name]
+        title_tokens = self.last_controlled.get("title_tokens")
+        if title_tokens:
+            hints["title_tokens"] = [token for token in title_tokens.split("|") if token]
+        return hints
+
+    def _dedup_reply(self, turn_id: str | None, key: tuple[str, str]) -> tuple[bool, str] | None:
+        if not turn_id:
+            return None
+        cached = self._universal_dedup.get((turn_id, *key))
+        return (True, cached) if cached is not None else None
+
+    def _remember_dedup(self, turn_id: str | None, key: tuple[str, str], reply: str) -> None:
+        if not turn_id:
+            return
+        if len(self._universal_dedup) > 200:
+            for stale in list(self._universal_dedup)[:100]:
+                self._universal_dedup.pop(stale, None)
+        self._universal_dedup[(turn_id, *key)] = reply
 
     async def initialize(self) -> None:
         self.registry = load_desktop_apps(self.apps_path)
@@ -119,14 +253,16 @@ class DesktopController:
         return self.registry.get(app_id)
 
     def resolve_registered_app_id(self, value: str) -> str | None:
-        """Resolve an id or human display name to one trusted registry entry."""
+        """Resolve an id, alias or human display name to one trusted registry entry."""
         if self.spec(value) is not None:
             return value
         needle = normalize(value)
-        matches = [
-            spec.id for spec in self.registry.valid_specs()
-            if needle and needle in {normalize(spec.id), normalize(spec.display_name)}
-        ]
+        matches = []
+        for spec in self.registry.valid_specs():
+            names = {normalize(spec.id), normalize(spec.display_name)}
+            names.update(normalize(alias) for alias in spec.aliases)
+            if needle and needle in names:
+                matches.append(spec.id)
         return matches[0] if len(matches) == 1 else None
 
     def list_apps(self) -> dict:
@@ -230,12 +366,20 @@ class DesktopController:
         )
         return payload
 
-    async def launch_dynamic(self, query: str, *, origin: str = "operator") -> dict:
-        """Universal launch: free-text app request resolved by discovery (#56..#67)."""
+    async def launch_dynamic(self, query: str, *, origin: str = "operator",
+                             force_new: bool = False) -> dict:
+        """Universal launch: free-text app request resolved by discovery (#56..#67).
+
+        force_new (§17): só True quando o operador pediu explicitamente outra
+        instância ("abre outro", "nova janela").
+        """
         started = time.perf_counter()
 
         def done(**kwargs) -> dict:
             payload = operation_result(app=query.strip(), action="launch_dynamic", duration_ms=(time.perf_counter() - started) * 1000, **kwargs)
+            # Fonte da verdade da chamada corrente. Sem isso o pipeline podia
+            # consumir o resultado da ação anterior ao abrir apps dinamicamente.
+            self.last_operation_result = payload
             logger.info(
                 "desktop_operation",
                 extra={
@@ -248,7 +392,60 @@ class DesktopController:
             return payload
 
         clean = query.strip()
-        resolution = self.discovery.resolve(clean)
+        # Fast path do Universal Registry (nyra-full §41): alias aprendido/exato
+        # resolve sem busca fuzzy completa. Resolução roda FORA do event loop:
+        # cache expirado dispara reindex completo (Start Menu/PowerShell) e
+        # travaria o backend inteiro inline (nyra-full §2 divergência real).
+        fast_candidates = (
+            await asyncio.to_thread(self.universal.resolve_launch_candidates, clean)
+            if self.universal is not None else []
+        )
+        fast_candidate = fast_candidates[0] if fast_candidates else None
+        if fast_candidate is not None and not force_new:
+            existing = self._existing_instance_windows(fast_candidate)
+            # Só focamos janelas VISÍVEIS. Instância oculta em tray segue o
+            # caminho normal de launch: o próprio app traz a janela principal
+            # à tona (focar superfícies ocultas trava em apps Electron).
+            if existing and existing[0].visible:
+                from app.desktop import window_manager as _wm
+
+                focused = await asyncio.to_thread(_wm.focus_window, existing[0].hwnd)
+                if focused:
+                    await self._publish_verified(fast_candidate, existing[0].pid)
+                    self.universal.record_success(fast_candidate.id, alias_query=clean)
+                    self._note_controlled(
+                        fast_candidate.display_name,
+                        kind="app",
+                        process_names=[existing[0].process_name or ""],
+                        title_tokens=[fast_candidate.display_name],
+                    )
+                    return done(
+                        success=True,
+                        message=(f"'{fast_candidate.display_name}' já estava aberto; "
+                                 f"janela existente em primeiro plano (pid {existing[0].pid})."),
+                        execution_success=True, effect_verified=True,
+                        verification_status="VERIFIED",
+                        detail={"candidate": fast_candidate.public_dict(),
+                                "pid": existing[0].pid, "already_open": True,
+                                "windows": [w.model_dump(mode="json") for w in existing[:5]]},
+                    )
+        if fast_candidate is not None:
+            raw_result, successful_candidate = await self._launch_candidates_with_fallback(
+                fast_candidates,
+                origin=origin,
+            )
+            if successful_candidate is not None:
+                self.universal.record_success(
+                    successful_candidate.id,
+                    alias_query=clean,
+                    launch_candidate=successful_candidate,
+                )
+                self._note_controlled(successful_candidate.display_name)
+            else:
+                self.universal.record_failure(fast_candidate.id)
+            return self._finish_dynamic_attempt(done, raw_result)
+
+        resolution = await asyncio.to_thread(self.discovery.resolve, clean)
         status = resolution.get("status")
         if status == "DISABLED":
             return done(success=False, error_code=LaunchErrorCode.UNKNOWN_APP.value,
@@ -263,8 +460,61 @@ class DesktopController:
                 target=candidate_data.get("target", ""),
                 confidence=float(candidate_data.get("confidence", 0.0)),
             )
-            expected_window = candidate.display_name.casefold() not in _BACKGROUND_HINTS
-            return await self._launch_candidate(candidate, done, origin=origin, expected_window=expected_window)
+            if self.universal is not None:
+                launch_candidates = await asyncio.to_thread(
+                    self.universal.resolve_launch_candidates,
+                    clean,
+                    fallback=candidate,
+                )
+            else:
+                from app.desktop.launch_policy import ordered_launch_candidates
+
+                launch_candidates = ordered_launch_candidates([
+                    *self.discovery.candidates_for(candidate.id),
+                    candidate,
+                ])
+            if launch_candidates:
+                candidate = launch_candidates[0]
+            if not force_new:
+                existing = self._existing_instance_windows(candidate)
+                if existing and existing[0].visible:
+                    from app.desktop import window_manager as _wm
+
+                    focused = await asyncio.to_thread(_wm.focus_window, existing[0].hwnd)
+                    if focused:
+                        await self._publish_verified(candidate, existing[0].pid)
+                        self.universal.record_success(candidate.id, alias_query=clean)
+                        self._note_controlled(
+                            candidate.display_name,
+                            kind="app",
+                            process_names=[existing[0].process_name or ""],
+                            title_tokens=[candidate.display_name],
+                        )
+                        return done(
+                            success=True,
+                            message=(f"'{candidate.display_name}' já estava aberto; "
+                                     f"janela existente em primeiro plano (pid {existing[0].pid})."),
+                            execution_success=True, effect_verified=True,
+                            verification_status="VERIFIED",
+                            detail={"candidate": candidate.public_dict(),
+                                    "pid": existing[0].pid, "already_open": True,
+                                    "windows": [w.model_dump(mode="json") for w in existing[:5]]},
+                        )
+            raw_result, successful_candidate = await self._launch_candidates_with_fallback(
+                launch_candidates,
+                origin=origin,
+            )
+            if successful_candidate is not None:
+                if self.universal is not None:
+                    self.universal.record_success(
+                        successful_candidate.id,
+                        alias_query=clean,
+                        launch_candidate=successful_candidate,
+                    )
+                self._note_controlled(successful_candidate.display_name)
+            elif self.universal is not None:
+                self.universal.record_failure(candidate.id)
+            return self._finish_dynamic_attempt(done, raw_result)
         if status == "AMBIGUOUS":
             options = resolution.get("candidates", [])
             names = ", ".join(f"{item['display_name']} ({item['launch_method']})" for item in options)
@@ -280,12 +530,138 @@ class DesktopController:
             message=f"Nenhuma aplicação instalada correspondente a '{redact_query(clean)}' foi encontrada nas fontes seguras de descoberta.",
         )
 
+    @staticmethod
+    def _finish_dynamic_attempt(done, result: dict) -> dict:
+        base_keys = {
+            "success", "app", "action", "error_code", "message", "duration_ms",
+            "execution_success", "effect_verified", "verification_status",
+        }
+        detail = {key: value for key, value in result.items() if key not in base_keys}
+        return done(
+            success=bool(result.get("success")),
+            error_code=result.get("error_code"),
+            message=str(result.get("message") or ""),
+            execution_success=result.get("execution_success"),
+            effect_verified=result.get("effect_verified"),
+            verification_status=str(result.get("verification_status") or "NOT_REQUIRED"),
+            detail=detail,
+        )
+
+    async def _launch_candidates_with_fallback(
+        self,
+        candidates: list[ApplicationCandidate],
+        *,
+        origin: str,
+    ) -> tuple[dict, ApplicationCandidate | None]:
+        """Try every discovered route until PID/HWND verification succeeds."""
+        attempts: list[dict] = []
+        last_result: dict | None = None
+        for candidate in candidates:
+            def attempt_done(**kwargs) -> dict:
+                return operation_result(
+                    app=candidate.display_name,
+                    action="launch_attempt",
+                    **kwargs,
+                )
+
+            result = await self._launch_candidate(
+                candidate,
+                attempt_done,
+                origin=origin,
+                expected_window=True,
+            )
+            attempt = {
+                "launch_method": str(candidate.launch_method),
+                "source": candidate.source,
+                "target": candidate.public_dict()["target"],
+                "execution_success": result.get("execution_success"),
+                "effect_verified": result.get("effect_verified"),
+                "verification_status": result.get("verification_status"),
+                "error_code": result.get("error_code"),
+            }
+            attempts.append(attempt)
+            result["attempts"] = list(attempts)
+            result["launch_method"] = str(candidate.launch_method)
+            result["launch_source"] = candidate.source
+            last_result = result
+            if result.get("success") and result.get("effect_verified") is True:
+                return result, candidate
+
+        if last_result is None:
+            last_result = operation_result(
+                success=False,
+                app="",
+                action="launch_attempt",
+                error_code=LaunchErrorCode.EXECUTABLE_NOT_FOUND.value,
+                message="No valid local launch method was discovered.",
+                execution_success=False,
+                effect_verified=False,
+                verification_status="EXECUTION_FAILED",
+                detail={"attempts": []},
+            )
+        else:
+            last_message = str(last_result.get("message") or "")
+            last_result["success"] = False
+            last_result["effect_verified"] = False
+            last_result["verification_status"] = "VERIFICATION_FAILED"
+            last_result["message"] = (
+                f"Todos os {len(attempts)} metodos locais foram tentados sem "
+                f"confirmacao por PID/HWND. Ultima falha: {last_message}"
+            )
+        return last_result, None
+
+    def _visible_windows_for_candidate(self, candidate: ApplicationCandidate) -> list[WindowInfo]:
+        """Janelas visíveis já existentes do candidato (§17 already-open)."""
+        return [
+            window for window in annotate_process_names(list_visible_windows())
+            if _window_relevant(window, candidate) and not _is_protected_window(window)
+        ]
+
+    def _existing_instance_windows(self, candidate: ApplicationCandidate) -> list[WindowInfo]:
+        """Instância existente, VISÍVEL ou oculta em tray (§17/§26).
+
+        Janela oculta só casa por NOME DE PROCESSO (sinal forte); título de
+        janela invisível não é evidência confiável. Stems vêm do alvo do
+        candidato E do registro universal (exe/atalho), cobrindo apps que
+        resolvem via lnk/AUMID (Discord, Steam).
+        """
+        visible = self._visible_windows_for_candidate(candidate)
+        if visible:
+            return visible
+        stems: set[str] = set()
+        try:
+            stem = Path(expand_launch_target(candidate.target)).stem.casefold()
+            if stem and stem not in {"application", "app"}:
+                stems.add(stem)
+        except OSError:
+            pass
+        entry = self.universal.entries.get(candidate.id) if self.universal else None
+        if entry is not None:
+            if entry.executable:
+                stems.add(Path(entry.executable).stem.casefold())
+            if entry.target:
+                stems.add(Path(entry.target).stem.casefold())
+        stems.discard("")
+        if not stems:
+            return []
+        hidden: list[WindowInfo] = []
+        for window in annotate_process_names(list_application_windows(include_invisible=True)):
+            if _is_protected_window(window):
+                continue
+            process_name = (window.process_name or "").casefold().removesuffix(".exe")
+            if process_name in stems:
+                hidden.append(window)
+        # Janelas COM título primeiro (superfícies de rendering não têm título).
+        hidden.sort(key=lambda item: not bool((item.title or "").strip()))
+        return hidden[:1]
+
     async def _launch_candidate(self, candidate: ApplicationCandidate, done, *, origin: str, expected_window: bool = True) -> dict:
         method = candidate.launch_method
         pre_existing = {
             window.hwnd for window in annotate_process_names(list_visible_windows())
             if _window_relevant(window, candidate)
         }
+        pre_existing_pids = _matching_process_pids(candidate)
         pid = None
         try:
             if method == LaunchMethod.EXE:
@@ -296,6 +672,19 @@ class DesktopController:
                                 message=f"Executável '{candidate.target}' não encontrado.", execution_success=False,
                                 effect_verified=False, verification_status="EXECUTION_FAILED",
                                 detail={"candidate": candidate.public_dict()})
+                if _is_console_exe(executable):
+                    return done(
+                        success=False,
+                        error_code=LaunchErrorCode.SPAWN_FAILED.value,
+                        message=(
+                            f"'{candidate.display_name}' requer ShellExecute para "
+                            "preservar a janela de console."
+                        ),
+                        execution_success=False,
+                        effect_verified=False,
+                        verification_status="EXECUTION_FAILED",
+                        detail={"candidate": candidate.public_dict()},
+                    )
                 creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
                 process = subprocess.Popen(  # noqa: S603 - alvo resolvido por descoberta validada
                     [executable], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -328,7 +717,7 @@ class DesktopController:
                         found = [
                             window for window in annotate_process_names(list_visible_windows())
                             if _window_relevant(window, candidate)
-                            and window.pid not in pre_existing
+                            and window.hwnd not in pre_existing
                             and (window.pid in ({process.pid} | children))
                         ]
                     now = time.monotonic()
@@ -346,11 +735,68 @@ class DesktopController:
                         allow_pid_free = True
                         continue
                 if not expected_window:
+                    # App de fundo (tray): sem janela OBRIGATÓRIA, mas se uma
+                    # janela relevante surgir, confirma efeito real (§14).
+                    background_deadline = time.monotonic() + 8.0
+                    while time.monotonic() < background_deadline:
+                        await asyncio.sleep(0.5)
+                        found_background = [
+                            window for window in annotate_process_names(list_visible_windows())
+                            if _window_relevant(window, candidate)
+                            and window.hwnd not in pre_existing
+                            and not _is_protected_window(window)
+                        ]
+                        if found_background:
+                            await self._publish_verified(candidate, found_background[0].pid)
+                            return done(success=True,
+                                        message=f"'{candidate.display_name}' aberto; janela visível confirmada (pid {found_background[0].pid}).",
+                                        execution_success=True, effect_verified=True,
+                                        verification_status="VERIFIED",
+                                        detail={"candidate": candidate.public_dict(), "pid": process.pid,
+                                                "windows": [w.model_dump(mode="json") for w in found_background[:5]]})
                     alive = poll_process() is None
                     return done(success=alive, message="Processo em background iniciado; verificação por janela não aplicável.",
                                 execution_success=True, effect_verified=alive, verification_status="VERIFIED" if alive else "VERIFICATION_FAILED",
                                 detail={"candidate": candidate.public_dict(), "pid": process.pid})
                 if not confirmed:
+                    confirmed_pids = _matching_process_pids(candidate) - pre_existing_pids
+                    if confirmed_pids:
+                        verified_pid = min(confirmed_pids)
+                        await self._publish_verified(candidate, verified_pid)
+                        return done(
+                            success=True,
+                            message=(
+                                f"'{candidate.display_name}' aberto via {method}; "
+                                f"processo confirmado (pid {verified_pid})."
+                            ),
+                            execution_success=True,
+                            effect_verified=True,
+                            verification_status="VERIFIED",
+                            detail={
+                                "candidate": candidate.public_dict(),
+                                "pid": verified_pid,
+                                "verification": "PID",
+                            },
+                        )
+                    # nyra-full §11: app single-instance já aberto não é falha —
+                    # se as janelas pré-existentes seguem vivas, foca e reporta.
+                    still_open = [
+                        window for window in annotate_process_names(list_visible_windows())
+                        if _window_relevant(window, candidate)
+                        and window.hwnd in pre_existing
+                        and not _is_protected_window(window)
+                    ]
+                    if still_open:
+                        from app.desktop import window_manager as _wm
+
+                        _wm.focus_window(still_open[0].hwnd)
+                        await self._publish_verified(candidate, still_open[0].pid)
+                        return done(success=True,
+                                    message=f"'{candidate.display_name}' já estava aberto; janela existente trazida para frente (pid {still_open[0].pid}).",
+                                    execution_success=True, effect_verified=True, verification_status="VERIFIED",
+                                    detail={"candidate": candidate.public_dict(), "pid": still_open[0].pid,
+                                            "already_open": True,
+                                            "windows": [w.model_dump(mode="json") for w in still_open[:5]]})
                     terminated = self._terminate_own_process(process)
                     return done(success=False, error_code=LaunchErrorCode.WINDOW_NOT_CONFIRMED.value,
                                 message="Processo iniciado, mas nenhuma janela visível foi confirmada dentro do timeout."
@@ -372,6 +818,7 @@ class DesktopController:
                             detail={"candidate": candidate.public_dict()})
             deadline = time.monotonic() + 15.0
             confirmed: list[WindowInfo] = []
+            confirmed_pids: set[int] = set()
             while time.monotonic() < deadline:
                 await asyncio.sleep(0.5)
                 confirmed = [
@@ -380,7 +827,27 @@ class DesktopController:
                 ]
                 if confirmed:
                     break
+                confirmed_pids = _matching_process_pids(candidate) - pre_existing_pids
+                if confirmed_pids:
+                    break
             if not expected_window:
+                # Background/tray: confirmação oportunista de janela nova.
+                background_deadline = time.monotonic() + 8.0
+                while time.monotonic() < background_deadline:
+                    await asyncio.sleep(0.5)
+                    found_background = [
+                        window for window in annotate_process_names(list_visible_windows())
+                        if _window_relevant(window, candidate) and window.hwnd not in pre_existing
+                        and not _is_protected_window(window)
+                    ]
+                    if found_background:
+                        await self._publish_verified(candidate, found_background[0].pid)
+                        return done(success=True,
+                                    message=f"'{candidate.display_name}' aberto; janela visível confirmada (pid {found_background[0].pid}).",
+                                    execution_success=True, effect_verified=True,
+                                    verification_status="VERIFIED",
+                                    detail={"candidate": candidate.public_dict(),
+                                            "windows": [w.model_dump(mode="json") for w in found_background[:5]]})
                 return done(success=True, message="Comando de abertura executado; verificação por janela não aplicável.",
                             execution_success=True, effect_verified=None, verification_status="EXECUTED",
                             detail={"candidate": candidate.public_dict()})
@@ -391,6 +858,41 @@ class DesktopController:
                             execution_success=True, effect_verified=True, verification_status="VERIFIED",
                             detail={"candidate": candidate.public_dict(),
                                     "windows": [window.model_dump(mode="json") for window in confirmed[:5]]})
+            if confirmed_pids:
+                verified_pid = min(confirmed_pids)
+                await self._publish_verified(candidate, verified_pid)
+                return done(
+                    success=True,
+                    message=(
+                        f"'{candidate.display_name}' aberto via {method}; "
+                        f"processo confirmado (pid {verified_pid})."
+                    ),
+                    execution_success=True,
+                    effect_verified=True,
+                    verification_status="VERIFIED",
+                    detail={
+                        "candidate": candidate.public_dict(),
+                        "pid": verified_pid,
+                        "verification": "PID",
+                    },
+                )
+            still_open = [
+                window for window in annotate_process_names(list_visible_windows())
+                if _window_relevant(window, candidate)
+                and window.hwnd in pre_existing
+                and not _is_protected_window(window)
+            ]
+            if still_open:
+                from app.desktop import window_manager as _wm
+
+                _wm.focus_window(still_open[0].hwnd)
+                await self._publish_verified(candidate, still_open[0].pid)
+                return done(success=True,
+                            message=f"'{candidate.display_name}' já estava aberto; janela existente trazida para frente.",
+                            execution_success=True, effect_verified=True, verification_status="VERIFIED",
+                            detail={"candidate": candidate.public_dict(), "pid": still_open[0].pid,
+                                    "already_open": True,
+                                    "windows": [w.model_dump(mode="json") for w in still_open[:5]]})
             return done(success=False, error_code=LaunchErrorCode.WINDOW_NOT_CONFIRMED.value,
                         message=f"'{candidate.display_name}' foi acionado, mas nenhuma janela nova foi confirmada no desktop.",
                         execution_success=True, effect_verified=False, verification_status="VERIFICATION_FAILED",
@@ -578,12 +1080,24 @@ class DesktopController:
             candidate = Path.cwd() / candidate
         resolved = candidate.resolve()
         verb = "open" if not app else "open"
-        if not resolved.exists():
+        if not resolved.is_file():
             return done(success=False, error_code="FILE_NOT_FOUND",
                         message=f"Arquivo inexistente: {resolved}", execution_success=False, effect_verified=False)
         if app and self.spec(app) is None:
             return done(success=False, error_code=LaunchErrorCode.UNKNOWN_APP.value,
                         message=f"Aplicativo '{app}' não registrado.", execution_success=False)
+        if not app and resolved.suffix.casefold() not in _SAFE_ASSOCIATION_SUFFIXES:
+            return done(
+                success=False,
+                error_code="UNSAFE_FILE_TYPE",
+                message=(
+                    "Tipo de arquivo não autorizado para associação automática. "
+                    "Use um aplicativo do Desktop Apps Registry; executáveis, scripts "
+                    "e atalhos passam somente por system_shell com approval."
+                ),
+                execution_success=False,
+                effect_verified=False,
+            )
         try:
             if app:
                 executable = shutil.which(self.spec(app).executable) or self.spec(app).executable
@@ -602,7 +1116,7 @@ class DesktopController:
             return done(success=False, error_code="OPEN_FAILED",
                         message=f"{type(exc).__name__}: {str(exc)[:120]}", execution_success=False)
         return done(success=True, message=f"Solicitação de abertura enviada para {resolved.name}.",
-                    execution_success=True, effect_verified=True, verification_status="EXECUTED",
+                    execution_success=True, effect_verified=None, verification_status="EXECUTED",
                     detail={"path": str(resolved), "with_app": app or None})
 
     async def open_url(self, url: str) -> dict:
@@ -612,10 +1126,21 @@ class DesktopController:
             return operation_result(app="browser", action="open_url", duration_ms=(time.perf_counter() - started) * 1000, **kwargs)
 
         clean = url.strip()
-        allowed_schemes = ("http://", "https://", "ms-settings:", "shell:", "file://")
-        if not clean.casefold().startswith(allowed_schemes):
+        try:
+            parsed = urlsplit(clean)
+            _ = parsed.port
+        except ValueError:
+            parsed = None
+        if (
+            parsed is None
+            or parsed.scheme.casefold() not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or any(ord(char) < 0x20 for char in clean)
+        ):
             return done(success=False, error_code="INVALID_URL",
-                        message="Somente http/https/ms-settings/shell/file são aceitos.",
+                        message="Somente URLs HTTP/HTTPS absolutas, sem credenciais embutidas, são aceitas.",
                         execution_success=False)
         try:
             result = ctypes.windll.shell32.ShellExecuteW(None, "open", clean, None, None, 1)
@@ -626,7 +1151,7 @@ class DesktopController:
             return done(success=False, error_code="OPEN_FAILED",
                         message=f"ShellExecute retornou {result}.", execution_success=False)
         return done(success=True, message=f"Navegação solicitada para {clean[:80]}.",
-                    execution_success=True, effect_verified=True, verification_status="EXECUTED",
+                    execution_success=True, effect_verified=None, verification_status="EXECUTED",
                     detail={"url": clean})
 
     # ------------------------------------------------------------- ui automation
@@ -666,6 +1191,36 @@ class DesktopController:
             raise ValueError("WINDOW_NOT_FOUND:Nenhuma janela visível correspondente foi encontrada.")
         return targets[0].hwnd
 
+    def _require_uia_approval(self, action: str, parameters: dict,
+                              approval_id: str | None) -> dict | None:
+        """One-use approval bound to the exact UI actuator and window."""
+        from app.tools.shell_models import ShellRiskLevel
+
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        binding_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        description = f"desktop_ui_{action} params_sha256={binding_digest}"
+        target = f"desktop:ui:{action}:{parameters.get('hwnd', '')}"
+        if self.approvals is None:
+            return {"success": False, "error_code": "APPROVAL_REQUIRED",
+                    "approval_required": True}
+        fingerprint = self.approvals.fingerprint(
+            description, "desktop_ui", "", 30, target=target,
+        )
+        if not approval_id:
+            record = self.approvals.request(
+                command=description, shell="desktop_ui", working_directory="",
+                timeout_seconds=30, risk_level=ShellRiskLevel.ELEVATED,
+                target=target, fingerprint=fingerprint,
+            )
+            return {"success": False, "error_code": "APPROVAL_REQUIRED",
+                    "approval_required": True, "approval_id": record.approval_id}
+        granted, reason = self.approvals.consume(approval_id, fingerprint)
+        if not granted:
+            return {"success": False, "error_code": "APPROVAL_INVALID", "message": reason}
+        return None
+
     async def ui_inspect(self, *, app: str = "", query: str = "", hwnd: int | None = None, max_depth: int = 5) -> dict:
         from app.desktop import uia
 
@@ -693,7 +1248,8 @@ class DesktopController:
         )
 
     async def ui_click(self, *, name: str = "", automation_id: str = "", control_type: str = "",
-                       app: str = "", query: str = "", hwnd: int | None = None) -> dict:
+                       app: str = "", query: str = "", hwnd: int | None = None,
+                       approval_id: str | None = None) -> dict:
         from app.desktop import uia
 
         try:
@@ -702,12 +1258,21 @@ class DesktopController:
             code, message = str(exc).split(":", 1)
             return operation_result(app="ui", action="click", success=False, error_code=code, message=message,
                                     execution_success=False, effect_verified=False)
+        decision = self._require_uia_approval(
+            "click",
+            {"hwnd": handle, "name": name, "automation_id": automation_id,
+             "control_type": control_type},
+            approval_id,
+        )
+        if decision is not None:
+            return decision
         return await self._uia_call(
             uia.click_element, handle, name=name, automation_id=automation_id, control_type=control_type,
         )
 
     async def ui_set_text(self, value: str, *, name: str = "", automation_id: str = "", control_type: str = "",
-                          app: str = "", query: str = "", hwnd: int | None = None) -> dict:
+                          app: str = "", query: str = "", hwnd: int | None = None,
+                          approval_id: str | None = None) -> dict:
         from app.desktop import uia
 
         try:
@@ -716,6 +1281,15 @@ class DesktopController:
             code, message = str(exc).split(":", 1)
             return operation_result(app="ui", action="set_text", success=False, error_code=code, message=message,
                                     execution_success=False, effect_verified=False)
+        decision = self._require_uia_approval(
+            "set_text",
+            {"hwnd": handle, "name": name, "automation_id": automation_id,
+             "control_type": control_type,
+             "value_sha256": hashlib.sha256(value.encode("utf-8")).hexdigest()},
+            approval_id,
+        )
+        if decision is not None:
+            return decision
         return await self._uia_call(
             uia.set_text, handle, value, name=name, automation_id=automation_id, control_type=control_type,
         )
@@ -734,7 +1308,8 @@ class DesktopController:
             uia.get_text, handle, name=name, automation_id=automation_id, control_type=control_type,
         )
 
-    async def ui_send_keys(self, text: str, *, app: str = "", query: str = "", hwnd: int | None = None) -> dict:
+    async def ui_send_keys(self, text: str, *, app: str = "", query: str = "", hwnd: int | None = None,
+                           approval_id: str | None = None) -> dict:
         from app.desktop import uia
         from app.desktop.window_manager import focus_window
 
@@ -744,6 +1319,14 @@ class DesktopController:
             code, message = str(exc).split(":", 1)
             return operation_result(app="ui", action="send_keys", success=False, error_code=code, message=message,
                                     execution_success=False, effect_verified=False)
+        decision = self._require_uia_approval(
+            "send_keys",
+            {"hwnd": handle,
+             "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
+            approval_id,
+        )
+        if decision is not None:
+            return decision
         focused = await asyncio.to_thread(focus_window, handle)
         if not focused:
             return operation_result(app="ui", action="send_keys", success=False, error_code="FOCUS_NOT_CONFIRMED",
@@ -917,4 +1500,408 @@ class DesktopController:
             message=f"Janela visível confirmada no desktop ({len(confirmed_windows)} janela(s), pid {confirmed_windows[0].pid}).",
             execution_success=True, effect_verified=True, verification_status="VERIFIED",
             detail={"pid": process.pid, "windows": window_payloads},
+        )
+
+    # ==================================================== Universal Operator
+
+    def universal_status(self) -> dict:
+        status = self.universal.status()
+        status["last_controlled"] = dict(self.last_controlled) if self.last_controlled else None
+        return status
+
+    def refresh_universal(self, force: bool = True) -> dict:
+        sources = self.universal.refresh(force=force)
+        return {"refreshed": True, "sources": sources, **self.universal_status()}
+
+    async def handle_universal(self, intent, *, turn_id: str | None = None) -> tuple[bool, str]:
+        """Executa uma UniversalIntent SEM LLM (nyra-full §25/§41).
+
+        Retorna (handled, reply). Dedup por turno garante 1 pedido →
+        1 execução física mesmo se chamado duas vezes.
+        """
+        cached = self._dedup_reply(turn_id, intent.dedup_key)
+        if cached is not None:
+            return cached
+
+        # Nova ação nunca herda evidência de uma ação física anterior.
+        self.last_operation_result = None
+
+        target_query = intent.target
+        hints: dict[str, list[str]] = {}
+        if intent.contextual:
+            context = self.last_controlled
+            if not context:
+                reply = "Não sei a qual item você se refere — mencione o nome dele."
+                self._remember_dedup(turn_id, intent.dedup_key, reply)
+                return True, reply
+            target_query = context.get("display_name") or target_query
+            hints = self._context_hints()
+
+        action_value = intent.action.value
+        if action_value == "OPEN_APP":
+            force_new = bool(getattr(intent, "explicit_new", False))
+            if intent.contextual and (self.last_controlled or {}).get("kind") == "folder":
+                handled, reply = await self._universal_open_folder(target_query)
+            elif intent.contextual and (self.last_controlled or {}).get("kind") == "file":
+                handled, reply = await self._universal_open_file(
+                    (self.last_controlled or {}).get("path") or target_query, contextual=True
+                )
+            else:
+                handled, reply = await self._universal_open(target_query, force_new=force_new)
+        elif action_value == "OPEN_FOLDER":
+            handled, reply = await self._universal_open_folder(target_query)
+        elif action_value == "OPEN_FILE":
+            handled, reply = await self._universal_open_file(target_query, contextual=intent.contextual)
+        else:
+            handled, reply = await self._universal_window_op(action_value, target_query, hints=hints)
+
+        self._remember_dedup(turn_id, intent.dedup_key, reply)
+        return handled, reply
+
+    async def _universal_open_folder(self, name_query: str) -> tuple[bool, str]:
+        """OPEN_FOLDER determinístico (nyra-full §6): resolve pasta conhecida,
+        abre via Explorer/ShellExecute e verifica a janela. NUNCA usa
+        filesystem_list_files nem Agent Loop."""
+        from app.desktop.intents import FOLDER_SHELL_URIS
+
+        key = normalize(name_query)
+        resolved: tuple[str, str] | None = None  # (display_name, uri_or_path)
+        entry = FOLDER_SHELL_URIS.get(key)
+        if entry is not None:
+            resolved = entry
+        elif key == "home":
+            resolved = ("Home", str(Path.home()))
+        elif key == "appdata":
+            roaming = os.environ.get("APPDATA")
+            if roaming:
+                resolved = ("AppData", roaming)
+        elif key == "appdatelocal":
+            local = os.environ.get("LOCALAPPDATA")
+            if local:
+                resolved = ("AppData Local", local)
+        elif key in {"temp", "temporarios"}:
+            temp_dir = os.environ.get("TEMP") or os.environ.get("TMP")
+            if temp_dir:
+                resolved = ("Temp", temp_dir)
+        elif key == "onedrive":
+            onedrive = os.environ.get("OneDrive") or os.environ.get("OneDriveConsumer")
+            if onedrive:
+                resolved = ("OneDrive", onedrive)
+        else:
+            # Pasta do usuário: procura por nome sob raízes conhecidas.
+            resolved = self._find_user_folder(name_query)
+
+        if resolved is None:
+            return True, (
+                f"Não encontrei a pasta \"{name_query}\" nos locais conhecidos. "
+                "Nada foi aberto."
+            )
+
+        display_name, target_uri = resolved
+        candidate = ApplicationCandidate(
+            id=f"folder_{normalize(display_name)}",
+            display_name=display_name,
+            source="folder_alias",
+            launch_method=LaunchMethod.URI,
+            target=target_uri,
+            confidence=1.0,
+        )
+        started = time.perf_counter()
+
+        def done(**kwargs) -> dict:
+            return operation_result(app=display_name, action="universal_open_folder",
+                                    duration_ms=(time.perf_counter() - started) * 1000, **kwargs)
+
+        result = await self._launch_candidate(candidate, done, origin="fastpath")
+        self.last_operation_result = result
+        if result.get("already_open"):
+            self._note_controlled(display_name, kind="folder",
+                                  process_names=("explorer",), title_tokens=(display_name,))
+            return True, f"Pasta {display_name} já estava aberta; janela existente em primeiro plano."
+        if result.get("success") and result.get("effect_verified"):
+            self._note_controlled(display_name, kind="folder",
+                                  process_names=("explorer",), title_tokens=(display_name,))
+            return True, f"Pasta {display_name} aberta no Explorador."
+        if result.get("success"):
+            self._note_controlled(display_name, kind="folder",
+                                  process_names=("explorer",), title_tokens=(display_name,))
+            return True, f"Comando da pasta {display_name} enviado; janela ainda não confirmada."
+        return True, f"Não consegui abrir a pasta {display_name}: {result.get('message', '')}"
+
+    def _find_user_folder(self, name_query: str) -> tuple[str, str] | None:
+        """Localiza pasta do usuário pelo nome sob raízes comuns (sem hardcode)."""
+        wanted = normalize(name_query)
+        if not wanted:
+            return None
+        home = Path.home()
+        roots = [home / child for child in
+                 ("Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos")]
+        roots.extend([home, DATA_ROOT, PROJECT_ROOT])
+        for root in roots:
+            try:
+                if not root.is_dir():
+                    continue
+                for child in sorted(root.iterdir()):
+                    if child.is_dir() and normalize(child.name) == wanted:
+                        return child.name, str(child)
+            except OSError:
+                continue
+        return None
+
+    def _find_file_by_name(self, raw_name: str) -> Path | None:
+        """Resolve arquivo por nome em locais padrão (nyra-full §7/§29)."""
+        clean = raw_name.strip().strip('"')
+        if not clean:
+            return None
+        candidate = Path(clean).expanduser()
+        if candidate.is_absolute():
+            return candidate if candidate.is_file() else None
+        for base in (PROJECT_ROOT, DATA_ROOT):
+            direct = base / candidate
+            if direct.is_file():
+                return direct
+        filename = candidate.name.casefold()
+        home = Path.home()
+        roots = [home / child for child in
+                 ("Desktop", "Downloads", "Documents", "Pictures", "Music", "Videos")]
+        roots.extend([DATA_ROOT, PROJECT_ROOT])
+        for root in roots:
+            try:
+                if not root.is_dir():
+                    continue
+                for child in sorted(root.iterdir()):
+                    if child.is_file() and child.name.casefold() == filename:
+                        return child
+            except OSError:
+                continue
+        return None
+
+    async def _universal_open_file(self, raw_name: str, *, contextual: bool = False) -> tuple[bool, str]:
+        """OPEN_FILE determinístico (nyra-full §7): resolve → app associado →
+        abrir → verificar janela/arquivo quando possível."""
+        from app.desktop import window_manager as wm
+
+        resolved_path: Path | None
+        if contextual:
+            context = self.last_controlled or {}
+            raw = context.get("path") if context.get("kind") == "file" else None
+            if not raw:
+                return True, "Não sei a qual arquivo você se refere — cite o nome dele."
+            resolved_path = Path(raw)
+            if not resolved_path.is_file():
+                resolved_path = self._find_file_by_name(resolved_path.name)
+        else:
+            resolved_path = self._find_file_by_name(raw_name)
+        if resolved_path is None or not resolved_path.is_file():
+            return True, (
+                f"Não encontrei o arquivo \"{raw_name}\" nos locais padrão. "
+                "Nada foi aberto."
+            )
+
+        pre_existing = {
+            window.hwnd for window in annotate_process_names(list_visible_windows())
+        }
+        result = await self.open_file(str(resolved_path))
+        self.last_operation_result = result
+        if not result.get("success"):
+            return True, (
+                f"Não consegui abrir o arquivo {resolved_path.name}: {result.get('message', '')}"
+            )
+
+        stem = resolved_path.stem.casefold()
+        deadline = time.monotonic() + 10.0
+        confirmed = None
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.5)
+            for window in annotate_process_names(list_visible_windows()):
+                if window.hwnd in pre_existing or _is_protected_window(window):
+                    continue
+                if stem and stem in (window.title or "").casefold():
+                    confirmed = window
+                    break
+            if confirmed is not None:
+                break
+        if confirmed is not None:
+            result = {**result, "effect_verified": True, "already_open": False,
+                      "windows": [confirmed.model_dump(mode="json")]}
+            self.last_operation_result = result
+            self._note_controlled(resolved_path.stem, kind="file",
+                                  title_tokens=(resolved_path.stem,), path=str(resolved_path))
+            process_label = (confirmed.process_name or "aplicativo associado").removesuffix(".exe")
+            return True, (
+                f"Arquivo {resolved_path.name} aberto no {process_label} "
+                f"(janela hwnd {confirmed.hwnd})."
+            )
+        # Arquivo pode já estar aberto: foca a janela existente correspondente.
+        for window in annotate_process_names(list_visible_windows()):
+            if _is_protected_window(window):
+                continue
+            if stem and stem in (window.title or "").casefold():
+                focused = await asyncio.to_thread(wm.focus_window, window.hwnd)
+                if focused:
+                    self._note_controlled(resolved_path.stem, kind="file",
+                                          title_tokens=(resolved_path.stem,), path=str(resolved_path))
+                    return True, (
+                        f"Arquivo {resolved_path.name} já estava aberto; "
+                        "janela existente trazida para frente."
+                    )
+        return True, (
+            f"Comando de abertura de {resolved_path.name} enviado; "
+            "não consegui confirmar a janela do aplicativo."
+        )
+
+    async def _universal_open(self, target_query: str, *, force_new: bool = False) -> tuple[bool, str]:
+        cleaned = target_query
+        if cleaned.casefold().startswith("pasta "):
+            # Rede de segurança: frase de pasta que escapou do parser (§6).
+            return await self._universal_open_folder(cleaned[6:].strip())
+
+        result = await self.launch_dynamic(cleaned, origin="fastpath", force_new=force_new)
+        error_code = str(result.get("error_code") or "")
+        if result.get("success"):
+            detail_pid = result.get("pid")
+            windows = result.get("windows") or []
+            hwnd_text = ""
+            if windows and isinstance(windows, list):
+                hwnd_text = f", janela {windows[0].get('hwnd')}" if windows[0].get("hwnd") else ""
+            verified = bool(result.get("effect_verified"))
+            name = result.get("app") or cleaned
+            # Contexto (§18) vale para TODO sucesso — inclusive abertura em
+            # background/tray sem confirmação de janela.
+            self._note_controlled(name, kind="app", title_tokens=(name,))
+            if result.get("already_open"):
+                return True, f"{name} já estava aberto; janela existente em primeiro plano."
+            if verified:
+                pid_text = f" (PID {detail_pid})" if detail_pid else ""
+                return True, f"Aberto: {name}{pid_text}{hwnd_text}."
+            return True, f"Comando de abertura de {name} enviado, mas ainda não consegui confirmar a janela."
+        if error_code == "AMBIGUOUS_APPLICATION":
+            options = result.get("options") or []
+            names = [str(item.get("display_name")) for item in options[:4] if item.get("display_name")]
+            question = " ou ".join(names) if names else "as opções disponíveis"
+            return True, f"Há mais de um aplicativo possível: {question}? Diga qual prefere."
+        if error_code in {LaunchErrorCode.EXECUTABLE_NOT_FOUND.value, LaunchErrorCode.UNKNOWN_APP.value}:
+            return True, (
+                f"Não encontrei nenhum aplicativo instalado correspondente a \"{target_query}\". "
+                "Nada foi executado."
+            )
+        return True, f"Falha ao abrir {target_query}: {result.get('message', 'erro desconhecido')}"
+
+    def _resolve_window_targets(self, query: str, hints: dict[str, list[str]] | None = None) -> list[WindowInfo]:
+        """Janelas visíveis do alvo consultado (registry + universal + título +
+        dicas de contexto para pronomes como 'ele'/'ela' — nyra-full §8/§18)."""
+        candidates: list[str] = []          # nomes de processo sem .exe
+        title_tokens: list[str] = []
+
+        if hints:
+            candidates.extend(name.casefold().removesuffix(".exe") for name in hints.get("process_names", []))
+            title_tokens.extend(token.casefold() for token in hints.get("title_tokens", []))
+
+        spec_id = self.resolve_registered_app_id(query)
+        if spec_id:
+            spec = self.spec(spec_id)
+            if spec:
+                candidates.extend(name.removesuffix(".exe") for name in spec.normalized_process_names())
+                title_tokens.extend(token.casefold() for token in spec.window_title_contains)
+
+        query_norm = normalize(query)
+        entry = self.universal.entries.get(query_norm)
+        if entry is None:
+            for candidate_entry in self.universal.entries.values():
+                alias_set = {normalize(alias.removeprefix("learned:")) for alias in candidate_entry.aliases}
+                if query_norm and query_norm in alias_set:
+                    entry = candidate_entry
+                    break
+        if entry is not None:
+            candidates.extend(self.universal.process_names_for(entry.app_id))
+            exe_stem = Path(entry.executable).stem.casefold() if entry.executable else ""
+            if exe_stem:
+                candidates.append(exe_stem)
+            title_tokens.append(entry.display_name.casefold())
+
+        plain_stem = normalize(Path(query.strip()).stem)
+        if plain_stem:
+            candidates.append(plain_stem)
+
+        candidates = [name for name in {name.casefold() for name in candidates if name}]
+        matches: list[WindowInfo] = []
+        seen_hwnd: set[int] = set()
+        for window in annotate_process_names(list_visible_windows()):
+            if window.hwnd in seen_hwnd or _is_protected_window(window):
+                continue
+            process_name = (window.process_name or "").casefold().removesuffix(".exe")
+            title = (window.title or "").casefold()
+            if process_name in candidates or any(token and token in title for token in title_tokens):
+                matches.append(window)
+                seen_hwnd.add(window.hwnd)
+        return matches
+
+    async def _universal_window_op(self, action_value: str, target_query: str,
+                                   *, hints: dict[str, list[str]] | None = None) -> tuple[bool, str]:
+        from app.desktop import window_manager as wm
+
+        windows = self._resolve_window_targets(target_query, hints=hints)
+        if not windows:
+            return True, (
+                f"Nenhuma janela visível de \"{target_query}\" neste momento — nada foi alterado."
+            )
+
+        affected = 0
+        details: list[str] = []
+        for window in windows[:5]:
+            ok = False
+            if action_value == "CLOSE_APP":
+                ok = wm.graceful_close(window.hwnd)
+            elif action_value == "MINIMIZE_APP":
+                ok = wm.minimize_window(window.hwnd)
+            elif action_value == "MAXIMIZE_APP":
+                ok = wm.maximize_window(window.hwnd)
+            elif action_value == "RESTORE_APP":
+                ok = wm.restore_window(window.hwnd)
+            elif action_value == "FOCUS_APP":
+                ok = wm.focus_window(window.hwnd)
+            elif action_value == "SWITCH_APP":
+                # Alternar: se estiver minimizada restaura; senão traz à frente.
+                if wm.window_state(window.hwnd)["iconic"]:
+                    ok = wm.restore_window(window.hwnd)
+                    ok = bool(wm.focus_window(window.hwnd)) or ok
+                else:
+                    ok = wm.focus_window(window.hwnd)
+            if ok:
+                affected += 1
+                details.append(f"hwnd={window.hwnd}")
+        verb = {
+            "CLOSE_APP": "fechada(s)",
+            "MINIMIZE_APP": "minimizada(s)",
+            "MAXIMIZE_APP": "maximizada(s)",
+            "RESTORE_APP": "restaurada(s)",
+            "FOCUS_APP": "trazida(s) para frente",
+            "SWITCH_APP": "colocada(s) em primeiro plano",
+        }.get(action_value, "alterada(s)")
+        # Um alvo explícito nunca herda o rótulo/path do último contexto.
+        # Isso evitava fechar corretamente o Notepad e responder "Downloads".
+        context = (self.last_controlled or {}) if hints else {}
+        label = context.get("display_name") or target_query
+        kind = context.get("kind", "app")
+        result_payload = operation_result(
+            app=label, action=f"universal_{action_value.casefold()}",
+            success=affected > 0, message="; ".join(details),
+            execution_success=affected > 0,
+            effect_verified=bool(affected),
+            verification_status="VERIFIED" if affected else "VERIFICATION_FAILED",
+            windows=[w.model_dump(mode="json") for w in windows[:5]],
+        )
+        self.last_operation_result = result_payload
+        if affected:
+            self._note_controlled(
+                label, kind=kind,
+                process_names=[(w.process_name or "").casefold().removesuffix(".exe") for w in windows if w.process_name],
+                title_tokens=[label.casefold()],
+                path=context.get("path"),
+            )
+            return True, (
+                f"{affected} janela(s) de {label} {verb} com verificação ({'; '.join(details)})."
+            )
+        return True, (
+            f"Encontrei {len(windows)} janela(s) de {label}, mas nenhuma ação foi confirmada pelo sistema."
         )

@@ -8,7 +8,7 @@ import re
 import time
 
 from app.avatar import AvatarController
-from app.character.context import is_standalone_greeting
+from app.character.context import is_simple_conversation, is_standalone_greeting
 from app.character.response_style import apply_response_style
 from app.core.turn import (
     PipelineFailure,
@@ -62,6 +62,8 @@ class RealtimeOrchestrator(ChatOrchestrator):
         self.remote_shell = None
         self.agent = None
         self.turns = turn_registry or TurnRegistry()
+        # Universal Operator (nyra-full): injetado pelo main quando disponível.
+        self.desktop = None
 
     async def converse(
         self,
@@ -91,6 +93,10 @@ class RealtimeOrchestrator(ChatOrchestrator):
             # durante telemetry/publish antes de _run_turn (§156).
             if self._active_task and not self._active_task.done() and self._active_task is not current_task:
                 await self.interrupt("new_user_turn")
+            # Invariante 4 (Apêndice PRO C): novo turno invalida a fila antiga.
+            dropped_stale = await self.speech_queue.purge_except(response_key)
+            if dropped_stale:
+                logger.info("stale_speech_purged", extra={"turn_id": turn_id, "dropped": dropped_stale})
             cancel_event = asyncio.Event()
             self._active_response_id, self._active_task, self._cancel_event = response_key, current_task, cancel_event
             self.telemetry.start(response_key, speech_end=speech_end or time.perf_counter())
@@ -168,70 +174,133 @@ class RealtimeOrchestrator(ChatOrchestrator):
         direct_response = "Oi. O que precisa?" if is_standalone_greeting(clean_text) else None
         resume_agent_run_id: str | None = None
         route_to_agent = bool(self.tools is not None and self.tools.should_route_to_agent(clean_text))
-        if self.agent is not None and re.fullmatch(r"(?i)\s*(?:nyra[, ]+)?(?:para|pare|cancela|cancelar|interrompe|interromper)\s*[.!]?\s*", clean_text):
-            cancelled = await self.agent.cancel_active("operator_voice_or_chat")
-            direct_response = "Interrompi o Agent Run ativo." if cancelled else "Não há Agent Run ativo para interromper."
-        if self.shell is not None:
-            approval = await self.shell.resolve_user_approval(clean_text)
-            if approval is not None:
-                route_to_agent = True
-                if approval.status == "GRANTED":
-                    resume_agent_run_id = approval.agent_run_id
-                elif self.agent is not None:
-                    await self.agent.approval_denied(approval.agent_run_id)
-                    direct_response = "A operação pendente foi cancelada e não será executada."
-                tool_name = "remote_shell" if approval.shell == "ssh" else "system_shell"
-                runtime_parts.append(
-                    "SHELL_APPROVAL_DECISION="
-                    + json.dumps(approval.public_dict(), ensure_ascii=False)
-                    + (f"\nContinue o mesmo agent_run e reenvie exatamente o mesmo {tool_name} com este approval_id." if approval.status == "GRANTED" else "\nA operação foi negada; não a execute.")
+        # UNIVERSAL OPERATOR fast path (nyra-full §25/§41 / nyra-7c §75):
+        # pipeline unificado das 7 camadas quando presente; sem ele, o bloco
+        # legacy abaixo mantém o comportamento anterior (compatibilidade).
+        computer = getattr(self, "computer", None)
+        universal_handled = False
+        if computer is not None and direct_response is None:
+            try:
+                handle_result = await computer.handle_user_request(
+                    clean_text,
+                    conversation_id=turn.conversation_id,
+                    turn_id=turn_id,
                 )
-            if route_to_agent:
-                shell_status = self.shell.status()
+                if handle_result.handled:
+                    direct_response = handle_result.reply
+                    route_to_agent = False  # ONE ACTION OWNER (§11/§34)
+                    universal_handled = True
+                    for metric_key, metric_value in handle_result.metrics.items():
+                        self.telemetry.measure(response_id, metric_key, metric_value)
+            except Exception as error:  # noqa: BLE001 — pipeline nunca derruba turno
+                logger.warning(
+                    "computer_pipeline_failed",
+                    extra={"turn_id": turn_id, "exception_type": type(error).__name__},
+                )
+        elif self.desktop is not None and direct_response is None:
+            from app.desktop.intents import parse_notepad_multistep, parse_universal_intent
+
+            mstep = parse_notepad_multistep(clean_text)
+            if mstep is not None:
+                from app.desktop.multistep import notepad_write_and_save
+
+                result = await notepad_write_and_save(
+                    self.desktop, mstep["text"], mstep["filename"]
+                )
+                direct_response = result["message"]
+                route_to_agent = False
+                universal_handled = True
+            else:
+                uintent = parse_universal_intent(clean_text)
+                if uintent is not None:
+                    handled, reply = await self.desktop.handle_universal(uintent, turn_id=turn_id)
+                    if handled:
+                        direct_response = reply
+                        route_to_agent = False  # ONE ACTION OWNER (§11)
+                        universal_handled = True
+        # FAST PATH: conversa trivial não atravessa percepção, sentinel, network
+        # nem seleção de contexto operacional — contexto casual mínimo + streaming.
+        fast_conversation = (
+            direct_response is None
+            and not route_to_agent
+            and is_simple_conversation(clean_text)
+        )
+        if universal_handled:
+            tool_context_ms = (time.perf_counter() - tools_started) * 1000
+            self.telemetry.measure(response_id, "tools_ms", tool_context_ms)
+        elif not fast_conversation:
+            if self.agent is not None and re.fullmatch(r"(?i)\s*(?:nyra[, ]+)?(?:para|pare|cancela|cancelar|interrompe|interromper)\s*[.!]?\s*", clean_text):
+                cancelled = await self.agent.cancel_active("operator_voice_or_chat")
+                direct_response = "Interrompi o Agent Run ativo." if cancelled else "Não há Agent Run ativo para interromper."
+            if self.shell is not None and turn.approval_capable:
+                approval = await self.shell.resolve_user_approval(clean_text)
+                if approval is not None:
+                    route_to_agent = True
+                    if approval.status == "GRANTED":
+                        resume_agent_run_id = approval.agent_run_id
+                    elif self.agent is not None:
+                        await self.agent.approval_denied(approval.agent_run_id)
+                        direct_response = "A operação pendente foi cancelada e não será executada."
+                    tool_name = "remote_shell" if approval.shell == "ssh" else "system_shell"
+                    runtime_parts.append(
+                        "SHELL_APPROVAL_DECISION="
+                        + json.dumps(approval.public_dict(), ensure_ascii=False)
+                        + (f"\nContinue o mesmo agent_run e reenvie exatamente o mesmo {tool_name} com este approval_id." if approval.status == "GRANTED" else "\nA operação foi negada; não a execute.")
+                    )
+                if route_to_agent:
+                    shell_status = self.shell.status()
+                    runtime_parts.append(
+                        "SYSTEM_SHELL_STATUS="
+                        + json.dumps(
+                            {
+                                "enabled": shell_status["enabled"],
+                                "default_shell": shell_status["default_shell"],
+                                "default_working_directory": shell_status["default_working_directory"],
+                                "max_calls_per_turn": shell_status["max_calls_per_turn"],
+                            },
+                            ensure_ascii=False,
+                        )
+                    )
+            if self.remote_shell is not None and route_to_agent:
+                remote_status = self.remote_shell.status()
                 runtime_parts.append(
-                    "SYSTEM_SHELL_STATUS="
+                    "TRUSTED_REMOTE_SHELL="
                     + json.dumps(
                         {
-                            "enabled": shell_status["enabled"],
-                            "default_shell": shell_status["default_shell"],
-                            "default_working_directory": shell_status["default_working_directory"],
-                            "max_calls_per_turn": shell_status["max_calls_per_turn"],
+                            "enabled": remote_status["enabled"],
+                            "registered_hosts": remote_status["hosts"],
+                            "rule": "remote_shell accepts only logical id/alias; never pass an IP, username, port or credential",
                         },
                         ensure_ascii=False,
                     )
                 )
-        if self.remote_shell is not None and route_to_agent:
-            remote_status = self.remote_shell.status()
-            runtime_parts.append(
-                "TRUSTED_REMOTE_SHELL="
-                + json.dumps(
-                    {
-                        "enabled": remote_status["enabled"],
-                        "registered_hosts": remote_status["hosts"],
-                        "rule": "remote_shell accepts only logical id/alias; never pass an IP, username, port or credential",
-                    },
-                    ensure_ascii=False,
+            if self.agent is not None and route_to_agent:
+                runtime_parts.append("AGENT_POLICY=" + json.dumps(self.agent.status(), ensure_ascii=False))
+            if self.sentinel_watch is not None:
+                sentinel_response = await self.sentinel_watch.explicit_command(clean_text)
+                if sentinel_response is not None:
+                    direct_response = sentinel_response
+            if self.network_watch is not None and re.search(r"\b(rede|internet|conex[aã]o|lat[eê]ncia|jitter|pacotes?|gateway|dns)\b", clean_text, re.IGNORECASE):
+                runtime_parts.append("NETWORK_WATCH=" + json.dumps(self.network_watch.status(), ensure_ascii=False))
+                if self.skills is not None and re.search(r"\b(verifica|verificar|confere|checa|como est[aá])\b", clean_text, re.IGNORECASE):
+                    try:
+                        result = await self.skills.execute("network_status", {})
+                        runtime_parts.append("SKILL_RESULT[network_status]=" + json.dumps(result.model_dump(mode="json"), ensure_ascii=False))
+                    except (KeyError, RuntimeError, ValueError):
+                        pass
+            # nyra-full §13: listar arquivos ≠ abrir pasta. Diretriz determinística
+            # para o domínio LLM (filesystem_list_files), sem sequestrar o pipeline.
+            elif re.search(r"\b(?:mostra|mostre|liste|lista|quais)\b.{0,60}\barquivos?\b",
+                           clean_text, re.IGNORECASE):
+                runtime_parts.append(
+                    "FILESYSTEM_INTENT=LIST_ONLY: o operador quer LISTAR arquivos; "
+                    "use filesystem_list_files. NÃO abra pasta, app ou janela para isso."
                 )
-            )
-        if self.agent is not None and route_to_agent:
-            runtime_parts.append("AGENT_POLICY=" + json.dumps(self.agent.status(), ensure_ascii=False))
-        if self.sentinel_watch is not None:
-            sentinel_response = await self.sentinel_watch.explicit_command(clean_text)
-            if sentinel_response is not None:
-                direct_response = sentinel_response
-        if self.network_watch is not None and re.search(r"\b(rede|internet|conex[aã]o|lat[eê]ncia|jitter|pacotes?|gateway|dns)\b", clean_text, re.IGNORECASE):
-            runtime_parts.append("NETWORK_WATCH=" + json.dumps(self.network_watch.status(), ensure_ascii=False))
-            if self.skills is not None and re.search(r"\b(verifica|verificar|confere|checa|como est[aá])\b", clean_text, re.IGNORECASE):
-                try:
-                    result = await self.skills.execute("network_status", {})
-                    runtime_parts.append("SKILL_RESULT[network_status]=" + json.dumps(result.model_dump(mode="json"), ensure_ascii=False))
-                except (KeyError, RuntimeError, ValueError):
-                    pass
-        if self.sentinel_watch is not None and re.search(r"\bsentinel\b", clean_text, re.IGNORECASE):
-            runtime_parts.append("UTAMO_SENTINEL=" + json.dumps(await self.sentinel_watch.summary(24), ensure_ascii=False))
-        selected_perception = self.context_selector.select(clean_text, self.perception.snapshot)
-        if selected_perception:
-            runtime_parts.append("LOCAL_PC_AWARENESS=" + selected_perception)
+            if self.sentinel_watch is not None and re.search(r"\bsentinel\b", clean_text, re.IGNORECASE):
+                runtime_parts.append("UTAMO_SENTINEL=" + json.dumps(await self.sentinel_watch.summary(24), ensure_ascii=False))
+            selected_perception = self.context_selector.select(clean_text, self.perception.snapshot)
+            if selected_perception:
+                runtime_parts.append("LOCAL_PC_AWARENESS=" + selected_perception)
         tool_context_ms = (time.perf_counter()-tools_started)*1000
         self.telemetry.measure(response_id, "tools_ms", tool_context_ms)
         context_started = time.perf_counter(); context_timings: dict[str,float] = {}
@@ -337,8 +406,9 @@ class RealtimeOrchestrator(ChatOrchestrator):
         self.telemetry.mark(response_id, "t_response_complete")
         metrics = self.telemetry.finish(response_id)
         logger.info(
-            "PERF request=%s stt=%sms memory=%sms context=%sms tools=%sms prompt_chars=%s ollama_connect=%sms ollama_first_token=%sms ollama_generation=%sms ollama_total=%sms tts_first_audio=%sms total=%sms",
+            "PERF request=%s model=%s stt=%sms memory=%sms context=%sms tools=%sms prompt_chars=%s ollama_connect=%sms ollama_first_token=%sms ollama_generation=%sms ollama_total=%sms tts_first_audio=%sms total=%sms",
             response_id,
+            getattr(self.llm, "active_model", None) or getattr(self.llm, "model", None) or self.llm.name,
             metrics.get("stt_total_ms"), metrics.get("memory_lookup_ms"), metrics.get("context_build_ms"),
             metrics.get("tools_ms"), metrics.get("prompt_characters"), metrics.get("ollama_connect_ms"),
             metrics.get("ollama_first_token_ms"), metrics.get("ollama_generation_ms"), metrics.get("ollama_total_ms"),
@@ -477,5 +547,6 @@ class RealtimeOrchestrator(ChatOrchestrator):
         return {
             "status": self.status.value, "response_id": self._active_response_id,
             "sentence_queue": self.speech_queue.pending,
+            "tts_counters": dict(getattr(self.speech_queue, "counters", {})),
             "turns": self.turns.snapshot(),
         }

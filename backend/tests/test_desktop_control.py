@@ -24,6 +24,7 @@ from app.tools.shell_approval import ShellApprovalGate
 
 
 def write_apps(path: Path, apps: list[dict]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump({"apps": apps}, allow_unicode=True), encoding="utf-8")
     return path
 
@@ -254,6 +255,103 @@ async def test_tool_rejects_unregistered_app_id(tmp_path):
 def test_settings_default_desktop_apps_path_exists():
     settings = Settings.from_sources(database_path="unused.db")
     assert settings.desktop_apps_path.name == "desktop_apps.yaml"
+
+
+@pytest.mark.asyncio
+async def test_shell_execute_inputs_fail_closed_for_code_shortcuts_and_uris(tmp_path, monkeypatch):
+    controller = make_controller(tmp_path, [])
+    invoked: list[str] = []
+
+    import ctypes
+
+    monkeypatch.setattr(
+        ctypes.windll.shell32,
+        "ShellExecuteW",
+        lambda _hwnd, _verb, target, _params, _cwd, _show: invoked.append(str(target)) or 33,
+    )
+    for suffix in (".exe", ".cmd", ".ps1", ".lnk", ".url", ".unknown"):
+        target = tmp_path / f"payload{suffix}"
+        target.write_bytes(b"not executed")
+        blocked = await controller.open_file(str(target))
+        assert blocked["error_code"] == "UNSAFE_FILE_TYPE"
+    for uri in (
+        "file:///C:/Windows/System32/notepad.exe",
+        r"shell:AppsFolder\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+        "ms-settings:network",
+        "https://user:password@example.test/",
+    ):
+        blocked = await controller.open_url(uri)
+        assert blocked["error_code"] == "INVALID_URL"
+    assert invoked == []
+
+    document = tmp_path / "notes.txt"
+    document.write_text("safe", encoding="utf-8")
+    opened_file = await controller.open_file(str(document))
+    opened_url = await controller.open_url("https://example.test/path")
+    assert opened_file["success"] is True
+    assert opened_url["success"] is True
+    assert invoked == [str(document.resolve()), "https://example.test/path"]
+
+
+@pytest.mark.asyncio
+async def test_classic_uia_actuators_require_exact_one_use_approval(tmp_path, monkeypatch):
+    gate = ShellApprovalGate()
+    controller = DesktopController(
+        EventBus(), apps_path=write_apps(tmp_path / "apps.yaml", []), approvals=gate,
+    )
+    monkeypatch.setattr(controller, "_window_hwnd_for_uia", lambda **_kwargs: 4242)
+
+    async def fake_uia_call(_fn, *_args, **_kwargs):
+        return {"success": True, "method": "test"}
+
+    monkeypatch.setattr(controller, "_uia_call", fake_uia_call)
+    pending = await controller.ui_click(name="Proceed", control_type="Button", hwnd=4242)
+    assert pending["error_code"] == "APPROVAL_REQUIRED"
+    gate.grant(pending["approval_id"], "test")
+    tampered = await controller.ui_click(
+        name="Delete", control_type="Button", hwnd=4242,
+        approval_id=pending["approval_id"],
+    )
+    assert tampered["error_code"] == "APPROVAL_INVALID"
+    exact = await controller.ui_click(
+        name="Proceed", control_type="Button", hwnd=4242,
+        approval_id=pending["approval_id"],
+    )
+    assert exact["success"] is True
+
+    text_pending = await controller.ui_set_text(
+        "approved value", name="Search", control_type="Edit", hwnd=4242,
+    )
+    assert text_pending["error_code"] == "APPROVAL_REQUIRED"
+    assert "approved value" not in gate.get(text_pending["approval_id"]).command
+    gate.grant(text_pending["approval_id"], "test")
+    text_tampered = await controller.ui_set_text(
+        "tampered value", name="Search", control_type="Edit", hwnd=4242,
+        approval_id=text_pending["approval_id"],
+    )
+    assert text_tampered["error_code"] == "APPROVAL_INVALID"
+    text_exact = await controller.ui_set_text(
+        "approved value", name="Search", control_type="Edit", hwnd=4242,
+        approval_id=text_pending["approval_id"],
+    )
+    assert text_exact["success"] is True
+
+    from app.desktop import window_manager
+
+    monkeypatch.setattr(window_manager, "focus_window", lambda _hwnd: True)
+    keys_pending = await controller.ui_send_keys("{win+r}cmd.exe{enter}", hwnd=4242)
+    assert keys_pending["error_code"] == "APPROVAL_REQUIRED"
+    gate.grant(keys_pending["approval_id"], "test")
+    keys_tampered = await controller.ui_send_keys(
+        "{win+r}powershell.exe{enter}", hwnd=4242,
+        approval_id=keys_pending["approval_id"],
+    )
+    assert keys_tampered["error_code"] == "APPROVAL_INVALID"
+    keys_exact = await controller.ui_send_keys(
+        "{win+r}cmd.exe{enter}", hwnd=4242,
+        approval_id=keys_pending["approval_id"],
+    )
+    assert keys_exact["success"] is True
 
 
 def test_dynamic_executable_target_expands_windows_environment(tmp_path, monkeypatch):

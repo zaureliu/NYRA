@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mouthFromAmplitude } from '../avatar/lipSync'
 import type { MouthState } from '../types'
-import { backendUrl } from '../runtime/backend'
+import { backendObjectUrl, releaseBackendObjectUrl } from '../runtime/backend'
 
 export function useAudioLipSync(outputDevice = 'default', onAmplitude?: (value: number) => void, volume = 1) {
   const [mouth, setMouth] = useState<MouthState>('mouth_closed')
@@ -9,6 +9,7 @@ export function useAudioLipSync(outputDevice = 'default', onAmplitude?: (value: 
   const contextRef = useRef<AudioContext | null>(null)
   const frameRef = useRef<number | null>(null)
   const endTimerRef = useRef<number | null>(null)
+  const objectUrlRef = useRef<string | null>(null)
   const smoothedRef = useRef(0)
   const amplitudeCallback = useRef(onAmplitude)
   amplitudeCallback.current = onAmplitude
@@ -16,6 +17,8 @@ export function useAudioLipSync(outputDevice = 'default', onAmplitude?: (value: 
   const stop = useCallback(() => {
     audioRef.current?.pause()
     audioRef.current = null
+    if (objectUrlRef.current) releaseBackendObjectUrl(objectUrlRef.current)
+    objectUrlRef.current = null
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
     frameRef.current = null
     if (endTimerRef.current !== null) window.clearTimeout(endTimerRef.current)
@@ -29,6 +32,7 @@ export function useAudioLipSync(outputDevice = 'default', onAmplitude?: (value: 
 
   useEffect(() => () => {
     audioRef.current?.pause()
+    if (objectUrlRef.current) releaseBackendObjectUrl(objectUrlRef.current)
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
     if (endTimerRef.current !== null) window.clearTimeout(endTimerRef.current)
     if (contextRef.current && contextRef.current.state !== 'closed') void contextRef.current.close()
@@ -39,7 +43,10 @@ export function useAudioLipSync(outputDevice = 'default', onAmplitude?: (value: 
     audioRef.current?.pause()
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
     if (contextRef.current && contextRef.current.state !== 'closed') void contextRef.current.close()
-    const audio = new Audio(backendUrl(url))
+    if (objectUrlRef.current) releaseBackendObjectUrl(objectUrlRef.current)
+    const sourceUrl = await backendObjectUrl(url)
+    objectUrlRef.current = sourceUrl
+    const audio = new Audio(sourceUrl)
     audio.volume = Math.max(0, Math.min(1, volume))
     audio.crossOrigin = 'anonymous'
     if (outputDevice !== 'default' && 'setSinkId' in audio) {
@@ -77,6 +84,8 @@ export function useAudioLipSync(outputDevice = 'default', onAmplitude?: (value: 
       amplitudeCallback.current?.(0)
       void context.close()
       contextRef.current = null
+      releaseBackendObjectUrl(sourceUrl)
+      if (objectUrlRef.current === sourceUrl) objectUrlRef.current = null
       onEnd()
     }
     audio.onended = finish

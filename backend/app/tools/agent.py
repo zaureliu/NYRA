@@ -64,8 +64,19 @@ class ToolAgentLoop:
         )
 
     async def run(self, messages: list[LLMMessage], runtime: AgentLoopRuntime | None = None, *, turn_id: str | None = None) -> str:
+        from app.tools.registry import classify_domain
+
         working = list(messages)
-        schemas = self.registry.llm_tools()
+        user_text = next(
+            (message.content for message in reversed(messages) if message.role == "user"),
+            "",
+        )
+        domain = classify_domain(user_text or "")
+        try:
+            schemas = self.registry.llm_tools(domain)
+        except TypeError:
+            # Registries alternativos (testes/fakes) podem expor llm_tools() sem domínio.
+            schemas = self.registry.llm_tools()
         ledger = GroundingLedger(turn_id=turn_id)
         shell_calls = 0
         execution_results: list[ToolResult] = []
@@ -78,6 +89,7 @@ class ToolAgentLoop:
         remote_observation_retries = 0
         local_backend_retries = 0
         repeats: dict[tuple[str, str], int] = {}
+        no_tool_nudges = 0
         max_rounds = (runtime.max_steps + 2) if runtime else (self.max_shell_calls + 6)
         operator_directive = self._operator_directive(messages)
         if operator_directive:
@@ -128,6 +140,26 @@ class ToolAgentLoop:
                 content = response.content.strip()
                 if not content:
                     raise RuntimeError("LLM completed the tool loop without a response")
+                if (
+                    schemas
+                    and not execution_results
+                    and not force_final
+                    and no_tool_nudges < 2
+                    and len(content) > 30
+                ):
+                    # nyra-full §26: tarefa multi-step exige tools nativas; prosa
+                    # sem nenhuma observação ainda = lembrete determinístico.
+                    no_tool_nudges += 1
+                    working.append(LLMMessage(
+                        role="system",
+                        content=(
+                            "TOOL CALL REQUIRED: esta tarefa só é concluída chamando as tools nativas "
+                            "disponíveis (ex.: desktop_open_application → ui_inspect → ui_set_text → "
+                            "ui_send_keys {ctrl+s} → filesystem/verificação). Responda SOMENTE com a "
+                            "próxima tool call, sem texto."
+                        ),
+                    ))
+                    continue
                 if self._looks_like_textual_tool_call(content):
                     if not force_final and textual_tool_retries < 2:
                         textual_tool_retries += 1
@@ -298,7 +330,11 @@ class ToolAgentLoop:
                     if runtime:
                         runtime.stop_reason = ShellErrorCode.SHELL_CALL_LIMIT.value
                     force_final = True
-                elif runtime and runtime.read_only and risk != RiskLevel.READ_ONLY:
+                elif runtime and runtime.read_only and risk not in (RiskLevel.READ_ONLY, RiskLevel.LOW_RISK):
+                    # Semântica corrigida: read_only bloqueia mutações reais
+                    # (ELEVATED+), mas ações LOW_RISK autorizadas pela política —
+                    # como desktop_launch verificado — seguem o fluxo normal de
+                    # locks, grounding e approval.
                     result = self._blocked(name, risk, "AGENT_READ_ONLY", "O Agent Loop está em modo somente leitura; alteração bloqueada.")
                 else:
                     if name == "system_shell":
@@ -611,13 +647,13 @@ class ToolAgentLoop:
     @staticmethod
     def _looks_like_textual_tool_call(content: str) -> bool:
         return bool(re.search(
-            r"(?is)<\s*/?tool_call\b|(?:```(?:json)?\s*)?\{\s*[\"']name[\"']\s*:\s*[\"'](?:system_shell|remote_shell)[\"']",
+            r"(?is)<\s*/?tool_call\b|(?:```(?:json|tool_call)?\s*)?\{\s*[\"']name[\"']\s*:\s*[\"'][a-z_][a-z_0-9]*[\"']",
             content,
         ))
 
     async def _execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         try:
-            return await self.registry.execute(name, arguments)
+            return await self.registry.execute(name, arguments, exposure="llm")
         except Exception as exc:
             return ToolResult(
                 tool=name, risk=RiskLevel.READ_ONLY, ok=False,

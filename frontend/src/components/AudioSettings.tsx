@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AudioSettingsValue } from '../hooks/useAudioSettings'
 import type { MicrophoneAvailability, MicrophonePermission } from '../hooks/audioDevices'
-import { backendUrl } from '../runtime/backend'
+import { backendObjectUrl, releaseBackendObjectUrl } from '../runtime/backend'
 import { MicrophoneTest } from './MicrophoneTest'
 
 interface ConversationStatus {
@@ -44,7 +44,11 @@ export function AudioSettings({ value, devices, microphoneAvailability, micropho
       const response = await fetch('/api/audio/test-voice', { method: 'POST' })
       const result = await response.json()
       if (!response.ok) throw new Error(result.detail ?? 'Falha no teste de voz')
-      const audio = new Audio(backendUrl(result.audio_url)); audio.volume = draft.volume
+      const sourceUrl = await backendObjectUrl(result.audio_url)
+      const audio = new Audio(sourceUrl); audio.volume = draft.volume
+      const release = () => releaseBackendObjectUrl(sourceUrl)
+      audio.addEventListener('ended', release, { once: true })
+      audio.addEventListener('error', release, { once: true })
       if (draft.speaker !== 'default' && 'setSinkId' in audio) await (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(draft.speaker)
       await audio.play(); setMessage(`${result.provider} · primeiro arquivo em ${result.synthesis_ms} ms`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha no teste de voz') }

@@ -174,16 +174,21 @@ class OperatorTaskManager:
         if not steps or len(steps) > self.max_steps:
             raise TaskValidationError("STEP_LIMIT",
                                       f"Entre 1 e {self.max_steps} steps (§152 bounds).")
-        known_tools = {descriptor["name"] if isinstance(descriptor, dict) else descriptor.name
-                       for descriptor in self.registry.descriptions()}
+        known_tools = {
+            descriptor["name"]
+            for descriptor in self.registry.descriptions()
+            if descriptor.get("enabled_for_llm", True) is True
+        }
         parsed_steps: list[TaskStep] = []
         for raw in steps:
             tool = str(raw.get("tool") or "").strip()
             if not tool:
                 raise TaskValidationError("INVALID_STEP", "Cada step precisa de 'tool'.")
-            if known_tools and tool not in known_tools:
-                raise TaskValidationError("UNKNOWN_TOOL",
-                                          f"Tool '{tool}' não existe no registry.")
+            if tool not in known_tools:
+                raise TaskValidationError(
+                    "TOOL_NOT_EXPOSED",
+                    f"Tool '{tool}' não está autorizada para composição por tarefa.",
+                )
             step_id = str(raw.get("step_id") or f"step_{len(parsed_steps)+1}")
             parsed_steps.append(TaskStep(
                 step_id=step_id,
@@ -404,7 +409,7 @@ class OperatorTaskManager:
                     pass
         started = time.perf_counter()
         try:
-            result = await self.registry.execute(step.tool, params)
+            result = await self.registry.execute(step.tool, params, exposure="llm")
             ok = bool(result.ok)
             data = result.data
             risk_value = getattr(result.risk, "value", str(result.risk))
@@ -467,7 +472,7 @@ class OperatorTaskManager:
             return False
         probe_params = dict((step.verification or {}).get("params") or {})
         try:
-            result = await self.registry.execute(probe_tool, probe_params)
+            result = await self.registry.execute(probe_tool, probe_params, exposure="llm")
             output = json.dumps(result.data, ensure_ascii=False, default=str)
             expect = str((step.verification or {}).get("expect_contains") or "")
             return bool(result.ok) and (not expect or expect.casefold() in output.casefold())

@@ -1,6 +1,6 @@
 # Bíblia visual — NYRA Avatar V2 (ativa)
 
-A fonte de verdade visual atual é `E:\nyra-v2\nyra_master.png`; a master integrada é `frontend/src/assets/nyra-v2/master/nyra-avatar-master.png`. NYRA mantém rosto oval delicado, olhos grandes azul-turquesa, cabelo longo loiro-mel com franja dividida, acabamento anime premium, aparência adulta e presença calma/acolhedora. A roupa oficial é contemporary Japanese feminine casual: blusa creme de gola delicada com cardigan vinho/ameixa. Headphones over-ear graphite/dark navy, com acentos mínimos violeta/ciano, ficam fisicamente encaixados no cabelo e nas orelhas.
+A fonte de verdade visual versionada é `frontend/src/assets/nyra-v2/master/nyra-avatar-master.png`. NYRA mantém rosto oval delicado, olhos grandes azul-turquesa, cabelo longo loiro-mel com franja dividida, acabamento anime premium, aparência adulta e presença calma/acolhedora. A roupa oficial é contemporary Japanese feminine casual: blusa creme de gola delicada com cardigan vinho/ameixa. Headphones over-ear graphite/dark navy, com acentos mínimos violeta/ciano, ficam fisicamente encaixados no cabelo e nas orelhas.
 
 A arte oficial é chest-up, RGBA transparente e usa um único canvas `1086×1448`. Estados de eyes/mouth nunca regeneram rosto, cabelo, roupa ou headphones. Toda variação deriva da master interna e conserva os landmarks do `frontend/public/avatar/nyra_v2/avatar-manifest.json`.
 

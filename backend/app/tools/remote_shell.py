@@ -17,6 +17,7 @@ from app.network_aliases import NetworkAliasRegistry, NetworkHostAlias
 from app.tools.redaction import redact_secrets
 from app.tools.grounding import VerificationStatus
 from app.tools.remote_executor import OpenSSHExecutor, RawRemoteResult
+from app.tools.password_ssh_executor import AsyncSSHPasswordExecutor
 from app.tools.remote_history import RemoteShellHistory
 from app.tools.remote_models import (
     RemoteExecutionResult,
@@ -41,6 +42,7 @@ class RemoteShellService:
         *,
         hosts: NetworkAliasRegistry | None = None,
         executor: OpenSSHExecutor | None = None,
+        password_executor: AsyncSSHPasswordExecutor | None = None,
         policy: RemoteCommandPolicy | None = None,
         history: RemoteShellHistory | None = None,
     ) -> None:
@@ -49,6 +51,10 @@ class RemoteShellService:
         self.approvals = approvals
         self.hosts = hosts or NetworkAliasRegistry(settings.trusted_hosts_path)
         self.executor = executor or OpenSSHExecutor()
+        # Transporte programático (asyncssh) usado quando há senha no Broker
+        # e nenhuma chave privada cadastrada — ssh.exe BatchMode jamais consegue
+        # consumir senha (causa do AUTH_FAILED histórico da integração OpenWrt).
+        self.password_executor = password_executor or AsyncSSHPasswordExecutor()
         self.policy = policy or RemoteCommandPolicy()
         self.history = history or RemoteShellHistory(settings.database_path)
 
@@ -139,12 +145,18 @@ class RemoteShellService:
 
         known_hosts = remote.resolve_path(remote.known_hosts_path)
         private_key = remote.resolve_path(remote.private_key_path)
+        password_username, password_auth = self._openwrt_password_credentials(logical)
+        # Transporte programático por senha (Credential Broker → asyncssh):
+        # endereço/porta SEMPRE do Trusted Host Registry; usuário/senha da
+        # integração OpenWrt. Chave privada configurada mantém prioridade.
+        use_password_transport = bool(password_auth) and private_key is None
         if known_hosts is None or not self._is_file(known_hosts):
             return self._error(RemoteShellErrorCode.SSH_KNOWN_HOSTS_MISSING, "Arquivo known_hosts cadastrado não está disponível; a conexão foi bloqueada.", logical.id, logical.address, safe_command, assessment, started, safe_reason, logical, agent_run_id=agent_run_id)
-        if private_key is not None and not self._is_file(private_key):
-            return self._error(RemoteShellErrorCode.SSH_CREDENTIALS_MISSING, "A chave privada cadastrada não está disponível.", logical.id, logical.address, safe_command, assessment, started, safe_reason, logical, agent_run_id=agent_run_id)
-        if private_key is None and not remote.use_ssh_agent:
-            return self._error(RemoteShellErrorCode.SSH_CREDENTIALS_MISSING, "O host não possui chave privada nem SSH agent autorizado.", logical.id, logical.address, safe_command, assessment, started, safe_reason, logical, agent_run_id=agent_run_id)
+        if not use_password_transport:
+            if private_key is not None and not self._is_file(private_key):
+                return self._error(RemoteShellErrorCode.SSH_CREDENTIALS_MISSING, "A chave privada cadastrada não está disponível.", logical.id, logical.address, safe_command, assessment, started, safe_reason, logical, agent_run_id=agent_run_id)
+            if private_key is None and not remote.use_ssh_agent and not password_auth:
+                return self._error(RemoteShellErrorCode.SSH_CREDENTIALS_MISSING, "O host não possui chave privada nem SSH agent autorizado.", logical.id, logical.address, safe_command, assessment, started, safe_reason, logical, agent_run_id=agent_run_id)
 
         approval_required = assessment.risk_level in {
             ShellRiskLevel.ELEVATED, ShellRiskLevel.DESTRUCTIVE, ShellRiskLevel.CRITICAL,
@@ -189,13 +201,26 @@ class RemoteShellService:
             command=safe_command, risk_level=assessment.risk_level.value,
             turn_id=turn_id,
         )
-        raw = await self.executor.execute(
-            logical, remote_command,
-            connect_timeout_seconds=self.settings.ssh_connect_timeout_seconds,
-            command_timeout_seconds=timeout,
-            known_hosts_path=known_hosts,
-            private_key_path=private_key,
-        )
+        if use_password_transport:
+            raw = await self._execute_with_password(
+                logical, password_username, password_auth, remote_command, timeout, known_hosts)
+        else:
+            raw = await self.executor.execute(
+                logical, remote_command,
+                connect_timeout_seconds=self.settings.ssh_connect_timeout_seconds,
+                command_timeout_seconds=timeout,
+                known_hosts_path=known_hosts,
+                private_key_path=private_key,
+            )
+            probe = self._result_from_raw(
+                raw, logical, safe_command, working_directory, assessment, safe_reason,
+                execution_id, agent_run_id, approval_required, approval_granted,
+            )
+            # Key auth preservada: se a chave existente for recusada e houver
+            # senha no Broker, tenta o transporte programático antes de falhar.
+            if probe.error_code == RemoteShellErrorCode.SSH_AUTHENTICATION_FAILED and password_auth:
+                raw = await self._execute_with_password(
+                    logical, password_username, password_auth, remote_command, timeout, known_hosts)
         result = self._result_from_raw(
             raw, logical, safe_command, working_directory, assessment, safe_reason,
             execution_id, agent_run_id, approval_required, approval_granted,
@@ -216,6 +241,52 @@ class RemoteShellService:
             approval_required=approval_required, approval_granted=approval_granted,
         )
         return result.model_dump(mode="json")
+
+    def _openwrt_password_credentials(self, logical: NetworkHostAlias) -> tuple[str, str]:
+        """(username, password) do transporte programático — vazios se não aplicável.
+
+        A senha vem EXCLUSIVAMENTE do Credential Broker (credential id
+        ``openwrt_ssh_password``) e nunca é logada ou devolvida ao frontend.
+        Escopo: somente hosts platform=openwrt do Trusted Host Registry.
+        """
+        if logical.remote_shell.platform != "openwrt":
+            return "", ""
+        try:
+            # Import tardio: evita ciclo (integrations.openwrt.config importa
+            # homelab.adapters.base → tools.remote_shell).
+            from app.integrations.openwrt.config import load_config, resolve_password
+
+            config = load_config(self.settings)
+            password = resolve_password(self.settings)
+        except Exception as error:  # noqa: BLE001 - indisponibilidade nunca vaza segredo
+            logger.warning(
+                "remote_password_transport_unavailable type=%s", type(error).__name__)
+            return "", ""
+        if not password:
+            return "", ""
+        username = str(config.get("username") or "").strip() or logical.remote_shell.username
+        return username, password
+
+    async def _execute_with_password(
+        self,
+        logical: NetworkHostAlias,
+        username: str,
+        password: str,
+        remote_command: str,
+        timeout_seconds: int,
+        known_hosts_path: Path,
+    ) -> RawRemoteResult:
+        return await self.password_executor.execute(
+            host_id=logical.id,
+            address=logical.address,
+            port=logical.remote_shell.port,
+            username=username,
+            password=password,
+            command=remote_command,
+            connect_timeout_seconds=self.settings.ssh_connect_timeout_seconds,
+            command_timeout_seconds=timeout_seconds,
+            known_hosts_path=known_hosts_path,
+        )
 
     def _assess(self, host: NetworkHostAlias, command: str) -> RemotePolicyAssessment:
         actions = {item.strip() for item in self.settings.agent_auto_remediation_actions.split(",") if item.strip()}

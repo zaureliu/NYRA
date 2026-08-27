@@ -85,7 +85,10 @@ async def test_job_reattach_marks_orphan_failed(tmp_path):
 # ------------------------------------------------------------------ Parte H/X
 @pytest.mark.asyncio
 async def test_recovery_file_backup_and_rollback(tmp_path):
-    engine = RecoveryEngine(database_path=tmp_path / "rec.db")
+    from app.tools.shell_approval import ShellApprovalGate
+
+    gate = ShellApprovalGate()
+    engine = RecoveryEngine(approvals=gate, database_path=tmp_path / "rec.db")
     await engine.initialize()
     target = tmp_path / "config-teste.yaml"  # §296: nunca config real
     target.write_text("valor: original\n", encoding="utf-8")
@@ -98,9 +101,9 @@ async def test_recovery_file_backup_and_rollback(tmp_path):
     engine.mark_written(transaction_id, None or __import__("hashlib").sha256(
         target.read_bytes()).hexdigest())
 
-    rolled = await engine.rollback(transaction_id)  # approvals=None → auto? Não: sem approval_id pede gate... gate None => APPROVAL_REQUIRED
-    if rolled.get("error_code") == "APPROVAL_REQUIRED":
-        rolled = await engine.rollback(transaction_id, auto=True)  # §165 policy autorizada no step
+    pending = await engine.rollback(transaction_id)
+    gate.grant(pending["approval_id"], "test")
+    rolled = await engine.rollback(transaction_id, approval_id=pending["approval_id"])
     assert rolled["success"] is True, rolled
     assert rolled["state"] == "RECOVERED"
     assert target.read_text(encoding="utf-8") == "valor: original\n"  # §166 verify
@@ -109,7 +112,10 @@ async def test_recovery_file_backup_and_rollback(tmp_path):
 @pytest.mark.asyncio
 async def test_recovery_refuses_blind_rollback_after_user_edit(tmp_path):
     """§167: mudança do usuário depois do snapshot bloqueia rollback cego."""
-    engine = RecoveryEngine(database_path=tmp_path / "rec.db")
+    from app.tools.shell_approval import ShellApprovalGate
+
+    gate = ShellApprovalGate()
+    engine = RecoveryEngine(approvals=gate, database_path=tmp_path / "rec.db")
     await engine.initialize()
     target = tmp_path / "cfg.txt"
     target.write_text("original", encoding="utf-8")
@@ -120,10 +126,53 @@ async def test_recovery_refuses_blind_rollback_after_user_edit(tmp_path):
     engine.mark_written(transaction_id, __import__("hashlib").sha256(b"escrito-pela-acao").hexdigest())
     # ...mas o USUÁRIO alterou depois.
     target.write_text("edicao-do-usuario", encoding="utf-8")
-    rolled = await engine.rollback(transaction_id, auto=True)
+    pending = await engine.rollback(transaction_id, auto=True)
+    assert pending["auto_rollback_blocked"] is True
+    gate.grant(pending["approval_id"], "test")
+    rolled = await engine.rollback(transaction_id, approval_id=pending["approval_id"])
     assert rolled["success"] is False
     assert rolled["state"] == RecoveryState.RECOVERY_REQUIRED.value
     assert target.read_text(encoding="utf-8") == "edicao-do-usuario"
+
+
+@pytest.mark.asyncio
+async def test_recovery_consumes_exact_one_use_approval(tmp_path):
+    from app.tools.shell_approval import ShellApprovalGate
+
+    gate = ShellApprovalGate()
+    engine = RecoveryEngine(approvals=gate, database_path=tmp_path / "approved-rec.db")
+    await engine.initialize()
+    target = tmp_path / "approved.txt"
+    target.write_text("original", encoding="utf-8")
+    prepared = await engine.prepare_file_backup(str(target), action="rollback aprovado")
+    target.write_text("changed", encoding="utf-8")
+    engine.mark_written(
+        prepared["transaction_id"],
+        __import__("hashlib").sha256(b"changed").hexdigest(),
+    )
+
+    pending = await engine.rollback(prepared["transaction_id"])
+    assert pending["error_code"] == "APPROVAL_REQUIRED"
+    other = tmp_path / "other-approved.txt"
+    other.write_text("other-original", encoding="utf-8")
+    other_prepared = await engine.prepare_file_backup(
+        str(other), action="rollback aprovado",
+    )
+    other.write_text("other-changed", encoding="utf-8")
+    engine.mark_written(
+        other_prepared["transaction_id"],
+        __import__("hashlib").sha256(b"other-changed").hexdigest(),
+    )
+    gate.grant(pending["approval_id"], "test")
+    wrong = await engine.rollback(
+        other_prepared["transaction_id"], approval_id=pending["approval_id"],
+    )
+    assert wrong["error_code"] == "APPROVAL_INVALID"
+    rolled = await engine.rollback(
+        prepared["transaction_id"], approval_id=pending["approval_id"],
+    )
+    assert rolled["success"] is True
+    assert target.read_text(encoding="utf-8") == "original"
 
 
 # ------------------------------------------------------------------ Parte I/Y

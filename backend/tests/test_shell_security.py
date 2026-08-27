@@ -44,6 +44,26 @@ def test_pipeline_redirection_aliases_and_unknown_executable_are_not_naively_saf
     assert classifier.classify("some-unknown-tool --do-something").level == ShellRiskLevel.ELEVATED
 
 
+@pytest.mark.parametrize(
+    ("command", "shell"),
+    [
+        ('Write-Output "$(& \'cmd.exe\' /c \'whoami\')"', "powershell"),
+        ("Write-Output ([System.IO.File]::WriteAllText('x','y'))", "powershell"),
+        ("Write-Output (Start-Process calc.exe)", "powershell"),
+        ("Write-Output ([System.IO.FileInfo]'x').'Delete'()", "powershell"),
+        ('echo "$(/usr/bin/id)"', "bash"),
+        ("echo `id`", "bash"),
+        ("cat <(id)", "bash"),
+    ],
+)
+def test_nested_shell_execution_is_never_read_only(command: str, shell: str):
+    assert ShellRiskClassifier().classify(command, shell).level in {
+        ShellRiskLevel.ELEVATED,
+        ShellRiskLevel.DESTRUCTIVE,
+        ShellRiskLevel.CRITICAL,
+    }
+
+
 class RecordingExecutor(ShellExecutor):
     def __init__(self) -> None:
         self.commands: list[str] = []

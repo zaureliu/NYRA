@@ -33,6 +33,9 @@ def _registry_with_fs(tmp_path):
         return {"success": True, "content": text[:2000], "exists": True,
                 "effect_verified": True, "verification_status": "VERIFIED"}
 
+    async def hidden_sink(**_):
+        return {"success": True}
+
     class _Model:
         pass
 
@@ -44,6 +47,9 @@ def _registry_with_fs(tmp_path):
 
     class ReadInput(BaseModel):
         path: str
+
+    class HiddenInput(BaseModel):
+        pass
 
     from app.tools.models import RiskLevel
     from app.tools.registry import ToolDefinition
@@ -57,6 +63,10 @@ def _registry_with_fs(tmp_path):
     registry.register(ToolDefinition("fs_append_test", "anexa", RiskLevel.LOW_RISK,
                                      WriteInput,
                                      lambda path, content="", **_: fs_append(path, content)))
+    registry.register(ToolDefinition(
+        "job_start_hidden_test", "sink interno", RiskLevel.ELEVATED,
+        HiddenInput, hidden_sink, llm_enabled=False,
+    ))
     return registry
 
 
@@ -162,6 +172,27 @@ async def test_task_cancel_stops_work(tmp_path):
     assert cancelled["task"]["state"] == "CANCELLED"
 
 
+@pytest.mark.asyncio
+async def test_hidden_tool_is_blocked_from_task_api_and_llm_exposure(tmp_path):
+    from app.operator.tasks import OperatorTaskManager, TaskValidationError
+
+    registry = _registry_with_fs(tmp_path)
+    manager = OperatorTaskManager(registry, database_path=tmp_path / "hidden.db")
+    await manager.initialize()
+    with pytest.raises(TaskValidationError) as error:
+        await manager.create_task("não executar sink interno", [
+            {"step_id": "s1", "tool": "job_start_hidden_test"},
+        ])
+    assert error.value.code == "TOOL_NOT_EXPOSED"
+
+    internal = await registry.execute("job_start_hidden_test", {}, exposure="internal")
+    assert internal.ok is True
+    with pytest.raises(PermissionError):
+        await registry.execute("job_start_hidden_test", {}, exposure="api")
+    with pytest.raises(PermissionError):
+        await registry.execute("job_start_hidden_test", {}, exposure="llm")
+
+
 # ------------------------------------------------------------------ Parte J/Z
 @pytest.mark.asyncio
 async def test_workflow_create_validate_version_and_run(tmp_path):
@@ -235,3 +266,20 @@ async def test_workflow_missing_parameter_fails_closed(tmp_path):
     run = await engine.run("wf_param_obrigatorio")  # sem 'destino'
     assert run["success"] is False
     assert run["error_code"] == "MISSING_PARAMETERS"
+
+
+@pytest.mark.asyncio
+async def test_hidden_tool_is_rejected_when_workflow_is_created(tmp_path):
+    from app.operator.workflows import WorkflowDefinition, WorkflowEngine, WorkflowStep
+
+    registry = _registry_with_fs(tmp_path)
+    engine = WorkflowEngine(registry, store_path=tmp_path / "hidden-wf.json")
+    definition = WorkflowDefinition(
+        workflow_id="wf_hidden_sink",
+        name="sink interno proibido",
+        steps=[WorkflowStep(step_id="s1", tool="job_start_hidden_test")],
+    )
+    result = await engine.create(definition)
+    assert result["success"] is False
+    assert result["error_code"] == "VALIDATION_FAILED"
+    assert "job_start_hidden_test" in " ".join(result["problems"])

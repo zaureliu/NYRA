@@ -29,7 +29,7 @@ function formFrom(status: ProxmoxConfigStatus | null): FormState {
   return {
     enabled: status?.enabled ?? false,
     url: status?.url ?? '',
-    verify_ssl: status?.verify_ssl ?? true,
+    verify_ssl: true,
     preferred_node: status?.preferred_node ?? '',
     timeout_seconds: status?.timeout_seconds ?? 8,
     token_id: '',
@@ -47,6 +47,7 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
   const [testResult, setTestResult] = useState<string>('')
   const [inventory, setInventory] = useState<ProxmoxInventory | null>(null)
   const [pendingApproval, setPendingApproval] = useState<{ approvalId: string; action: GuestAction; reference: string } | null>(null)
+  const [pendingDisconnect, setPendingDisconnect] = useState<string | null>(null)
   const [diagnosticsBody, setDiagnosticsBody] = useState<Record<string, unknown> | null>(null)
 
   const editing = form ?? formFrom(status)
@@ -54,10 +55,10 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
   /** Persiste o formulário (prompt11_2 §11): UI → validação → Credential
    * Broker → persistência → reload do connector → refresh. Campos vazios
    * NUNCA sobrescrevem credencial existente no broker. */
-  const persistForm = async (): Promise<boolean> => {
+  const persistForm = async (): Promise<'ok' | 'reset' | false> => {
     setActionError('')
     try {
-      await apiSend('/api/proxmox/config', 'PUT', {
+      const saved = await apiSend<{ credentials?: { credentials_reset?: boolean } }>('/api/proxmox/config', 'PUT', {
         enabled: editing.enabled,
         url: editing.url.trim(),
         verify_ssl: editing.verify_ssl,
@@ -69,7 +70,7 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
       })
       setForm(null)
       await refresh()
-      return true
+      return saved.credentials?.credentials_reset ? 'reset' : 'ok'
     } catch (issue) {
       setActionError(issue instanceof Error ? issue.message : String(issue))
       return false
@@ -79,7 +80,12 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
   const save = async () => {
     setBusy('save')
     try {
-      if (await persistForm()) onNotify('Configuração Proxmox salva.')
+      const persisted = await persistForm()
+      if (persisted === 'reset') {
+        onNotify('Configuração salva. O endpoint mudou; forneça um novo par de API Token.')
+      } else if (persisted) {
+        onNotify('Configuração Proxmox salva.')
+      }
     } finally {
       setBusy('')
     }
@@ -118,17 +124,37 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
     }
   }
 
-  const disconnect = async () => {
+  const disconnect = async (approvalId?: string) => {
     setBusy('disconnect')
     setActionError('')
     try {
-      await apiSend('/api/proxmox/disconnect', 'POST')
-      onNotify('Credenciais removidas do broker.')
+      const response = await apiSend<HAActionResponse>(
+        '/api/proxmox/disconnect', 'POST', approvalId ? { approval_id: approvalId } : {},
+      )
+      if (response.approval_required && response.approval_id && !approvalId) {
+        setPendingDisconnect(response.approval_id)
+        onNotify('A desconexão exige aprovação destrutiva de uso único.')
+        return
+      }
+      setPendingDisconnect(null)
+      onNotify('Credenciais removidas e fallback legado bloqueado.')
       refresh()
     } catch (issue) {
       setActionError(issue instanceof Error ? issue.message : String(issue))
     } finally {
       setBusy('')
+    }
+  }
+
+  const confirmDisconnect = async (approved: boolean) => {
+    if (!pendingDisconnect) return
+    const approvalId = pendingDisconnect
+    if (!approved) setPendingDisconnect(null)
+    try {
+      await apiSend(`/api/shell/approvals/${encodeURIComponent(approvalId)}`, 'POST', { approved })
+      if (approved) await disconnect(approvalId)
+    } catch (issue) {
+      setActionError(issue instanceof Error ? issue.message : String(issue))
     }
   }
 
@@ -301,8 +327,11 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
               value={editing.token_secret} style={inputStyle}
               onChange={(event) => setForm({ ...editing, token_secret: event.target.value })} />
           </label>
-          <Toggle checked={editing.verify_ssl} label="TLS Verification"
-            onChange={(value) => setForm({ ...editing, verify_ssl: value })} />
+          <Toggle checked label="TLS Verification (obrigatória)" disabled
+            onChange={() => undefined} />
+          <span className="ops-hint">
+            Para certificados internos, instale a CA do Proxmox no repositório de confiança do host NYRA.
+          </span>
           <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
             Preferred Node
             <input type="text" value={editing.preferred_node} style={inputStyle}
@@ -391,6 +420,18 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
             <ActionButton small variant="danger" onClick={() => void confirmApproval(false)}>
               Recusar
             </ActionButton>
+          </div>
+        </div>
+      )}
+
+      {pendingDisconnect && (
+        <div className="ops-alert warn" style={{ marginTop: 12 }}>
+          Remover as credenciais Proxmox e bloquear a reimportação de valores legados?
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <ActionButton small variant="danger" onClick={() => void confirmDisconnect(true)}>
+              Aprovar desconexão
+            </ActionButton>
+            <ActionButton small onClick={() => void confirmDisconnect(false)}>Recusar</ActionButton>
           </div>
         </div>
       )}

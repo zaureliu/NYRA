@@ -442,6 +442,8 @@ class WorkflowEngine:
         known_tools = set()
         if self.registry is not None:
             for descriptor in self.registry.descriptions():
+                if isinstance(descriptor, dict) and descriptor.get("enabled_for_llm", True) is not True:
+                    continue
                 name = descriptor.get("name") if isinstance(descriptor, dict) else getattr(descriptor, "name", None)
                 if name:
                     known_tools.add(name)
@@ -452,7 +454,7 @@ class WorkflowEngine:
             for dependency in step.depends_on:
                 if dependency not in seen_ids and all(item.step_id != dependency for item in definition.steps):
                     problems.append(f"'{step.step_id}' depende de step inexistente '{dependency}'")
-            if known_tools and step.tool not in known_tools:
+            if self.registry is not None and step.tool not in known_tools:
                 problems.append(f"tool desconhecida no registry: '{step.tool}' (§199)")
         cycle = find_cycle(definition.steps)
         if cycle:
@@ -482,6 +484,8 @@ class WorkflowEngine:
         risks: dict[str, str] = {}
         if self.registry is not None:
             for descriptor in self.registry.descriptions():
+                if isinstance(descriptor, dict) and descriptor.get("enabled_for_llm", True) is not True:
+                    continue
                 name = descriptor.get("name") if isinstance(descriptor, dict) else getattr(descriptor, "name", None)
                 if name:
                     known_tools.add(name)
@@ -492,7 +496,7 @@ class WorkflowEngine:
         approvals_expected: list[str] = []
         unknown_tools: list[str] = []
         for step in workflow.steps:
-            if step.tool not in known_tools and known_tools:
+            if self.registry is not None and step.tool not in known_tools:
                 unknown_tools.append(step.tool)
                 continue
             effective_risk = step.risk_override or risks.get(step.tool, "")
@@ -762,7 +766,7 @@ class WorkflowEngine:
         }
         try:
             result = await asyncio.wait_for(
-                self.registry.execute(step.tool, dict(params)), timeout=timeout)
+                self.registry.execute(step.tool, dict(params), exposure="llm"), timeout=timeout)
         except asyncio.TimeoutError:
             return {**base, "status": STEP_FAILED, "ok": False,
                     "error_code": "STEP_TIMEOUT", "error_type": "TimeoutError",
@@ -809,7 +813,7 @@ class WorkflowEngine:
     async def _probe(self, probe: VerificationProbe) -> bool:
         try:
             result = await asyncio.wait_for(
-                self.registry.execute(probe.tool, dict(probe.params)), timeout=30)
+                self.registry.execute(probe.tool, dict(probe.params), exposure="llm"), timeout=30)
         except Exception:  # noqa: BLE001
             return False
         if not result.ok:
@@ -823,7 +827,7 @@ class WorkflowEngine:
     async def _run_rollback(self, step: WorkflowStep) -> bool:
         try:
             result = await asyncio.wait_for(
-                self.registry.execute(step.rollback.tool, dict(step.rollback.params)),
+                self.registry.execute(step.rollback.tool, dict(step.rollback.params), exposure="llm"),
                 timeout=60)
             return bool(result.ok)
         except Exception:  # noqa: BLE001

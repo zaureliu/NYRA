@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from ipaddress import ip_network
-import re
+from ipaddress import ip_address, ip_network
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -69,9 +69,6 @@ class SentinelFingerprint(BaseModel):
     authentication_required: bool = True
 
 
-_HOST = re.compile(r"^[A-Za-z0-9._:-]*$")
-
-
 class SentinelSettingsUpdate(BaseModel):
     enabled: bool = False
     auto_discovery: bool = True
@@ -96,14 +93,34 @@ class SentinelSettingsUpdate(BaseModel):
     @classmethod
     def validate_host(cls, value: str) -> str:
         value = value.strip()
-        if value.startswith(("http://", "https://")):
-            from urllib.parse import urlsplit
+        if not value:
+            return ""
+        if "://" in value:
             parsed = urlsplit(value)
-            if not parsed.hostname or parsed.path not in {"", "/"} or parsed.username or parsed.password:
+            try:
+                parsed_port = parsed.port
+                address = ip_address(parsed.hostname or "")
+            except ValueError as error:
+                raise ValueError("Host Sentinel exige IP local literal") from error
+            if (
+                parsed.scheme.lower() not in {"http", "https"}
+                or parsed.path not in {"", "/"}
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+                or not (address.is_private or address.is_loopback or address.is_link_local)
+                or (parsed.scheme.lower() == "http" and not address.is_loopback)
+            ):
                 raise ValueError("Host Sentinel inválido")
+            _ = parsed_port
             return value.rstrip("/")
-        if not _HOST.fullmatch(value):
-            raise ValueError("Host Sentinel inválido")
+        try:
+            address = ip_address(value)
+        except ValueError as error:
+            raise ValueError("Host Sentinel exige IP local literal") from error
+        if not (address.is_private or address.is_loopback or address.is_link_local):
+            raise ValueError("Host Sentinel deve pertencer à rede local")
         return value
 
     @field_validator("reconnect_backoff")

@@ -14,11 +14,17 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import sys
 import threading
 import time
 from typing import Any
 
 logger = logging.getLogger("nyra.desktop.uia")
+
+# UI Automation runs on background workers and does not require an STA message
+# pump. Ask comtypes to use MTA if this module is the first COM consumer.
+if "comtypes" not in sys.modules and not hasattr(sys, "coinit_flags"):
+    sys.coinit_flags = 0
 
 _MAX_NODES = 220
 
@@ -44,7 +50,7 @@ class UiaError(Exception):
 
 
 _lock = threading.Lock()
-_automation: Any | None = None
+_thread_state = threading.local()
 
 
 def _client_module():
@@ -54,26 +60,77 @@ def _client_module():
 
 
 def _get_automation():
-    global _automation
+    _ensure_com()
+    automation = getattr(_thread_state, "automation", None)
+    if automation is not None:
+        return automation
     with _lock:
-        if _automation is None:
-            import comtypes
+        automation = getattr(_thread_state, "automation", None)
+        if automation is None:
+            import comtypes.client
 
-            comtypes.CoInitialize()
             module = _client_module()
-            _automation = comtypes.client.CreateObject(
+            automation = comtypes.client.CreateObject(
                 module.CUIAutomation, interface=module.IUIAutomation, clsctx=comtypes.CLSCTX_INPROC_SERVER,
             )
-        return _automation
+            _thread_state.automation = automation
+        return automation
 
 
 def _ensure_com():
+    if getattr(_thread_state, "com_initialized", False):
+        return
+    try:
+        # comtypes initializes COM automatically on the thread that imports it
+        # for the first time. Calling CoInitialize again in that case leaves an
+        # unmatched apartment count; on ThreadPoolExecutor shutdown this used
+        # to surface as RPC_E_DISCONNECTED (0x80010108).
+        already_loaded = "comtypes" in sys.modules
+        import comtypes
+
+        if already_loaded:
+            comtypes.CoInitializeEx(comtypes.COINIT_MULTITHREADED)
+        _thread_state.com_initialized = True
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def release_current_thread() -> None:
+    """Release UIA proxies from the apartment that created them.
+
+    COM pointers are apartment-bound. Releasing the former process-global
+    singleton during interpreter teardown could run on a different thread and
+    trigger ``RPC_E_DISCONNECTED``. The apartment itself intentionally lives
+    for the lifetime of its dedicated worker: some UIA providers raise that
+    native exception from ``CoUninitialize`` even after all pointers are
+    dropped. Windows releases the apartment when the worker thread terminates.
+    """
+    automation = getattr(_thread_state, "automation", None)
+    if automation is not None:
+        try:
+            del _thread_state.automation
+        except AttributeError:
+            pass
+        del automation
+        # comtypes may retain apartment-bound pointer cycles until cyclic GC.
+        # Collect them here, before CoUninitialize and on their owning thread;
+        # otherwise a later main-thread collection can raise RPC_E_DISCONNECTED.
+        import gc
+
+        gc.collect()
+
+
+def close_current_thread() -> None:
+    """Close the worker-owned MTA exactly once before its thread exits."""
+    release_current_thread()
+    if not getattr(_thread_state, "com_initialized", False):
+        return
     try:
         import comtypes
 
-        comtypes.CoInitialize()
-    except Exception:  # noqa: BLE001
-        pass
+        comtypes.CoUninitialize()
+    finally:
+        _thread_state.com_initialized = False
 
 
 # --------------------------------------------------------------------- helpers

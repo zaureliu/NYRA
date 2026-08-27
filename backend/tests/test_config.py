@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from app.core import config
 from app.core.config import Settings
 
 
@@ -33,3 +34,20 @@ def test_hands_on_is_the_fresh_install_default(tmp_path):
     settings = Settings(database_path=tmp_path / "nyra.db")
     assert settings.always_listening_enabled is True
     assert settings.listening_mode == "hands_free"
+
+
+def test_tts_asset_prefers_existing_local_override_then_packaged_asset(tmp_path, monkeypatch):
+    data_root = tmp_path / "runtime" / "data"
+    packaged = tmp_path / "bundle" / "data" / "models" / "kokoro.onnx"
+    packaged.parent.mkdir(parents=True)
+    packaged.write_bytes(b"packaged")
+    monkeypatch.setattr(config, "DATA_ROOT", data_root)
+    monkeypatch.setattr(config, "resolve_packaged_path", lambda value: tmp_path / "bundle" / value)
+
+    relative = Path("data/models/kokoro.onnx")
+    assert Settings.resolve_tts_asset_path(relative) == packaged
+
+    local = data_root / "models" / "kokoro.onnx"
+    local.parent.mkdir(parents=True)
+    local.write_bytes(b"operator override")
+    assert Settings.resolve_tts_asset_path(relative) == local

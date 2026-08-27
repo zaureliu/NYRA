@@ -145,10 +145,18 @@ def resize_window(hwnd: int, width: int, height: int, timeout_seconds: float = 3
 
 
 def graceful_close(hwnd: int, timeout_seconds: float = 5.0) -> bool:
-    """Send WM_CLOSE to the root window and verify it disappeared (§39-40)."""
+    """Send WM_CLOSE to the root window and verify it disappeared (§39-40).
+
+    Apps que minimizam para a tray (Discord, Steam) ESCONDEM a janela em vez
+    de destruí-la: desaparecer do desktop também é fechamento confirmado.
+    """
     root = _root_owner(hwnd)
     _user32.PostMessageW(root, 0x0010, 0, 0)  # WM_CLOSE
-    return wait_for(lambda: not _user32.IsWindow(root), timeout_seconds)
+
+    def gone() -> bool:
+        return not bool(_user32.IsWindow(root)) or not bool(_user32.IsWindowVisible(root))
+
+    return wait_for(gone, timeout_seconds)
 
 
 def window_still_alive(hwnd: int) -> bool:

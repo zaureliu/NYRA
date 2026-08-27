@@ -321,17 +321,19 @@ def diff_frames(before: Frame, after: Frame, cell: int = 16) -> dict:
 
 
 def fingerprint_pixels(frame: Frame, cell: int = 32) -> str:
-    """Cheap perceptual fingerprint used to revalidate frames (§24)."""
+    """Exact SHA-256 identity used by sensitive frame revalidation (§24).
+
+    ``cell`` remains accepted for API compatibility but is deliberately
+    ignored: sampling is insufficient for an authorization boundary.
+    """
     import hashlib
 
-    stride = frame.width * 4
     digest = hashlib.sha256()
-    for y in range(0, frame.height, cell):
-        row_base = y * stride
-        for x in range(0, frame.width, cell):
-            offset = row_base + x * 4
-            digest.update(bytes((frame.pixels[offset], frame.pixels[offset + 1],
-                                 frame.pixels[offset + 2])))
+    del cell
+    stride = frame.width * 4
+    for value in (frame.width, frame.height, stride, len(frame.pixels)):
+        digest.update(int(value).to_bytes(8, "little", signed=False))
+    digest.update(frame.pixels)
     return digest.hexdigest()
 
 

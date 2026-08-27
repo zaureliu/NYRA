@@ -114,6 +114,7 @@ async def test_conversation_states_empty_stt_and_direct_turn_do_not_guess(tmp_pa
     assert accepted["accepted"] is True
     assert orchestrator.calls[0][0] == "Nyra, bom dia"
     assert orchestrator.calls[0][1]["response_id"].startswith("turn_")
+    assert orchestrator.calls[0][1]["turn"].approval_capable is False
     await engine.stop()
 
 

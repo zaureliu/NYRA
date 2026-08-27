@@ -96,9 +96,18 @@ try {
 
   // Capabilities deve mostrar estado honesto com backend offline (alerta, não crash)
   await evaluate(`[...document.querySelectorAll('.ops-nav-item')].find((el) => el.textContent.trim().includes('Capabilities')).click()`)
-  await delay(900)
-  const capsOffline = await evaluate(`Boolean(document.querySelector('.ops-alert.error') || document.querySelector('.ops-card'))`)
-  assert.ok(capsOffline, 'Capabilities não exibiu nem cards nem erro explicativo')
+  let capsState = null
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await delay(400)
+    capsState = await evaluate(`(() => ({
+      ready: Boolean(document.querySelector('.ops-alert.error') || document.querySelector('.ops-card')),
+      loading: Boolean(document.querySelector('.ops-loading')),
+      title: document.querySelector('.ops-page-title')?.textContent?.trim() || '',
+      text: document.querySelector('main')?.textContent?.trim().slice(0, 180) || '',
+    }))()`)
+    if (capsState.ready) break
+  }
+  assert.ok(capsState?.ready, `Capabilities não exibiu cards/erro no prazo: ${JSON.stringify(capsState)}`)
 
   // Colapsar sidebar
   const collapse = await evaluate(`(async () => {

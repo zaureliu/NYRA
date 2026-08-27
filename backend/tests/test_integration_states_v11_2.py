@@ -303,7 +303,7 @@ class TestRoutesHotfixV11_2:
 class TestHAMonitorRefresh:
     def _ready_profile(self, mod, *, tested_at: float) -> None:
         mod.upsert_profile({"profile_id": "ha-vm", "name": "HA VM",
-                            "url": "http://192.168.1.200", "enabled": True})
+                            "url": "https://192.168.1.200", "enabled": True})
         data = mod._load_store()
         data["active_profile"] = "ha-vm"
         data["profiles"][0]["last_test"] = {
@@ -322,13 +322,13 @@ class TestHAMonitorRefresh:
         self._ready_profile(mod, tested_at=time.time() - 954)
 
         settings = Settings(home_assistant_enabled=True,
-                            home_assistant_url="http://192.168.1.200")
+                            home_assistant_url="https://192.168.1.200")
         before = await mod.unified_ha_state(type("S", (), {"settings": settings})())
         assert before["state"] == "STALE"  # reproduz o sintoma observado
 
         recorded = mod.record_monitor_success(
             {"version": "2026.8.3", "state": "RUNNING"},
-            base_url="http://192.168.1.200",
+            base_url="https://192.168.1.200",
         )
         assert recorded is True
 
@@ -340,13 +340,13 @@ class TestHAMonitorRefresh:
     def test_monitor_cooldown_avoids_rewrites(self, ha_env):
         mod, _, _ = ha_env
         self._ready_profile(mod, tested_at=time.time())
-        assert mod.record_monitor_success({}, base_url="http://192.168.1.200") is True
-        assert mod.record_monitor_success({}, base_url="http://192.168.1.200") is False
+        assert mod.record_monitor_success({}, base_url="https://192.168.1.200") is True
+        assert mod.record_monitor_success({}, base_url="https://192.168.1.200") is False
 
     def test_monitor_skips_mismatched_base_url(self, ha_env):
         mod, _, _ = ha_env
         self._ready_profile(mod, tested_at=time.time() - 954)
-        assert mod.record_monitor_success({}, base_url="http://10.9.9.9:8123") is False
+        assert mod.record_monitor_success({}, base_url="https://10.9.9.9:8123") is False
         vm = mod.get_profile("ha-vm")
         assert vm["last_test"]["tested_at"] <= time.time() - 900  # intocado
 
@@ -358,11 +358,11 @@ class TestHAMonitorRefresh:
     def test_monitor_skips_disabled_profile(self, ha_env):
         mod, _, _ = ha_env
         mod.upsert_profile({"profile_id": "ha-vm", "name": "HA VM",
-                            "url": "http://192.168.1.200", "enabled": False})
+                            "url": "https://192.168.1.200", "enabled": False})
         data = mod._load_store()
         data["active_profile"] = "ha-vm"
         mod._save_store(data)
-        assert mod.record_monitor_success({}, base_url="http://192.168.1.200") is False
+        assert mod.record_monitor_success({}, base_url="https://192.168.1.200") is False
 
     async def test_controller_health_loop_records_success(self, ha_env, monkeypatch,
                                                           tmp_path):
@@ -402,7 +402,7 @@ class TestHAMonitorRefresh:
             homelab_overview_cache_seconds=0,
             database_path=tmp_path / "nyra-test.db",
             home_assistant_enabled=True,
-            home_assistant_url="http://192.168.1.200",
+            home_assistant_url="https://192.168.1.200",
             home_assistant_token="monitor-tok-refresh",
         )
         plane = HomelabControlPlane(

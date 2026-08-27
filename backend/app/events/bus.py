@@ -120,6 +120,49 @@ class EventType(StrEnum):
     CREDENTIAL_CHANGED = "CREDENTIAL_CHANGED"
     RECOVERY_EXECUTED = "RECOVERY_EXECUTED"
     PROACTIVE_ALERT_FIRED = "PROACTIVE_ALERT_FIRED"
+    # nyra-7c §16/§79: eventos normalizados das camadas de autonomia
+    COMPUTER_WINDOW_FOREGROUND_CHANGED = "computer.window.foreground_changed"
+    COMPUTER_WINDOW_OPENED = "computer.window.opened"
+    COMPUTER_WINDOW_CLOSED = "computer.window.closed"
+    COMPUTER_PROCESS_STARTED = "computer.process.started"
+    COMPUTER_PROCESS_STOPPED = "computer.process.stopped"
+    COMPUTER_FILE_CREATED = "computer.file.created"
+    COMPUTER_FILE_MODIFIED = "computer.file.modified"
+    COMPUTER_CLIPBOARD_CHANGED = "computer.clipboard.changed"
+    COMPUTER_APPLICATION_LAUNCHED = "computer.application.launched"
+    COMPUTER_APPLICATION_CLOSED = "computer.application.closed"
+    COMPUTER_BROWSER_NAVIGATION = "computer.browser.navigation"
+    COMPUTER_DIALOG_DETECTED = "computer.dialog.detected"
+    COMPUTER_STATE_UPDATED = "computer.state.updated"
+    COMPUTER_INTENT_RESOLVED = "computer.intent.resolved"
+    COMPUTER_ACTION_EXECUTED = "computer.action.executed"
+    COMPUTER_EFFECT_VERIFIED = "computer.effect.verified"
+    USAGE_PATTERN_DETECTED = "usage.pattern.detected"
+    SKILL_CANDIDATE_CREATED = "skill.candidate.created"
+    SKILL_LEARNED = "skill.learned"
+    SKILL_EXECUTED = "skill.executed"
+    SKILL_DEGRADED = "skill.degraded"
+    # nyra-7c §103: sinais passivos para um Self-Development futuro. Estes
+    # eventos não disparam correção, patch ou execução; são só telemetria.
+    COMPUTER_PERCEPTION_FAILURE = "perception_failure"
+    COMPUTER_INTENT_RESOLUTION_FAILURE = "intent_resolution_failure"
+    COMPUTER_CONTEXT_RESOLUTION_FAILURE = "context_resolution_failure"
+    COMPUTER_OPERATOR_FAILURE = "operator_failure"
+    COMPUTER_VERIFICATION_FAILURE = "verification_failure"
+    COMPUTER_USAGE_PATTERN_FAILURE = "usage_pattern_failure"
+    COMPUTER_SKILL_EXECUTION_FAILURE = "skill_execution_failure"
+    # Self-Development Engine V1: audit events contain identifiers/status only.
+    SELFDEV_ISSUE_DETECTED = "selfdev.issue.detected"
+    SELFDEV_PLAN_CREATED = "selfdev.plan.created"
+    SELFDEV_WORKTREE_CREATED = "selfdev.worktree.created"
+    SELFDEV_PATCH_READY = "selfdev.patch.ready"
+    SELFDEV_VALIDATION_PASS = "selfdev.validation.pass"
+    SELFDEV_VALIDATION_FAIL = "selfdev.validation.fail"
+    SELFDEV_PROMOTION_APPLIED = "selfdev.promotion.applied"
+    SELFDEV_POST_VALIDATION_PASS = "selfdev.post_validation.pass"
+    SELFDEV_ROLLBACK = "selfdev.rollback"
+    SELFDEV_GITHUB_PUSHED = "selfdev.github.pushed"
+    SELFDEV_GITHUB_BLOCKED = "selfdev.github.blocked"
 
 
 class Event(BaseModel):
@@ -134,11 +177,18 @@ Subscriber = Callable[[Event], Awaitable[None]]
 
 
 class EventBus:
+    #: Backpressure (Parte 5.2): um assinante lento não pode monopolizar o
+    #: publisher. Cada notificação tem prazo blindado — estourou, o handler
+    #: continua em background (shield) e o publish segue sem bloquear o turno.
+    SUBSCRIBER_TIMEOUT_SECONDS = 0.5
+
     def __init__(self, history_size: int = 100) -> None:
         self._subscribers: set[Subscriber] = set()
         self._history: deque[Event] = deque(maxlen=history_size)
         self._lock = asyncio.Lock()
         self._sequence: int = 0
+        self._detached: set[asyncio.Task[None]] = set()
+        self.counters = {"events_published": 0, "subscriber_timeouts": 0}
 
     async def subscribe(self, subscriber: Subscriber) -> None:
         async with self._lock:
@@ -153,6 +203,7 @@ class EventBus:
         self._sequence += 1
         event = Event(type=event_type, payload=payload, seq=self._sequence)
         self._history.append(event)
+        self.counters["events_published"] += 1
         subscribers = tuple(self._subscribers)
         if subscribers:
             await asyncio.gather(
@@ -161,11 +212,34 @@ class EventBus:
         return event
 
     async def _safe_notify(self, callback: Subscriber, event: Event) -> None:
-        try:
-            await callback(event)
-        except Exception:
-            # Subscribers are isolated; transport failures cannot stop the pipeline.
-            return
+        async def _run() -> None:
+            try:
+                await callback(event)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                return
+
+        task = asyncio.create_task(_run())
+
+        def _finish(finished: asyncio.Task[None]) -> None:
+            self._detached.discard(finished)
+            if not finished.cancelled():
+                finished.exception()
+
+        task.add_done_callback(_finish)
+        timed_out, _pending = await asyncio.wait({task}, timeout=self.SUBSCRIBER_TIMEOUT_SECONDS)
+        if not timed_out:
+            # Handler lento segue rodando isolado; o pipeline não espera.
+            self.counters["subscriber_timeouts"] += 1
+            self._detached.add(task)
+
+    def detached_handler_tasks(self) -> tuple[asyncio.Task[None], ...]:
+        """Handlers que estouraram o prazo e seguem em background."""
+        return tuple(self._detached)
+
+    def stats(self) -> dict[str, int]:
+        return dict(self.counters)
 
     def history(self) -> list[Event]:
         return list(self._history)

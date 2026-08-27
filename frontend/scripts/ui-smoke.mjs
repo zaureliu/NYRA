@@ -34,8 +34,14 @@ try {
   await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }) })
   let requestId = 0
   const pending = new Map()
+  const runtimeEvents = []
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(event.data)
+    if (message.method === 'Runtime.exceptionThrown') {
+      runtimeEvents.push(message.params?.exceptionDetails?.exception?.description || message.params?.exceptionDetails?.text || 'Runtime exception')
+    } else if (message.method === 'Runtime.consoleAPICalled') {
+      runtimeEvents.push((message.params?.args || []).map((item) => item.value ?? item.description ?? '').join(' '))
+    }
     if (!message.id || !pending.has(message.id)) return
     const { resolve, reject } = pending.get(message.id)
     pending.delete(message.id)
@@ -67,6 +73,16 @@ try {
     await cdp('Emulation.setDeviceMetricsOverride', { width: viewportWidth, height: viewportHeight, deviceScaleFactor: 1, mobile: false })
   }
   await evaluate(`new Promise(resolve => document.readyState === 'complete' ? setTimeout(resolve, 500) : addEventListener('load', () => setTimeout(resolve, 500), {once:true}))`)
+  let appReady = false
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    appReady = await evaluate(`Boolean(document.querySelector('.composer textarea') && document.querySelector('.conversation-panel'))`)
+    if (appReady) break
+    await delay(250)
+  }
+  if (!appReady) {
+    const diagnostic = await evaluate(`({href: location.href, title: document.title, body: document.body?.innerText?.slice(0, 300) || '', html: document.body?.innerHTML?.slice(0, 300) || ''})`)
+    assert.fail(`NYRA conversation UI did not mount before the smoke timeout: ${JSON.stringify({...diagnostic, runtimeEvents: runtimeEvents.slice(-8)})}`)
+  }
 
   const composerMetrics = await evaluate(`(() => {
     const textarea = document.querySelector('.composer textarea');

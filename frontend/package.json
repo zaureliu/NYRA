@@ -1,8 +1,11 @@
 {
   "name": "nyra-frontend",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",

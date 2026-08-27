@@ -16,7 +16,10 @@ describe('desktop transparency', () => {
   it('embeds both release pages and keeps Vite limited to development', () => {
     expect(config.build.frontendDist).toBe('../../frontend/dist')
     expect(config.build.beforeBuildCommand).toContain('frontend run build')
-    expect(config.build.devUrl).toBe('http://127.0.0.1:5173/desktop.html')
+    // A raiz do devUrl é obrigatória: Tauri ignora o caminho "index.html" de
+    // WebviewUrl::App e carrega a base verbatim; com "/desktop.html" na base,
+    // o painel abriria a página do Presence em vez da Operations UI.
+    expect(config.build.devUrl).toBe('http://127.0.0.1:5173')
     expect(capabilities.windows).toContain('dashboard')
   })
 })

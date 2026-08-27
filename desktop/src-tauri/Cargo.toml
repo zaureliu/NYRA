@@ -1,6 +1,6 @@
 [package]
 name = "nyra-desktop"
-version = "0.2.0"
+version = "0.3.0"
 description = "NYRA Desktop Presence"
 authors = ["NYRA Project"]
 edition = "2021"

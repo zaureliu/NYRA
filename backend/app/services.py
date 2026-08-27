@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.character.state import StateMachine
 from app.core.config import Settings
@@ -35,6 +35,7 @@ from app.conversation import ConversationEngine
 from app.llm.warm_manager import OllamaWarmManager
 from app.runtime import RuntimeSupervisor
 from app.desktop import DesktopController
+from app.selfdev import SelfDevelopmentService
 
 if TYPE_CHECKING:
     from app.desktop.operator import OperatorController
@@ -80,7 +81,14 @@ class Services:
     warm_manager: OllamaWarmManager | None
     conversation: ConversationEngine
     runtime_supervisor: RuntimeSupervisor
+    selfdev: SelfDevelopmentService
     desktop: DesktopController
     operator: "OperatorController | None"
     operator_v2: "OperatorV2Service | None"
     turns: TurnRegistry
+    # nyra-7c: camadas de autonomia do computador (pipeline unificado).
+    computer: Any = None
+    computer_state: Any = None
+    computer_perception: Any = None
+    usage_learning: Any = None
+    skill_memory: Any = None

@@ -73,6 +73,8 @@ async def _mutate(
             "message": error or "Serviço não registrado no Runtime Registry.",
         }
     risk_level, resolved_spec = _risk_for(supervisor, service, action)
+    if not bool(getattr(resolved_spec.capabilities, action, False)):
+        return await getattr(supervisor, action)(service, origin="tool")
 
     if risk_level in {RiskLevel.ELEVATED, RiskLevel.DESTRUCTIVE, RiskLevel.CRITICAL}:
         agent_run_id = current_agent_run_id.get()

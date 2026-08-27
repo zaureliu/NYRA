@@ -12,12 +12,12 @@ from app.homelab.models import ActionDecision
 
 # action -> (risk_level, approval_mode) where mode: auto | approval
 _DEFAULT_POLICIES: dict[str, tuple[str, str]] = {
-    "vm_start": ("LOW_RISK", "auto"),
+    "vm_start": ("LOW_RISK", "approval"),
     "vm_shutdown": ("ELEVATED", "approval"),
     "vm_stop": ("DESTRUCTIVE", "approval"),
     "vm_reboot": ("ELEVATED", "approval"),
     "vm_reset": ("DESTRUCTIVE", "approval"),
-    "ha_call_service": ("LOW_RISK", "auto"),
+    "ha_call_service": ("LOW_RISK", "approval"),
 }
 
 _ALLOWED_ACTIONS = frozenset(_DEFAULT_POLICIES)

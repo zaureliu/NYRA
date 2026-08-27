@@ -30,11 +30,13 @@ class OperatorV2Service:
                  browser_controller=None, proactive_gate=None) -> None:
         from app.operator.browser_v2 import BrowserV2Controller
         from app.operator.adapters import create_adapter_registry
+        from app.operator.clipboard import ClipboardController
 
         self.settings = settings
         self.event_bus = event_bus
         self.approvals = approvals
         self.registry = registry
+        self.clipboard = ClipboardController()
 
         vision_on = bool(getattr(settings, "vision_enabled", True))
         self.vision_enabled = vision_on
@@ -152,6 +154,7 @@ class OperatorV2Service:
                 "workflow_engine": self.workflow_engine_enabled,
                 "desktop_watcher": self.watcher is not None,
                 "proactive_operator": getattr(self.settings, "proactive_operator_enabled", False),
+                "clipboard": True,
             },
             "contexts": self.contexts.snapshot(),
             "watches": self.watcher.status() if self.watcher else {"running": False},

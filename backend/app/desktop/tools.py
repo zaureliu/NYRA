@@ -82,6 +82,7 @@ class UiClickInput(UiTargetInput):
     name: str = Field(default="", max_length=120)
     automation_id: str = Field(default="", max_length=120)
     control_type: str = Field(default="", max_length=40, pattern=r"^[A-Za-z]*$")
+    approval_id: str | None = Field(default=None, min_length=16, max_length=128)
 
 
 class UiSetTextInput(UiClickInput):
@@ -90,6 +91,7 @@ class UiSetTextInput(UiClickInput):
 
 class UiSendKeysInput(UiTargetInput):
     text: str = Field(min_length=1, max_length=20000)
+    approval_id: str | None = Field(default=None, min_length=16, max_length=128)
 
 
 def register_desktop_tools(
@@ -246,7 +248,7 @@ def register_desktop_tools(
     ))
     registry.register(ToolDefinition(
         "desktop_open_url",
-        "Abre URL http/https no navegador padrão ou URI ms-settings:/shell: do Windows (ex.: ms-settings:network). Esquema é validado; nada arbitrário é executado.",
+        "Abre somente URL HTTP/HTTPS absoluta no navegador padrão. file:, shell:, ms-settings: e credenciais embutidas são bloqueados.",
         RiskLevel.LOW_RISK, DesktopOpenUrlInput, desktop_open_url,
         dynamic_risk=False, llm_enabled=True,
         preflight=lambda payload: {"risk_level": "LOW_RISK", "resource_key": f"desktop:url:{payload.get('url', '')[:60]}", "host": "local"},
@@ -263,16 +265,18 @@ def register_desktop_tools(
             app=app, query=query, hwnd=hwnd,
         )
 
-    async def ui_click(name="", automation_id="", control_type="", app="", query="", hwnd=None, **_):
+    async def ui_click(name="", automation_id="", control_type="", app="", query="", hwnd=None,
+                       approval_id=None, **_):
         return await controller.ui_click(
             name=name, automation_id=automation_id, control_type=control_type,
-            app=app, query=query, hwnd=hwnd,
+            app=app, query=query, hwnd=hwnd, approval_id=approval_id,
         )
 
-    async def ui_set_text(value, name="", automation_id="", control_type="", app="", query="", hwnd=None, **_):
+    async def ui_set_text(value, name="", automation_id="", control_type="", app="", query="", hwnd=None,
+                          approval_id=None, **_):
         return await controller.ui_set_text(
             value, name=name, automation_id=automation_id, control_type=control_type,
-            app=app, query=query, hwnd=hwnd,
+            app=app, query=query, hwnd=hwnd, approval_id=approval_id,
         )
 
     async def ui_get_text(name="", automation_id="", control_type="", app="", query="", hwnd=None, **_):
@@ -281,15 +285,12 @@ def register_desktop_tools(
             app=app, query=query, hwnd=hwnd,
         )
 
-    async def ui_send_keys(text, app="", query="", hwnd=None, **_):
-        return await controller.ui_send_keys(text, app=app, query=query, hwnd=hwnd)
+    async def ui_send_keys(text, app="", query="", hwnd=None, approval_id=None, **_):
+        return await controller.ui_send_keys(
+            text, app=app, query=query, hwnd=hwnd, approval_id=approval_id,
+        )
 
     uia_preflight = lambda payload: {"risk_level": "READ_ONLY", "resource_key": "ui:read", "host": "local"}
-    uia_action_preflight = lambda action: lambda payload: {
-        "risk_level": "LOW_RISK",
-        "resource_key": f"ui:{action}:{str(payload.get('query') or payload.get('app') or '')[:40]}",
-        "host": "local",
-    }
 
     if not uia_enabled:
         return
@@ -308,15 +309,25 @@ def register_desktop_tools(
     ))
     registry.register(ToolDefinition(
         "ui_click",
-        "Clica num controle estruturado da janela alvo via InvokePattern (fallback coordenado apenas se o elemento expuser rect). Prefira sempre critérios estruturados a coordenadas.",
-        RiskLevel.LOW_RISK, UiClickInput, ui_click,
-        dynamic_risk=False, llm_enabled=True, preflight=uia_action_preflight("click"),
+        "Clica num controle estruturado somente após approval one-use vinculado ao HWND e à identidade exata do elemento.",
+        RiskLevel.ELEVATED, UiClickInput, ui_click,
+        dynamic_risk=False, llm_enabled=True,
+        preflight=lambda payload: {
+            "risk_level": "ELEVATED",
+            "resource_key": f"ui:click:{payload.get('hwnd', '')}:{str(payload.get('automation_id') or payload.get('name') or '')[:40]}",
+            "host": "local",
+        },
     ))
     registry.register(ToolDefinition(
         "ui_set_text",
-        "Preenche um campo de texto (Edit/Document) da janela alvo via ValuePattern e RELÊ o valor armazenado para confirmar.",
-        RiskLevel.LOW_RISK, UiSetTextInput, ui_set_text,
-        dynamic_risk=False, llm_enabled=True, preflight=uia_action_preflight("set_text"),
+        "Preenche um campo somente após approval one-use vinculado ao HWND, alvo e hash do valor; relê o conteúdo para confirmar.",
+        RiskLevel.ELEVATED, UiSetTextInput, ui_set_text,
+        dynamic_risk=False, llm_enabled=True,
+        preflight=lambda payload: {
+            "risk_level": "ELEVATED",
+            "resource_key": f"ui:set_text:{payload.get('hwnd', '')}:{str(payload.get('automation_id') or payload.get('name') or '')[:40]}",
+            "host": "local",
+        },
     ))
     registry.register(ToolDefinition(
         "ui_get_text",
@@ -327,7 +338,12 @@ def register_desktop_tools(
     if input_fallback_enabled:
         registry.register(ToolDefinition(
             "ui_send_keys",
-            "Fallback de teclado: foca a janela alvo, CONFIRMA o foreground e só então envia as teclas. Use somente quando UIA não oferecer o controle adequado.",
-            RiskLevel.LOW_RISK, UiSendKeysInput, ui_send_keys,
-            dynamic_risk=False, llm_enabled=True, preflight=uia_action_preflight("send_keys"),
+            "Fallback de teclado sensível: exige approval one-use vinculado ao HWND e ao hash das teclas, confirma foreground e só então envia.",
+            RiskLevel.ELEVATED, UiSendKeysInput, ui_send_keys,
+            dynamic_risk=False, llm_enabled=True,
+            preflight=lambda payload: {
+                "risk_level": "ELEVATED",
+                "resource_key": f"ui:send_keys:{payload.get('hwnd', '')}:{str(payload.get('query') or payload.get('app') or '')[:40]}",
+                "host": "local",
+            },
         ))

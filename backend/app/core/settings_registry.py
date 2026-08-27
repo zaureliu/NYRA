@@ -15,6 +15,7 @@ Fonte única de verdade para settings expostas à UI:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from app.core.runtime_settings import save_runtime_settings
@@ -113,6 +114,8 @@ ENTRIES: tuple[SettingSpec, ...] = (
     # ---------------------------------------------------------------- homelab
     SettingSpec("homelab_poll_interval", "homelab", "int", 60,
                 "Intervalo de poll do homelab (segundos).", minimum=10, maximum=86400),
+    SettingSpec("homelab_mutations_enabled", "homelab", "bool", False,
+                "Opt-in global para mutações de homelab; cada ação ainda exige approval."),
     SettingSpec("homelab_default_timeout_seconds", "homelab", "float", 5.0,
                 "Timeout padrão de probes homelab (segundos).", minimum=1.0, maximum=30.0),
     SettingSpec("cpu_alert_threshold", "homelab", "float", 90.0,
@@ -140,9 +143,6 @@ ENTRIES: tuple[SettingSpec, ...] = (
     SettingSpec("sentinel_alert_cooldown_seconds", "integrations", "int", 300,
                 "Cooldown entre alertas falados do Sentinel (segundos).",
                 minimum=10, maximum=86400),
-    SettingSpec("sentinel_alert_cooldown_seconds", "integrations", "int", 300,
-                "Cooldown entre alertas falados do Sentinel (segundos).",
-                minimum=10, maximum=86400),
     SettingSpec("home_assistant_url", "integrations", "str", "",
                 "URL do profile Home Assistant ativo."),
     # ---------------------------------------------------------------- privacy
@@ -165,6 +165,28 @@ ENTRIES: tuple[SettingSpec, ...] = (
     SettingSpec("runtime_health_interval_seconds", "developer", "int", 15,
                 "Intervalo de health check dos serviços gerenciados (segundos).",
                 minimum=5, maximum=600),
+    # --------------------------------------------------------------- selfdev
+    SettingSpec("selfdev_mode", "selfdev", "enum", "AUTONOMOUS_SAFE",
+                "Modo do Self-Development Engine.",
+                options=("OFF", "OBSERVE_ONLY", "AUTONOMOUS_SAFE", "AUTONOMOUS_ADVANCED")),
+    SettingSpec("selfdev_model", "selfdev", "str", "qwen3:8b",
+                "Modelo local instalado no Ollama usado somente pelo SelfDev."),
+    SettingSpec("selfdev_workspace", "selfdev", "str", "../nyra-selfdev",
+                "Workspace isolado de candidates e worktrees.", requires_restart=True),
+    SettingSpec("selfdev_run_when_idle", "selfdev", "bool", True,
+                "Executar candidates somente quando o sistema estiver ocioso."),
+    SettingSpec("selfdev_auto_publish_github", "selfdev", "bool", False,
+                "Publicar melhorias LOW_RISK após todos os gates. OFF no bootstrap 0.3.0."),
+    SettingSpec("selfdev_max_auto_promotions_per_day", "selfdev", "int", 3,
+                "Teto diário de promoções automáticas.", minimum=0, maximum=20),
+    SettingSpec("selfdev_max_candidate_runtime_minutes", "selfdev", "int", 30,
+                "Timeout total de um candidate em minutos.", minimum=1, maximum=240),
+    SettingSpec("selfdev_max_files_low_risk", "selfdev", "int", 8,
+                "Máximo de arquivos em candidate LOW_RISK.", minimum=1, maximum=100),
+    SettingSpec("selfdev_max_diff_lines_low_risk", "selfdev", "int", 500,
+                "Máximo de linhas de diff em candidate LOW_RISK.", minimum=1, maximum=20000),
+    SettingSpec("selfdev_cooldown_minutes", "selfdev", "int", 15,
+                "Cooldown após candidate rejeitado ou bloqueado.", minimum=0, maximum=1440),
     # ------------------------------------------------- secrets (sempre mascarados)
     # Exibidos apenas como {"configured": true|false}; nunca aceitam valor pela
     # UI de settings (§42-§43). O fluxo correto é indicado em `configure_via`.
@@ -225,6 +247,8 @@ def get_settings_v3(settings: Any) -> dict[str, Any]:
             value: dict[str, Any] | Any = {"configured": _configured_value(settings, e.key)}
         else:
             value = getattr(settings, e.key, e.default)
+            if isinstance(value, Path):
+                value = str(value)
         item = {
             "key": e.key,
             "category": e.category,
@@ -302,6 +326,8 @@ def export_config(settings: Any, about: dict[str, Any]) -> dict[str, Any]:
             value = {"configured": _configured_value(settings, e.key)}
         else:
             value = getattr(settings, e.key, e.default)
+            if isinstance(value, Path):
+                value = str(value)
         entries.append({"key": e.key, "category": e.category,
                         "type": e.type, "value": value})
     return {

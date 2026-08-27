@@ -29,4 +29,3 @@ class MemoryRecord(BaseModel):
     metadata: dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
-
