@@ -12,8 +12,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 import ssl
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -24,6 +26,7 @@ from app.integrations.base import IntegrationError, require_secure_credential_tr
 logger = logging.getLogger("nyra.homelab.proxmox")
 
 _ERROR_PREFIX = "PROXMOX"
+_DEFAULT_CA_RELATIVE_PATH = Path("NYRA") / "certs" / "proxmox-root-ca.pem"
 
 
 class ProxmoxReadOnlyClient:
@@ -80,6 +83,16 @@ class ProxmoxReadOnlyClient:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"PVEAPIToken={self.token_id}={self._token_secret}"}
 
+    def _httpx_verify(self) -> bool | ssl.SSLContext:
+        """Keep TLS verification on, adding NYRA's private Proxmox CA when present."""
+        local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+        if not local_app_data:
+            return True
+        ca_file = Path(local_app_data) / _DEFAULT_CA_RELATIVE_PATH
+        if not ca_file.is_file():
+            return True
+        return ssl.create_default_context(cafile=str(ca_file))
+
     async def _check_fingerprint(self) -> None:
         """Pin the server certificate leaf digest when a fingerprint is set.
 
@@ -134,10 +147,13 @@ class ProxmoxReadOnlyClient:
         last_error: Exception | None = None
         for attempt in range(2):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout_seconds, verify=self.verify_ssl) as client:
+                async with httpx.AsyncClient(
+                    timeout=self.timeout_seconds,
+                    verify=self._httpx_verify(),
+                ) as client:
                     response = await client.request(method, url, headers=self._headers(), json=json_body)
                 break
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
+            except (httpx.TimeoutException, httpx.TransportError, ssl.SSLError) as exc:
                 last_error = exc
                 if attempt == 1:
                     if _is_tls_verification_error(exc):
@@ -318,7 +334,7 @@ def _is_tls_verification_error(exc: BaseException) -> bool:
     for _ in range(8):
         if current is None:
             return False
-        if isinstance(current, ssl.SSLCertVerificationError):
+        if isinstance(current, ssl.SSLError):
             return True
         text = str(current).casefold()
         if "certificate verify failed" in text or "certificate_verify_failed" in text:

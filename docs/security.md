@@ -32,3 +32,9 @@ O SelfDev usa worktrees isolados e patches estruturados com paths contidos, hash
 A API é destinada ao operador local e ainda não usa uma credencial de sessão por lançamento. A barreira de Host/Origin reduz ataques de navegador, mas um processo já executando como o mesmo usuário local continua dentro da fronteira de confiança do host. Não exponha a porta backend na LAN e não use proxy que remova ou reescreva essas validações.
 
 Para relatar uma vulnerabilidade, não publique credenciais, bancos, áudio ou logs privados em issues públicas. Envie somente uma reprodução mínima e sanitizada ao mantenedor do repositório.
+
+## Fronteiras de confiança V2
+
+Contexto recebe um rótulo obrigatório: `SYSTEM_TRUSTED`, `USER_INPUT`, `TOOL_TRUSTED`, `TOOL_UNTRUSTED`, `REMOTE_CONTENT`, `WEB_CONTENT`, `DOCUMENT_CONTENT` ou `MEMORY_CONTENT`. Web, documentos, memória e resultados remotos são dados sem autoridade de instrução, mesmo quando contêm frases como “ignore as instruções anteriores”. O Context Engine serializa essa fronteira; Browser Operator e RAG também a preservam no resultado estruturado.
+
+Memory V2 recusa material com aparência de credencial e não substitui o Credential Broker. RAG restringe ingestão a roots autorizados, resolve o caminho antes da leitura e preserva provenance. Replay é dry-run seguro: chamadas de tool não são reexecutadas. Action Budget limita tools, retries, planner, falhas, tempo, restarts e ações destrutivas/rede. Traces, eventos e diagnósticos passam pela redaction estruturada antes da persistência ou exposição na API.

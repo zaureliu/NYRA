@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "rules": [
     {"canonical":"NYRA","aliases":["Nyra"],"category":"ai","spoken_form":"Naira"},
     {"canonical":"Utamo Sentinel","category":"infrastructure","priority":10,"spoken_form":"Utâmo Sentinél"},
@@ -91,6 +91,22 @@
     {"canonical":"CVE","category":"security","spoken_form":"cê vê é"},
     {"canonical":"MFA","category":"security","spoken_form":"eme éfe á"},
     {"canonical":"WPA2","category":"security","spoken_form":"dâbliu pê á dois"},
-    {"canonical":"WPA3","category":"security","spoken_form":"dâbliu pê á três"}
+    {"canonical":"WPA3","category":"security","spoken_form":"dâbliu pê á três"},
+    {"canonical":"Home Assistant","category":"home_automation","spoken_form":"Rôum Assístant"},
+    {"canonical":"Discord","category":"applications","spoken_form":"Díscord"},
+    {"canonical":"Spotify","category":"applications","spoken_form":"Espótifai"},
+    {"canonical":"Visual Studio Code","category":"development","priority":10,"spoken_form":"Visual Studio Code"},
+    {"canonical":"VS Code","category":"development","spoken_form":"vê ésse Code"},
+    {"canonical":"LILYGO","category":"hardware","spoken_form":"Líli Gou"},
+    {"canonical":"Cardputer","category":"hardware","spoken_form":"Cárdputer"},
+    {"canonical":"Proxmark3","aliases":["Proxmark 3"],"category":"hardware","spoken_form":"Próxmark três"},
+    {"canonical":"Chameleon","category":"hardware","spoken_form":"Camíleon"},
+    {"canonical":"CC1101","category":"hardware","spoken_form":"cê cê onze zero um"},
+    {"canonical":"nRF24","category":"hardware","spoken_form":"ene érre éfe vinte e quatro"},
+    {"canonical":"LoRa","category":"hardware","spoken_form":"Lôra"},
+    {"canonical":"T-Embed","category":"hardware","spoken_form":"tê Embéd"},
+    {"canonical":"RF Lab","category":"hardware","spoken_form":"érre éfe Lab"},
+    {"canonical":"RX","category":"hardware","strategy":"spell_letters","spoken_form":"érre xis"},
+    {"canonical":"VM","category":"infrastructure","strategy":"spell_letters","spoken_form":"vê eme"}
   ]
 }

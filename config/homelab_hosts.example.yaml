@@ -1,0 +1,4 @@
+# Public template only. Copy to homelab_hosts.local.yaml and configure locally.
+# Do not commit addresses, hostnames, credentials or topology from a real network.
+version: 1
+hosts: []

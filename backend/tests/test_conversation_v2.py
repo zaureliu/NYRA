@@ -9,7 +9,9 @@ import pytest
 
 from app.conversation.engine import ConversationEngine
 from app.conversation.models import AudioSettingsUpdate, ConversationState, InterruptionTarget
+from app.core.turn import PipelineFailure
 from app.events import EventBus, EventType
+from app.listening.models import UtteranceDecision
 from app.llm.warm_manager import OllamaReadiness, OllamaWarmManager
 from app.realtime.telemetry import RealtimeTelemetry
 from app.speech.stt import FasterWhisperSTT
@@ -55,15 +57,39 @@ class FakeListening:
     def status(self):
         return {"enabled": self.enabled}
 
+    def can_process(self, _client_id: str):
+        return True, "ready"
+
+    def decide(self, text: str):
+        return UtteranceDecision(accepted=True, reason="hands_free", text=text, hands_free_active=True)
+
 
 class FakeChat:
+    def __init__(self, pipeline_status: str = "COMPLETE", audio_urls: list[str] | None = None) -> None:
+        self.pipeline_status = pipeline_status
+        self.audio_urls = ["/api/audio/nyra-test.wav"] if audio_urls is None else audio_urls
+        self.audio_url = None
+
     def model_dump(self, mode: str = "json") -> dict:
-        return {"response_id": "turn", "response": "Oi."}
+        return {
+            "response_id": "turn",
+            "response": "Oi.",
+            "pipeline_status": self.pipeline_status,
+            "audio_urls": self.audio_urls,
+        }
 
 
 class FakeOrchestrator:
     def __init__(self) -> None:
-        self.tts = SimpleNamespace(name="kokoro", primary_name="kokoro", fallback_name="pyttsx3")
+        self.tts = SimpleNamespace(
+            name="edge_tts", primary_name="edge_tts", fallback_name="kokoro",
+            engine_id="edge_neural", active_engine="edge_neural",
+            active_voice="en-US-AvaMultilingualNeural",
+            fallback_active=False, fallback_reason=None,
+            capabilities=lambda: SimpleNamespace(supports_emotion=False),
+            describe=lambda: {"engine": "edge_tts"},
+        )
+        self.emotion_planner = SimpleNamespace(configure=lambda **_values: None)
         self.calls = []
         self.speech_cancels = 0
         self.agent = SimpleNamespace(cancel_active=self.cancel_task)
@@ -86,12 +112,14 @@ def conversation_settings():
         voice_barge_in=True,
         microphone="default",
         speaker="default",
-        tts_voice="pf_dora",
+        tts_voice="en-US-AvaMultilingualNeural",
         tts_speaking_rate=.97,
         audio_volume=.9,
         listening_mode="hands_free",
         always_listening_enabled=False,
-        tts_provider="kokoro",
+        tts_provider="edge_tts",
+        voice_emotion_mode="automatic",
+        voice_expressiveness="normal",
     )
 
 
@@ -116,6 +144,60 @@ async def test_conversation_states_empty_stt_and_direct_turn_do_not_guess(tmp_pa
     assert orchestrator.calls[0][1]["response_id"].startswith("turn_")
     assert orchestrator.calls[0][1]["turn"].approval_capable is False
     await engine.stop()
+
+
+@pytest.mark.asyncio
+async def test_always_listening_reports_each_voice_stage_without_hiding_text(tmp_path: Path):
+    engine = ConversationEngine(
+        conversation_settings(), EventBus(), FakeSTT("Nyra, fala oi"),
+        FakeListening(), FakeOrchestrator(), RealtimeTelemetry(),
+    )
+    result = await engine.listening_audio_turn(tmp_path / "speech.wav", "client_12345678")
+    assert result["accepted"] is True
+    assert result["voice_stages"] == {
+        "STT": "COMPLETED",
+        "DECISION": "COMPLETED",
+        "LLM": "COMPLETED",
+        "TTS": "COMPLETED",
+        "PLAYBACK": "PENDING",
+    }
+
+
+@pytest.mark.asyncio
+async def test_always_listening_keeps_text_valid_when_tts_is_degraded(tmp_path: Path):
+    orchestrator = FakeOrchestrator()
+
+    async def degraded(text, **kwargs):
+        orchestrator.calls.append((text, kwargs))
+        return FakeChat("AUDIO_DEGRADED", [])
+
+    orchestrator.converse = degraded  # type: ignore[method-assign]
+    engine = ConversationEngine(
+        conversation_settings(), EventBus(), FakeSTT("Nyra, responda"),
+        FakeListening(), orchestrator, RealtimeTelemetry(),
+    )
+    result = await engine.listening_audio_turn(tmp_path / "speech.wav", "client_12345678")
+    assert result["accepted"] is True
+    assert result["chat"]["response"] == "Oi."
+    assert result["voice_stages"]["TTS"] == "FAILED"
+    assert result["voice_stages"]["PLAYBACK"] == "NOT_AVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_always_listening_wraps_stt_failure_with_stage_and_safe_state(tmp_path: Path):
+    class MissingAudioSTT(FakeSTT):
+        async def transcribe(self, path: Path):
+            raise FileNotFoundError(str(path))
+
+    engine = ConversationEngine(
+        conversation_settings(), EventBus(), MissingAudioSTT(),
+        FakeListening(), FakeOrchestrator(), RealtimeTelemetry(),
+    )
+    with pytest.raises(PipelineFailure) as raised:
+        await engine.listening_audio_turn(tmp_path / "missing.wav", "client_12345678")
+    assert raised.value.error.stage == "STT"
+    assert raised.value.error.exception_type == "FileNotFoundError"
+    assert engine.status()["last_error"] == "STT:FileNotFoundError"
 
 
 async def _collect(target: list, event) -> None:
@@ -152,13 +234,14 @@ async def test_visible_audio_settings_reach_runtime_and_persistence(monkeypatch)
 
     engine.bind_tts_switcher(switch)
     value = AudioSettingsUpdate(
-        microphone="usb-mic", speaker="usb-speaker", voice="pf_dora", speech_speed=1.08,
+        microphone="usb-mic", speaker="usb-speaker", voice="en-US-AvaMultilingualNeural", speech_speed=1.08,
         volume=.6, conversation_mode="wake_word", always_listening=True, allow_interruption=False,
     )
     result = await engine.update_audio_settings(value)
     assert result["settings"] == value.model_dump()
     assert listening.last_update.microphone == "usb-mic"
-    assert switched == [("kokoro", "pf_dora", 1.08)]
+    assert listening.last_update.mode.value == "wake_word"
+    assert switched == [("edge_tts", "en-US-AvaMultilingualNeural", 1.08)]
     assert persisted[0]["speaker"] == "usb-speaker" and persisted[0]["audio_volume"] == .6
 
 

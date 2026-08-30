@@ -1,7 +1,7 @@
 """Home Assistant REST API integration.
 
-Base URL comes from configuration exactly as provided (the operator's
-instance answers at http://192.168.1.200; the port is NEVER auto-appended).
+Base URL comes from configuration exactly as provided; a port is never
+auto-appended.
 The long-lived access token lives only in settings/env and is sent exclusively
 as an Authorization header — it never reaches logs, the registry or the LLM.
 """

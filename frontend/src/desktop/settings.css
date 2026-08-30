@@ -1,5 +1,26 @@
-.desktop-settings { display: flex; flex-direction: column; gap: 9px; font-size: 11px; }
-.desktop-settings > strong { font: 600 9px IBM Plex Mono; color: #65d2dd; letter-spacing: .12em; }
-.desktop-settings label { display: flex; align-items: center; gap: 7px; }
-.desktop-settings small { color: #789097; font-size: 9px; }
-.desktop-settings select { margin-left: auto; border: 1px solid #315862; background: #0c171d; color: #a7e4ea; font-size: 10px; }
+.desktop-settings {
+  position: fixed;
+  top: 8px;
+  right: auto;
+  bottom: auto;
+  left: 8px;
+  display: flex;
+  flex-direction: column;
+  width: min(340px, calc(100vw - 16px));
+  min-width: min(216px, calc(100vw - 16px));
+  max-width: min(340px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  gap: clamp(3px, 1.25vh, 9px);
+  padding: clamp(6px, 1.8vh, 10px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  font-size: clamp(9.5px, 2.4vw, 11px);
+  line-height: 1.2;
+}
+.desktop-settings > strong { flex: 0 0 auto; font: 600 clamp(8px, 2vw, 9px) IBM Plex Mono; color: #65d2dd; letter-spacing: .12em; }
+.desktop-settings label { display: flex; flex: 0 0 auto; min-height: 15px; align-items: center; gap: clamp(4px, 1.5vw, 7px); white-space: nowrap; }
+.desktop-settings input { flex: 0 0 auto; margin: 0; }
+.desktop-settings small { flex: 0 0 auto; color: #789097; font-size: clamp(8px, 2vw, 9px); line-height: 1.2; }
+.desktop-settings select { min-width: 0; max-width: 58%; margin-left: auto; border: 1px solid #315862; background: #0c171d; color: #a7e4ea; font-size: clamp(9px, 2.2vw, 10px); }
+.context-card.desktop-settings > div { flex: 0 0 auto; margin-top: 2px; }
+.context-card.desktop-settings button { min-height: 22px; padding: clamp(4px, 1.5vh, 7px); }

@@ -161,7 +161,9 @@ def parse_universal_intent(text: str) -> UniversalIntent | None:
                 return UniversalIntent(UniversalAction.OPEN_FILE, name)
 
         # 6) Nome com extensão plausível: "abre relatorio.pdf".
-        if len(target.split()) <= 4 and _FILE_EXTENSION.search(target):
+        # Executable names are canonical app aliases, not document artifacts.
+        if len(target.split()) <= 4 and _FILE_EXTENSION.search(target) and \
+                not target.casefold().endswith((".exe", ".com")):
             return UniversalIntent(UniversalAction.OPEN_FILE, target)
 
         contextual = target in _CONTEXTUAL_TARGETS

@@ -40,6 +40,11 @@ class ToolAgentLoop:
         r"(?i)\b(abra|abre|abrir|feche|fecha|fechar|minimize|minimiza|maximize|restaura|traz|foco|focar|"
         "escreva|escreve|digite|digita|clique|clica|salve|salva|navegue|acesa|acessa)\\b"
     )
+    _MONITOR_REQUEST_PATTERN = re.compile(
+        r"(?i)\b(monitora|monitore|monitorar|monitoramento|acompanha|acompanhe|acompanhar|"
+        r"avisa|avise|avisar|fica\s+de\s+olho)\b|"
+        r"\bquando\b.{0,100}\b(?:mudar|ficar|chegar|cair|subir|terminar|concluir)\b"
+    )
 
     @classmethod
     def _operator_directive(cls, messages: list[LLMMessage]) -> str | None:
@@ -72,6 +77,7 @@ class ToolAgentLoop:
             "",
         )
         domain = classify_domain(user_text or "")
+        monitor_request = bool(self._MONITOR_REQUEST_PATTERN.search(user_text or ""))
         try:
             schemas = self.registry.llm_tools(domain)
         except TypeError:
@@ -90,10 +96,24 @@ class ToolAgentLoop:
         local_backend_retries = 0
         repeats: dict[tuple[str, str], int] = {}
         no_tool_nudges = 0
+        monitor_nudges = 0
         max_rounds = (runtime.max_steps + 2) if runtime else (self.max_shell_calls + 6)
         operator_directive = self._operator_directive(messages)
         if operator_directive:
             working.append(LLMMessage(role="system", content=operator_directive))
+        if monitor_request:
+            working.append(LLMMessage(
+                role="system",
+                content=(
+                    "MONITORING REQUIRED: este pedido exige acompanhamento futuro real. Chame `monitor_create` "
+                    "com TODOS os campos planos: objective, probe_tool READ_ONLY, probe_params, condition_path, "
+                    "condition_operator, target_value, interval_seconds e duration_seconds. Para NetworkWatch, "
+                    "use probe_tool=get_network_status; para detectar qualquer atualização, use "
+                    "condition_path=snapshot.timestamp e condition_operator=CHANGED. "
+                    "Não diga 'vou monitorar/acompanhar/verificar depois' sem success=true e monitor_id "
+                    "retornados por monitor_create neste turno. Se a criação falhar, informe a falha explicitamente."
+                ),
+            ))
         if runtime:
             remote_requirement = (
                 f" REMOTE_TARGET={runtime.required_remote_host}; REGISTERED_ADDRESS={runtime.required_remote_address}; "
@@ -140,6 +160,29 @@ class ToolAgentLoop:
                 content = response.content.strip()
                 if not content:
                     raise RuntimeError("LLM completed the tool loop without a response")
+                monitor_created = any(
+                    result.tool == "monitor_create"
+                    and result.ok
+                    and result.data.get("success") is True
+                    and bool((result.data.get("monitor") or {}).get("monitor_id"))
+                    for result in execution_results
+                )
+                if monitor_request and not monitor_created and not force_final and monitor_nudges < 2:
+                    monitor_nudges += 1
+                    working.append(LLMMessage(
+                        role="system",
+                        content=(
+                            "MONITOR JOB MISSING: ainda não existe MonitorJob real neste turno. "
+                            "Chame monitor_create agora. Se uma tentativa falhou, corrija somente argumentos "
+                            "estruturais com base no erro; caso não seja possível, pare e relate que o "
+                            "monitoramento não foi criado."
+                        ),
+                    ))
+                    continue
+                if monitor_request and not monitor_created:
+                    return self._monitor_creation_failure(execution_results)
+                if monitor_created:
+                    return self._monitor_confirmation(execution_results)
                 if (
                     schemas
                     and not execution_results
@@ -255,7 +298,10 @@ class ToolAgentLoop:
                     continue
                 if runtime and runtime.needs_verification:
                     runtime.unverified_action = True
-                return await self._grounded_final(working, content, execution_results, ledger)
+                grounded = await self._grounded_final(working, content, execution_results, ledger)
+                from app.operator.monitoring import enforce_monitor_promise
+
+                return enforce_monitor_promise(grounded, job_created=monitor_created)
 
             stop_batch = False
             for call in response.tool_calls:
@@ -374,6 +420,18 @@ class ToolAgentLoop:
                     agent_run_id=runtime.run.id if runtime else None,
                     turn_id=turn_id,
                 )
+                monitor_create_verified = bool(
+                    name == "monitor_create"
+                    and result.ok
+                    and result.data.get("success") is True
+                    and result.data.get("effect_verified") is True
+                    and (result.data.get("monitor") or {}).get("monitor_id")
+                )
+                if monitor_create_verified:
+                    # The manager only returns effect_verified after the SQLite
+                    # commit and a real initial probe. A second LLM-driven probe
+                    # is unnecessary and can race a very short monitor.
+                    observation.verification_status = VerificationStatus.VERIFIED
                 if observation.success and observation.risk_level.upper() in READ_ONLY_RISKS:
                     ledger.record_verification_attempt(observation)
                 if runtime:
@@ -431,7 +489,12 @@ class ToolAgentLoop:
                 if result.ok:
                     consecutive_failures = 0
                     if runtime:
-                        if risk != RiskLevel.READ_ONLY:
+                        if monitor_create_verified:
+                            runtime.needs_verification = False
+                            for held_resource in list(runtime.held_resources):
+                                await runtime.release_resource(held_resource)
+                                runtime.held_resources.discard(held_resource)
+                        elif risk != RiskLevel.READ_ONLY:
                             runtime.needs_verification = True
                             await runtime.transition(self._state("VERIFY"))
                         elif runtime.needs_verification:
@@ -630,6 +693,57 @@ class ToolAgentLoop:
         if successful:
             return "A investigação foi interrompida pelo limite de segurança; os resultados reais coletados permanecem registrados."
         return "A investigação não conseguiu obter evidência suficiente e foi interrompida pelo limite de segurança."
+
+    @staticmethod
+    def _monitor_confirmation(results: list[ToolResult]) -> str:
+        result = next(
+            item for item in reversed(results)
+            if item.tool == "monitor_create"
+            and item.ok
+            and item.data.get("success") is True
+            and (item.data.get("monitor") or {}).get("monitor_id")
+        )
+        monitor = result.data["monitor"]
+        monitor_id = str(monitor["monitor_id"])
+        objective = str(monitor.get("objective") or "acompanhamento solicitado")[:300]
+        status = str(monitor.get("status") or "ACTIVE")
+        reading = monitor.get("last_reading") or {}
+        value = reading.get("value")
+        reading_text = (
+            f" A leitura inicial real foi {str(value)[:160]}."
+            if reading.get("ok") is True and value is not None
+            else " A primeira tentativa de leitura ficou registrada no job."
+        )
+        if status == "ACTIVE":
+            return (
+                f"Vou monitorar por meio do MonitorJob real {monitor_id}, criado e persistido para {objective}."
+                f"{reading_text} Intervalo: {monitor.get('interval_seconds')} segundos; "
+                f"prazo: {monitor.get('duration_seconds')} segundos. Avisarei automaticamente sobre "
+                "mudança relevante, condição atingida, erro ou fim do prazo."
+            )
+        return (
+            f"O MonitorJob real {monitor_id} foi criado para {objective} e já encerrou com status {status}."
+            f"{reading_text} {str(monitor.get('final_summary') or '')[:500]}"
+        ).strip()
+
+    @staticmethod
+    def _monitor_creation_failure(results: list[ToolResult]) -> str:
+        failed = next(
+            (item for item in reversed(results) if item.tool == "monitor_create" and not item.ok),
+            None,
+        )
+        if failed is None:
+            detail = "o modelo não conseguiu emitir uma chamada monitor_create válida"
+        else:
+            data = failed.data
+            detail = str(
+                data.get("message") or data.get("error_code")
+                or data.get("error") or "falha sem detalhe"
+            )
+        return (
+            "Não consegui criar um MonitorJob real; portanto, não há monitoramento ativo. "
+            f"Falha: {redact_secrets(' '.join(detail.split()))[:360]}."
+        )
 
     @staticmethod
     def _model_safe_result(name: str, result_dump: dict[str, Any]) -> dict[str, Any]:

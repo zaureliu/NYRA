@@ -1,7 +1,7 @@
 {
   "name": "nyra-local",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Entrypoint local da NYRA; dependencias permanecem isoladas em frontend e desktop.",
   "scripts": {
     "dev": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/bootstrap.ps1 -Mode Development",

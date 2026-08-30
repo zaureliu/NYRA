@@ -78,5 +78,36 @@ tasklist independente confirma o PID no SO → fecha somente o PID da NYRA.
 
 - Apps UWP cuja janela muda de processo são cobertos por `window_title_contains`;
   se o operador renomear/ocultar títulos, a verificação cai no timeout honesto.
-- Não há (ainda) close/minimize/focus estruturados — fechamento hoje via
-  shell específico por PID (nunca por nome de imagem).
+- Close, minimize, maximize, restore e focus usam Win32 estruturado com
+  verificação por releitura do estado; não dependem de shell por PID.
+
+## Universal App Operator (canonical + compound fast-path)
+
+O discovery continua coletando rotas do Start Menu, App Paths, PATH,
+Registry, AUMID e diretórios comuns. Antes do ranking, `canonical_apps.py`
+consolida essas rotas por sinais fortes de identidade. O
+`UniversalAppRegistry` persiste uma entidade por aplicativo, mantendo seus
+aliases, nomes de processo e todas as alternativas de launch. Uma fonte ou um
+método de launch nunca constitui, sozinho, uma aplicação diferente.
+
+O fluxo atual é:
+
+```text
+raw user command
+  -> artifact precedence
+  -> CompoundIntentPlanner (quando houver mais de uma ação)
+  -> canonical app resolution + real ambiguity check
+  -> CompoundActionExecutor (single owner)
+  -> open/focus -> wait for ready -> UIA/native action -> verify each step
+  -> internal structured result -> clean user-facing response
+```
+
+Sequências locais determinísticas (`OPEN+TYPE`, `OPEN+SEND`, `OPEN+SEARCH`,
+`OPEN+MAXIMIZE`, entre outras) não atravessam Agent Run, `system_shell` ou
+`remote_shell`. O contexto de execução conserva internamente o aplicativo
+canônico e a janela proprietária. A sequência para na primeira verificação
+falha e nunca transforma execução parcial em sucesso conversacional.
+
+Aliases aprendidos só são registrados depois de sucesso verificado. Um alias
+compartilhado por duas identidades realmente diferentes continua produzindo
+uma pergunta de desambiguação.

@@ -9,13 +9,14 @@ export type OpsView =
   | 'integrations'
   | 'sentinel'
   | 'voice'
+  | 'usb'
   | 'settings'
   | 'developer'
   | 'about'
 
 export const OPS_VIEWS: readonly OpsView[] = [
   'overview', 'conversation', 'capabilities', 'autonomy', 'tasks',
-  'homelab', 'network', 'integrations', 'sentinel', 'voice',
+  'homelab', 'network', 'integrations', 'sentinel', 'voice', 'usb',
   'settings', 'developer', 'about',
 ]
 
@@ -54,6 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Sistema',
     items: [
       { view: 'voice', label: 'Voz', icon: 'VZ' },
+      { view: 'usb', label: 'Dispositivos USB', icon: 'US' },
       { view: 'settings', label: 'Configurações', icon: 'CF' },
       { view: 'developer', label: 'Developer', icon: 'DV' },
       { view: 'about', label: 'Sobre', icon: 'AB' },

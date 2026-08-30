@@ -105,8 +105,22 @@ def maximize_window(hwnd: int, timeout_seconds: float = 3.0) -> bool:
 
 def restore_window(hwnd: int, timeout_seconds: float = 3.0) -> bool:
     root = _root_owner(hwnd)
+    was_iconic = bool(_user32.IsIconic(root))
+    was_zoomed = bool(_user32.IsZoomed(root))
     _user32.ShowWindow(root, _SW_RESTORE)
-    return wait_for(lambda: not bool(_user32.IsIconic(root)) and not bool(_user32.IsZoomed(root)), timeout_seconds)
+
+    def restored() -> bool:
+        if not bool(_user32.IsWindowVisible(root)):
+            return False
+        if was_iconic:
+            # A maximized window minimized to the taskbar may legitimately
+            # return maximized. Restore means visible/not minimized here.
+            return not bool(_user32.IsIconic(root))
+        if was_zoomed:
+            return not bool(_user32.IsZoomed(root))
+        return not bool(_user32.IsIconic(root))
+
+    return wait_for(restored, timeout_seconds)
 
 
 def move_window(hwnd: int, x: int, y: int, timeout_seconds: float = 3.0) -> bool:

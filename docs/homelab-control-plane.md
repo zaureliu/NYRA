@@ -15,7 +15,7 @@ Camada central para **observar, diagnosticar e controlar** o homelab real como r
         ┌─────────────┼──────────────┐
         ↓             ↓              ↓
  Host Registry   Integrations   Network Probe
- (homelab_hosts.yaml)           (ICMP/TCP/HTTP)
+ (registry local)               (ICMP/TCP/HTTP)
         │
         ├─ Proxmox ....... API nativa (token PVE) + tasks UPID
         ├─ Home Assistant  REST API (long-lived token)
@@ -33,7 +33,7 @@ O Control Plane **não é um segundo agente**: o AgentController continua decidi
 | Arquivo | Responsabilidade |
 |---|---|
 | `backend/app/homelab/models.py` | `HostDefinition`, estados normalizados (`ONLINE`, `OFFLINE`, `DEGRADED`, `UNREACHABLE`, `AUTHENTICATION_FAILED`, `INTEGRATION_UNAVAILABLE`, `DISABLED`), probes |
-| `backend/app/homelab/registry.py` | Unified Host Registry (`config/homelab_hosts.yaml`), aliases case-insensitive, validação de duplicatas |
+| `backend/app/homelab/registry.py` | Unified Host Registry local, aliases case-insensitive, validação de duplicatas |
 | `backend/app/homelab/health.py` | Network Probe Layer (reusa probes do `network_watch`) e agregação de estado — **ping falhando ≠ host offline** |
 | `backend/app/homelab/controller.py` | Orquestração: overview concorrente com cache curto, locks por recurso, approval, ACT→VERIFY, eventos com cooldown |
 | `backend/app/homelab/history.py` | Histórico operacional em SQLite (`homelab_history`), sem secrets |
@@ -45,11 +45,11 @@ O Control Plane **não é um segundo agente**: o AgentController continua decidi
 
 ## Unified Host Registry
 
-Fonte única: `config/homelab_hosts.yaml` (override: `NYRA_HOMELAB_REGISTRY_PATH`).
+Fonte única: arquivo local definido por `NYRA_HOMELAB_REGISTRY_PATH` (default: `config/homelab_hosts.local.yaml`). O template público é `config/homelab_hosts.example.yaml`.
 
 - Aliases centralizados, case-insensitive (`roteador` → openwrt; `ha` → home_assistant).
-- **Nenhuma credencial no registry**: `credentials_profile` aponta para settings (`settings.proxmox_token`, `settings.home_assistant_token`) ou para o Trusted Host Registry SSH (`config/network_aliases.json`).
-- Hosts padrão: `openwrt` (192.168.1.1), `proxmox` (192.168.1.2), `dc1` (192.168.1.10), `home_assistant` (192.168.1.200).
+- **Nenhuma credencial no registry**: `credentials_profile` aponta para settings (`settings.proxmox_token`, `settings.home_assistant_token`) ou para o Trusted Host Registry SSH local.
+- O clone público não define hosts, endereços ou topologia. O operador cria as entradas no arquivo `.local.yaml` ignorado.
 
 ### Probe HTTP autenticado
 
@@ -102,12 +102,12 @@ Painel enxuto `HomelabPanel` (dashboard/integrações): estado dos 4 hosts com c
 ```env
 NYRA_HOMELAB_ENABLED=true
 NYRA_HOMELAB_MUTATIONS_ENABLED=false
-NYRA_HOMELAB_REGISTRY_PATH=config/homelab_hosts.yaml
+NYRA_HOMELAB_REGISTRY_PATH=config/homelab_hosts.local.yaml
 NYRA_HOMELAB_DEFAULT_TIMEOUT_SECONDS=5
 NYRA_HOMELAB_OVERVIEW_CACHE_SECONDS=5
 NYRA_HOMELAB_OFFLINE_FAILURE_THRESHOLD=2
 NYRA_PROXMOX_ENABLED=true
-NYRA_PROXMOX_URL=https://192.168.1.2:8006
+NYRA_PROXMOX_URL=https://proxmox.example.invalid:8006
 NYRA_PROXMOX_VERIFY_SSL=true
 NYRA_HOME_ASSISTANT_URL=https://home-assistant.local   # HTTP com Bearer só em loopback
 ```

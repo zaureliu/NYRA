@@ -106,8 +106,7 @@ barge-in via settings), processor externo e diagnóstico com métricas reais
 
 ## 8. Release / Sobre / World State
 
-* `GET /api/about` — versão unificada **0.2.0** (Tauri já era 0.2.0; backend,
-  frontend e metadados foram unificados nela — ver §AP/AQ do prompt11).
+* `GET /api/about` — versão unificada do backend, frontend e Tauri.
 * `GET /api/release/health` — GREEN/YELLOW/RED por critérios: daily-use,
   release gate (`scripts/release_gate.py` → `.tmp/release-health.json`),
   encoding audit. Pendência honesta = YELLOW, não GREEN.
@@ -130,3 +129,9 @@ Backend: `tests/test_operations_ui_v3.py` (29) +
 Frontend: `src/ops/opsAudit.test.ts` (ghost buttons, mojibake, navegação) +
 `src/ops/ui.test.ts` (status mapping + envelope). Smoke de UI real:
 `npm run test:ui` (requer dev server + backend no ar).
+
+## Intelligence Platform V2 no Control Center
+
+A Overview existente consulta `GET /api/intelligence/status` com `cache: no-store` e limpa o snapshot em caso de erro. Os cards existentes mostram estados confirmados do Brain/router, Memory, RAG, Context, Tasks, Events, Trace, Skills/Capabilities, Browser, Desktop/Vision, Diagnostics e SelfDev. Não existe um dashboard paralelo. Sem resposta real do backend, o estado é `UNKNOWN`/“Telemetria indisponível”; a UI não sintetiza `ONLINE` nem contagens zero.
+
+O endpoint entrega apenas telemetria sanitizada: estado, contagens, modelo selecionado, budget, filas, falhas e timestamps. Conteúdo privado de memória, documento, trace, áudio, credenciais e topologia não aparece nos cards.

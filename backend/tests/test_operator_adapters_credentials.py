@@ -129,7 +129,7 @@ def test_credential_roundtrip_and_metadata_only(tmp_path, monkeypatch):
     from app.operator import credentials as creds_mod
 
     monkeypatch.setattr(creds_mod, "_VAULT_FILE", tmp_path / "vault.bin")
-    secret = "ghp_supersecrettokenvalue1234"
+    secret = "ghp_" + ("x" * 24)
     broker = _broker(tmp_path)
     created = broker.create("home_assistant", secret, kind="http",
                             description="HA long-lived token", operator_direct=True)

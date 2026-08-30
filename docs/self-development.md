@@ -33,7 +33,7 @@ As opções ficam em `config/default.yaml`, variáveis `NYRA_*` e `Settings > Se
 - `AUTONOMOUS_SAFE`: candidatos/promovidos somente em LOW_RISK.
 - `AUTONOMOUS_ADVANCED`: também permite MEDIUM_RISK; HIGH_RISK continua bloqueado.
 
-O modelo padrão é `qwen3:8b`, já instalado no Ollama local. O router não baixa modelos e não usa provedores cloud. `selfdev_auto_publish_github` permanece `false` no bootstrap 0.3.0; só deve ser ativado explicitamente depois que a release real estiver validada e publicada.
+O modelo padrão é configurável e deve existir no Ollama local. O router não baixa modelos e não usa provedores cloud. `selfdev_auto_publish_github` permanece `false` por padrão e só deve ser ativado explicitamente depois que todos os gates locais e públicos estiverem validados.
 
 ## API e interface
 
@@ -42,3 +42,9 @@ Endpoints locais sob `/api/selfdev` expõem status, issues, detalhe/diff, execu�
 ## Recuperação e auditoria
 
 Fila, promoções e restart pendente sobrevivem a reinícios. Eventos `selfdev.*` contêm apenas identificadores, risco, contagens e estados. Falhas do SelfDev degradam o serviço isoladamente e não impedem chat, voz, memória ou controle local. Uma melhoria aplicada pode ser revertida por commit; conflitos ou árvore canônica suja bloqueiam a promoção para revisão do operador.
+
+## Gates V2
+
+Antes dos gates V1, o candidate passa por `REPRODUCE` e `ROOT_CAUSE_ANALYSIS`. A validação acrescenta `STATIC_ANALYSIS`, `REGRESSION_BENCHMARK`, `CANARY_VALIDATION` e `BEHAVIOR_COMPARISON`. O baseline executável só pode usar o mirror isolado `workspace/repository`; o runtime estável nunca vira diretório de testes. Ausência desse mirror bloqueia o ciclo. LOW_RISK continua subordinado a todos os gates, MEDIUM segue o modo Advanced e HIGH nunca é promovido autonomamente.
+
+O restart continua preparado em duas fases. Health pós-restart ausente ou negativo mantém a promoção incompleta e aciona `git revert`. O teste seguro de rollback pode usar um repositório Git temporário e um health probe intencionalmente negativo; ele não deve usar `reset --hard` nem tocar o runtime estável.

@@ -1,113 +1,112 @@
-# NYRA 0.3.0
+# NYRA 0.4.0
 
-NYRA é uma assistente de IA local para homelab construída como **identidade + LLM + memória + percepção + voz + avatar + ferramentas + eventos**. Ela sabe que é uma IA, mantém personalidade persistente e observa infraestrutura sem tomar decisões administrativas pelo operador.
+NYRA é uma assistente de IA local-first para conversa, voz, operação segura do Windows e observação de homelab. A arquitetura separa identidade, modelos, memória, contexto, política, capacidades, ferramentas, execução, verificação e observabilidade. Texto livre produzido pelo LLM nunca é executado diretamente.
 
-## Objetivo
+## Capacidades atuais
 
-Oferecer uma assistente pessoal local-first, auditável e extensível para conversa, voz, automação segura do computador e observação de homelab, mantendo dados privados no host e integrações externas sempre opt-in.
+- Ollama local com inventário dinâmico, roteamento por capacidade e fallback;
+- Memory V2 seletiva, RAG local incremental e Context Engine com budget;
+- Skills declarativas e Capability Registry baseado no health real;
+- Autonomous Task Engine, Event Intelligence, Diagnostics e Trace/Replay;
+- Universal Operator com resolução canônica de aplicativos, comandos compostos e verificação de efeito;
+- Browser Operator CDP/DOM-first e visão estrutural; modelo local de visão é opcional;
+- `system_shell`, Trusted SSH e Agent Loop com schemas, limites, redaction e approvals de uso único;
+- voz local, Desktop Presence Tauri, Avatar V2 e integração opcional com VTube Studio;
+- integrações opt-in para Home Assistant, OpenWrt, Proxmox e Utamo Sentinel;
+- SelfDev V2 isolado, com candidates em worktrees, gates de segurança e rollback.
 
-## Principais recursos
-
-- chat e voz locais com Ollama, STT e TTS desacoplados;
-- memória seletiva, identidade persistente e EventBus tipado;
-- avatar web e presença desktop via Tauri;
-- Universal Operator com approvals de uso único, verificação de efeito e recuperação;
-- integrações read-only por padrão para homelab e Utamo Sentinel;
-- Self-Development Engine com candidates isolados, testes, rollback e publicação sanitizada.
+Recursos opcionais nunca são reportados como `ONLINE` sem confirmação do backend. O modelo de visão pode aparecer `UNCONFIGURED`; integrações externas podem aparecer `OFFLINE`, `DISABLED` ou `UNCONFIGURED` sem impedir o uso local.
 
 ## Arquitetura
 
-- FastAPI + WebSocket, configuração Pydantic/YAML/.env e logs JSON.
-- Ollama atrás de `LLMProvider`; modelo inicial `qwen3:8b` já existente.
-- SQLite com tabelas separadas e FTS5, retenção e contexto seletivo.
-- faster-whisper local para português, com Web Audio, medidor, normalização e Silero VAD ONNX.
-- `ConversationEngine`: turn detection, STT reutilizável, estados explícitos, barge-in speech-only e telemetria de latência.
-- `TTSProvider`: Kokoro ONNX/`pf_dora` local como primário e Windows SAPI como fallback; Chatterbox permanece somente experimental.
-- React/Vite/TypeScript multipágina, WebSocket, Avatar V2 aprovado com master imutável, camadas SVG, lip sync e fallback estático; Tauri 2 oferece presença transparente e mouse follow global no desktop.
-- Shell local arbitrário classificado/auditado, Agent Loop limitado e SSH somente para hosts cadastrados.
-- Self-Development Engine local com evidência, fila persistente, worktrees isolados, testes selecionados, scan de segurança, promoção reversível e publicação externa opt-in.
+- Backend FastAPI/Pydantic com WebSocket, EventBus e logs estruturados.
+- Frontend React/Vite/TypeScript e desktop Tauri 2.
+- SQLite local com migrations, WAL, foreign keys, FTS5 e domínios lógicos separados.
+- Ollama atrás de `LLMProvider`; nenhum modelo é baixado silenciosamente.
+- STT local com faster-whisper e VAD; TTS principal configurável, com fallback local do Windows.
+- Approval Gate, Credential Broker, Grounding e Tool Registry permanecem autoridades independentes.
+- Conteúdo de documentos, web, memória e tools conserva trust boundary e não ganha autoridade de system prompt.
 
-Detalhes em [docs/architecture.md](docs/architecture.md) e [docs/self-development.md](docs/self-development.md).
-
-A Conversation Engine V2 acrescenta streaming casual real, TTS incremental por sentença, interrupção sem cancelar automaticamente a tarefa e preload/recovery do Ollama. A tela normal de áudio expõe somente preferências com efeito no runtime; diagnósticos mostram STT, TTS, readiness, TTFT e TTFA. Consulte [arquitetura V2](docs/conversation-engine-v2.md) e [auditoria dos controles](docs/audio-control-audit.md).
-
-A V5 adiciona `Settings > AI > Brain Lab` para comparar `qwen3:8b` e `qwen3.5:9b` sem troca automática, e `Settings > Visual > Live2D` para a bridge oficial do VTube Studio. O Avatar V2 permanece a identidade visível oficial; a arte NYRA Live2D está marcada `WAITING_FOR_LAYERED_ART`. Veja [Brain](docs/ollama-brain.md), [benchmark](docs/brain-benchmark.md) e [Live2D](docs/live2d-overview.md).
-
-Resultados executados estão em [docs/validation.md](docs/validation.md) e os binários em [docs/model-inventory.md](docs/model-inventory.md).
-
-## Universal Operator e sete camadas de autonomia
-
-O controle local é dividido em percepção, estado do computador, entendimento de intenção, Universal Operator, verificação de efeito, aprendizado de uso e memória de skills. Texto livre do LLM nunca é executado diretamente: shell local passa por `system_shell`, SSH por `remote_shell` e ações elevadas exigem approval exato e descartável.
-
-## Self-Development Engine
-
-O SelfDev observa métricas e eventos, exige evidência e hipótese de causa, cria worktrees em um workspace configurável fora da raiz canônica, seleciona testes, compara o candidato e só promove mudanças permitidas pela política de risco. O modo padrão é `AUTONOMOUS_SAFE`; publicação automática permanece desligada durante o bootstrap da versão 0.3.0. Detalhes em [docs/self-development.md](docs/self-development.md).
-
-## Satélite de voz
-
-O WebSocket local implementa o contrato `nyra.voice.v1`, com handshake, heartbeat, barge-in e cancelamento isolado de TTS. Qualquer exposição para outro dispositivo exige configuração explícita e não altera o padrão loopback/local-first.
+Consulte [arquitetura](docs/architecture.md), [Intelligence Platform V2](docs/intelligence-platform-v2.md), [segurança](docs/security.md) e [SelfDev](docs/self-development.md).
 
 ## Requisitos
 
 - Windows 10/11 para a experiência desktop completa;
-- Python 3.11, Node.js/npm e Rust somente para compilar o desktop;
-- Ollama instalado localmente e ao menos um modelo compatível já baixado;
-- microfone opcional para voz e VTube Studio opcional para avatar externo.
+- Python 3.11, Node.js/npm e Rust para desenvolvimento/build;
+- Ollama local com pelo menos um modelo compatível instalado;
+- microfone, VTube Studio, serviços de homelab e modelo vision são opcionais.
 
-## Instalação e início
+## Instalação
 
 ```powershell
-cd .\NYRA
+git clone https://github.com/zaureliu/NYRA.git
+cd NYRA
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 npm run dev
 ```
 
-`npm run dev` é o entrypoint oficial e idempotente: valida os dois `package-lock.json`, reutiliza dependências saudáveis, reconstrói apenas artefatos ausentes ou stale, inicia backend/Vite/Tauri em ordem e aguarda `/api/health`. Abra `http://127.0.0.1:5173`, consulte com `npm run status` e pare com `npm run stop`. Instruções completas: [docs/installation.md](docs/installation.md).
+O bootstrap valida lockfiles, prepara o ambiente Python, reconstrói apenas artefatos ausentes ou stale e aguarda o health real. Use `npm run status` e `npm run stop` para operar o ambiente de desenvolvimento.
 
-Para a personagem flutuante independente do navegador:
+Para gerar a release desktop:
 
 ```powershell
 npm run build:release
 .\start-nyra.ps1
 ```
 
-Detalhes e atalhos: [docs/desktop-presence.md](docs/desktop-presence.md).
+O executável fica em `desktop/src-tauri/target/release/nyra-desktop.exe`; o sidecar PyInstaller fica em `packaging/dist/nyra-backend`. Ambos são artefatos locais e não entram no Git. Veja [instalação](docs/installation.md) e [startup](docs/STARTUP.md).
 
-## Configuração
+## Configuração local
 
-Copie `.env.example` para `.env`; o setup faz isso se necessário. Valores `NYRA_*` sobrescrevem `config/default.yaml`. Portas padrão: frontend 5173, backend 8000, Ollama 11434. Credenciais de integrações configuradas pela interface ficam no Credential Broker do Windows; `.env` é apenas uma fonte local legada e nunca deve ser versionado.
+Copie `.env.example` para `.env`. Valores `NYRA_*` sobrescrevem `config/default.yaml`.
 
-## Ollama
+Registries de rede reais são privados:
 
-O backend sobe sem bloquear e o `OllamaWarmManager` faz preload isolado, warm-up opcional, keep-alive, recovery e readiness confirmada por `/api/ps`. Neste host/Ollama 0.32.15 o default validado é `NYRA_OLLAMA_KEEP_ALIVE=1h`. Troque `NYRA_OLLAMA_URL`, `NYRA_LLM_MODEL` ou implemente outro `LLMProvider`; warm-up não entra no chat, memória, TTS ou tools.
+```powershell
+Copy-Item config\network_aliases.example.json config\network_aliases.local.json
+Copy-Item config\homelab_hosts.example.yaml config\homelab_hosts.local.yaml
+```
 
-Modelos instalados podem ser selecionados na interface sem download automático. O SelfDev usa `qwen3:8b` por padrão e restringe a autopromoção conforme complexidade e risco.
+Preencha os arquivos `.local.*` somente no seu host. Eles são ignorados pelo Git. Credenciais devem permanecer no Credential Broker; não grave tokens, senhas ou chaves nesses registries.
 
-## Voz e microfone
+O SelfDev usa caminhos configuráveis (`NYRA_SELFDEV_WORKSPACE`, `NYRA_SELFDEV_CANONICAL_ROOT` e `NYRA_SELFDEV_PUBLIC_SNAPSHOT`). Os defaults são relativos ao clone, não dependem de um usuário ou drive específico e a publicação automática continua opt-in.
 
-Push-to-talk e Always Listening usam o mesmo pipeline. A captura aplica AEC/NS/AGC quando disponíveis, turn detection com pausa natural, Silero VAD e Faster-Whisper carregado uma vez. Durante a fala da NYRA, barge-in usa threshold reforçado para reduzir self-listening e interrompe apenas o TTS. A tela **Settings > Áudio e conversa** contém microfone, speaker, voz efetiva, velocidade, volume, modo, Always Listening e interrupção, além de testes reais de microfone e voz.
+## Intelligence Platform V2
 
-## Memória
+`backend/app/intelligence/` integra:
 
-Categorias: short-term, episodic, semantic, preferences e homelab_events. API permite criar, pesquisar, listar, excluir e mudar importância. Memória recente e eventos antigos de baixa importância são podados; fatos estáveis não são apagados automaticamente.
+- oito categorias de Memory V2 com deduplicação, confidence, decay e expiração;
+- RAG local para texto, Markdown, código, JSON, YAML, logs e PDF quando `pypdf` estiver disponível;
+- Context Engine com ranking, provenance, trust e budget;
+- Model Router V2 baseado nos modelos realmente instalados no Ollama;
+- Skills, Capability Registry, tasks persistentes, eventos correlacionados e diagnósticos por evidência;
+- traces redigidos, replay seguro, Evaluation Suite e Action Budget.
 
-## Avatar V2
+Knowledge corpus, chunks, embeddings, bancos, traces e memória do operador são dados privados de runtime e nunca fazem parte do repositório. O RAG padrão aceita somente roots locais autorizados pelo runtime.
 
-O pack `frontend/public/avatar/nyra_v2/` usa a master aprovada como visual oficial no dashboard e no Desktop Presence. Camadas no mesmo canvas fornecem olhar em 13 direções, blink suave, expressões e seis estados de boca sem redesenhar a personagem. O renderer respeita reduced motion, faz preload dos assets e usa mouse follow local na web e global via Tauri/Win32 no Desktop Presence. O pack V3 permanece apenas como histórico/rollback e não é selecionável pela interface.
+## Desktop e browser
+
+O Desktop Operator usa descoberta canônica, janela existente primeiro, UI Automation e fallbacks limitados. Aliases e launch methods do mesmo aplicativo são deduplicados antes da decisão de ambiguidade. Planos compostos determinísticos mantêm o alvo entre passos e verificam cada efeito.
+
+Respostas normais mostram apenas mensagens humanizadas; PID, HWND, contagens, métodos e metadata ficam nos resultados internos e só aparecem quando solicitados explicitamente.
+
+O Browser Operator prioriza DOM/CDP e Accessibility. Conteúdo web é `WEB_CONTENT` não confiável. Login, envio, compra, exclusão e outras operações sensíveis continuam subordinadas à política e ao Approval Gate.
+
+## Voz e presença
+
+Push-to-talk e Always Listening compartilham o pipeline de conversa, cancelamento e barge-in. Áudio de debug fica desligado por padrão. Samples, gravações, caches e modelos permanecem fora do Git.
+
+O Avatar V2 é o fallback visual oficial. A integração Live2D/VTube Studio depende de assets externos em camadas; sem esses assets, o runtime permanece funcional com o avatar incluído.
 
 ## Homelab e segurança
 
-A NYRA pode usar `system_shell` local e `remote_shell` somente em hosts lógicos confiáveis. O SSH exige `known_hosts` pré-provisionado inclusive com senha. Mutações de homelab ficam desativadas por padrão e, quando habilitadas pelo operador, todas exigem approval de uso único ligado ao payload exato. Não há SSH arbitrário, TOFU automático, bypass de UAC/host key ou autonomia destrutiva.
+`remote_shell` aceita apenas hosts lógicos cadastrados e `known_hosts` pré-provisionado. Mutações de homelab são desativadas por padrão e exigem approval exato e descartável quando habilitadas. Não há SSH arbitrário, TOFU automático, bypass de UAC/host key ou autonomia destrutiva.
 
-A API local rejeita `Host`, `Origin` e WebSocket de origens não autorizadas. Uploads de áudio e Always Listening nunca concedem approvals. Criação arbitrária de processos/jobs não é exposta ao LLM, tarefas/workflows nem à API; scripts de navegador exigem approval ligado ao hash, aba e URL completa. Credenciais de Home Assistant/Proxmox são invalidadas quando sua origem muda. Consulte [docs/security.md](docs/security.md).
+A API escuta em loopback por padrão e valida Host, Origin e WebSocket. Uploads de áudio, texto transcrito, documentos e páginas web nunca concedem approval. Consulte [SECURITY.md](SECURITY.md) e [docs/security.md](docs/security.md).
 
 ## Privacidade
 
-Áudio, memória, logs e topologia permanecem locais. Nenhum serviço cloud é configurado. A UI e API escutam apenas em `127.0.0.1`; credenciais só trafegam por HTTPS ou, em HTTP, para um IP loopback literal.
-
-## Utamo Sentinel Bridge
-
-A integração opcional com Utamo Sentinel reutiliza Socket.IO para discovery autenticado, eventos em tempo real, histórico local e alertas de voz. Ela é read-only e fica OFF por padrão. Configure em `Settings > Integrations > Utamo Sentinel`; consulte [docs/integrations/utamo-sentinel.md](docs/integrations/utamo-sentinel.md) e [docs/sentinel-security.md](docs/sentinel-security.md).
+Áudio, memória, logs, topologia, RAG e traces permanecem locais. Serviços externos e transmissão para nuvem são opt-in. `.env`, configs `.local.*`, bancos, logs, knowledge corpus, PDFs, modelos, screenshots, recordings e artefatos SelfDev são excluídos do versionamento.
 
 ## Testes
 
@@ -116,49 +115,29 @@ A integração opcional com Utamo Sentinel reutiliza Socket.IO para discovery au
 cd frontend
 npm.cmd test
 npm.cmd run build
+cd ..\desktop\src-tauri
+cargo fmt --check
 ```
 
-## Estrutura do projeto
+Os resultados reais e limitações desta versão estão em [docs/releases/0.4.0.md](docs/releases/0.4.0.md). Testes simulados ou mockados não são apresentados como E2E real.
 
-- `backend/`: API, conversa, memória, voz, ferramentas, integrações, runtime e SelfDev;
-- `frontend/`: interface React/Vite e testes de componentes;
-- `desktop/`: shell Tauri e integração Win32;
-- `identity/`: identidade, personalidade e bíblias visual/vocal;
-- `config/`: defaults e schemas de serviços;
-- `scripts/`, `watchdog/` e `packaging/`: operação, validação e empacotamento;
-- `docs/`: arquitetura, segurança, integrações e evidências de validação.
+## Estrutura
 
-## Solução de problemas
+- `backend/`: API, inteligência, conversa, memória, voz, ferramentas, integrações, runtime e SelfDev;
+- `frontend/`: interface React/Vite e testes;
+- `desktop/`: shell Tauri e integração nativa;
+- `identity/`: identidade e bíblias visual/vocal;
+- `config/`: defaults e templates públicos;
+- `scripts/`, `watchdog/` e `packaging/`: operação, validação e build;
+- `docs/`: arquitetura, segurança, integrações e validações.
 
-- `npm.ps1 não pode ser carregado`: use `npm.cmd` ou os scripts fornecidos.
-- LLM falso no health: execute `ollama serve`, confirme `ollama list` e `qwen3:8b`.
-- Primeira transcrição lenta: o modelo tiny é carregado na primeira captura; o setup faz preload.
-- TTS indisponível: confirme que uma voz SAPI está instalada e teste o health. Voz pt-BR depende do pacote de idioma do Windows.
-- Microfone sem rótulo: conceda permissão ao navegador e recarregue.
-- Portas ocupadas: pare processos anteriores ou ajuste `.env`, scripts e proxy Vite de forma consistente.
-- Logs: `%LOCALAPPDATA%\NYRA\logs` contém `application.log`, `conversation.log`, `tools.log`, `homelab.log`, `voice.log`, `microphone.log` e `errors.log`; o Tauri também grava no diretório local da aplicação.
-O `Pronunciation Lab` permite revisar termos técnicos PT-BR, comparar original/corrigido e salvar aliases sem editar JSON ou reiniciar a aplicação. Consulte `docs/pronunciation-engine.md`.
+## Limitações conhecidas
 
-## Escuta contínua e Network Watch
-
-Hands On/Always Listening é local e inicia ativo em modo Hands-Free; Network Watch continua opt-in. O overlay exibirá `MIC ON` enquanto a captura estiver ativa e um fallback discreto quando não houver entrada ou permissão.
-
-Atalhos Desktop Presence: `Ctrl+Shift+Space` para push-to-talk, `Ctrl+Shift+M` para mute/unmute, `Ctrl+Shift+N` para mostrar/ocultar e `Ctrl+Shift+I` para click-through.
-
-Documentação: [Always Listening](docs/always-listening.md), [Wake Word](docs/wake-word.md), [Hands-Free](docs/hands-free.md), [Network Watch](docs/network-watch.md), [Alertas proativos](docs/proactive-alerts.md) e [Privacidade](docs/privacy.md).
-
-## Limitações
-
-- Ollama e modelos de voz são dependências locais separadas e podem deixar o health degradado quando indisponíveis.
-- Recursos Win32, captura visual, áudio e integrações reais dependem do ambiente e das permissões do operador.
-- Arte Live2D totalmente rigada continua dependente de assets externos; o Avatar V2 permanece o fallback oficial.
-
-## Roadmap
-
-- ampliar adapters locais sem enfraquecer approvals e grounding;
-- evoluir métricas e candidates LOW_RISK do SelfDev;
-- melhorar portabilidade dos fluxos desktop e de voz mantendo cloud opt-in.
+- integrações externas dependem de configuração, credenciais e disponibilidade do serviço;
+- visão por modelo exige um modelo Ollama vision instalado; a visão estrutural continua disponível sem ele;
+- partes do SelfDev V2 e cenários deliberados de loop permanecem simulation-validated;
+- recursos Win32, CDP, áudio e VTube Studio dependem do ambiente e das permissões do operador.
 
 ## Licença
 
-Distribuído sob a licença MIT. Consulte [LICENSE](LICENSE).
+MIT. Consulte [LICENSE](LICENSE) e [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

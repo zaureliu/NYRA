@@ -11,6 +11,7 @@ mod backend_manager;
 mod backend_transport;
 mod conversation_transport;
 mod presence;
+mod spout_presence;
 
 static CLICK_THROUGH: AtomicBool = AtomicBool::new(false);
 
@@ -142,6 +143,29 @@ fn presence_status_payload(window: &tauri::WebviewWindow) -> PresenceStatusPaylo
         visible,
         minimized,
     }
+}
+
+#[tauri::command]
+fn vts_presence_configure(
+    state: tauri::State<'_, spout_presence::SpoutPresence>,
+    config: spout_presence::SpoutPresenceConfig,
+) -> Result<spout_presence::SpoutPresenceStatus, String> {
+    state.configure(config)
+}
+
+#[tauri::command]
+fn vts_presence_status(
+    state: tauri::State<'_, spout_presence::SpoutPresence>,
+) -> spout_presence::SpoutPresenceStatus {
+    state.status()
+}
+
+#[tauri::command]
+fn vts_presence_set_internal_visible(
+    state: tauri::State<'_, spout_presence::SpoutPresence>,
+    visible: bool,
+) {
+    state.set_internal_visible(visible);
 }
 
 fn emit_presence_state(window: &tauri::WebviewWindow, state: &str) {
@@ -331,6 +355,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(backend_manager::BackendManager::new())
         .manage(conversation_transport::ConversationBridge::new())
+        .manage(spout_presence::SpoutPresence::new())
         .invoke_handler(tauri::generate_handler![
             set_click_through,
             open_dashboard,
@@ -339,7 +364,10 @@ pub fn run() {
             presence_show,
             presence_hide,
             presence_toggle,
-            presence_status_command
+            presence_status_command,
+            vts_presence_configure,
+            vts_presence_status,
+            vts_presence_set_internal_visible
         ])
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Err(error) = show_dashboard(app) {
@@ -632,6 +660,9 @@ pub fn run() {
             // or an off-screen position. A deliberate app launch must always
             // bring Desktop Presence back, visible inside the work area.
             if let Some(window) = app.get_webview_window("main") {
+                if let Err(error) = app.state::<spout_presence::SpoutPresence>().start(&window) {
+                    log::error!("Falha ao iniciar VTube Studio Presence: {error}");
+                }
                 restore_presence(&window);
                 start_global_cursor_tracker(window);
             }
@@ -660,6 +691,7 @@ pub fn run() {
         .expect("falha ao iniciar NYRA Desktop")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                app_handle.state::<spout_presence::SpoutPresence>().stop();
                 // §6: backend owned é encerrado e a porta 8000 liberada.
                 backend_manager::shutdown_owned(app_handle);
             }

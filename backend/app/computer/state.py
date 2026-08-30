@@ -59,6 +59,7 @@ class ResolvedTarget:
     process_names: tuple[str, ...] = ()
     title_tokens: tuple[str, ...] = ()
     path: str | None = None
+    hwnd: int | None = None
     source_slot: str = ""
     freshness: Freshness = Freshness.FRESH
 
@@ -189,7 +190,8 @@ class ComputerStateService:
     def note_action(self, *, action: str, kind: str, display_name: str,
                     verified: bool, conversation_id: str = "default",
                     turn_id: str | None = None, process_names: tuple[str, ...] = (),
-                    title_tokens: tuple[str, ...] = (), path: str | None = None) -> None:
+                    title_tokens: tuple[str, ...] = (), path: str | None = None,
+                    hwnd: int | None = None) -> None:
         """Registra alvo da última ação para pronomes e 'de novo' (§18/§20)."""
         target: dict[str, Any] = {
             "action": action,
@@ -204,6 +206,8 @@ class ComputerStateService:
             target["title_tokens"] = list(title_tokens)
         if path:
             target["path"] = path
+        if hwnd:
+            target["hwnd"] = int(hwnd)
         self.update("last_action", target, source="operator", ttl_seconds=1800,
                     stale_after_seconds=7200)
         if not verified:
@@ -292,6 +296,7 @@ class ComputerStateService:
             kind="window", display_name=name,
             process_names=(process,) if process else (),
             title_tokens=(title.casefold(),) if title else (),
+            hwnd=int(foreground.get("hwnd") or 0) or None,
             source_slot="foreground_window", freshness=freshness,
         )
 
@@ -308,6 +313,7 @@ class ComputerStateService:
             process_names=tuple(target.get("process_names") or ()),
             title_tokens=tuple(target.get("title_tokens") or ()) or (name.casefold(),),
             path=target.get("path"),
+            hwnd=int(target.get("hwnd") or 0) or None,
             source_slot="last_target",
             freshness=freshness,
         )

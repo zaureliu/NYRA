@@ -114,7 +114,7 @@ class SelfDevelopmentService:
 
     def _settings_from_runtime(self) -> SelfDevSettings:
         workspace = Path(getattr(self.runtime_settings, "selfdev_workspace", "") or _preferred_path(
-            "NYRA_SELFDEV_WORKSPACE", PROJECT_ROOT.parent / "nyra-selfdev", RUNTIME_ROOT / "selfdev-workspace"
+            "NYRA_SELFDEV_WORKSPACE", PROJECT_ROOT.parent / "Nyra-Auto-Code", RUNTIME_ROOT / "selfdev-workspace"
         ))
         public = Path(getattr(self.runtime_settings, "selfdev_public_snapshot", "") or _preferred_path(
             "NYRA_PUBLIC_SNAPSHOT", PROJECT_ROOT.parent / "NYRA-GitHub-Public", PROJECT_ROOT.parent / "NYRA-GitHub-Public"
@@ -301,6 +301,21 @@ class SelfDevelopmentService:
                 self.queue.transition(issue.issue_id, IssueStatus.BLOCKED, reason="RISK_NOT_AUTOPROMOTABLE")
                 self.notifications.add(NotificationType.BLOCKED, issue.title, f"Risco {plan.risk} requer revisão.", issue_id=issue.issue_id)
                 return {"status": "BLOCKED", "error_code": "RISK_NOT_AUTOPROMOTABLE", "plan": plan.model_dump(mode="json")}
+            planned_files = [change.path for change in bundle.changes] if bundle is not None else plan.files_expected
+            reproduction = self.validation.reproduce(issue, plan)
+            if reproduction.status != "PASS":
+                self.queue.transition(issue.issue_id, IssueStatus.BLOCKED, reason="REPRODUCTION_EVIDENCE_REQUIRED")
+                return {"status": "BLOCKED", "error_code": "REPRODUCTION_EVIDENCE_REQUIRED",
+                        "reproduction": reproduction.model_dump(mode="json")}
+            # Baseline executes only in the isolated SelfDev repository mirror.
+            # The operational runtime is never used as an experimental workspace.
+            baseline_root = self.settings.workspace / "repository"
+            if not (baseline_root / "backend").is_dir():
+                self.queue.transition(issue.issue_id, IssueStatus.BLOCKED, reason="SELFDEV_BASELINE_MIRROR_MISSING")
+                return {"status": "BLOCKED", "error_code": "SELFDEV_BASELINE_MIRROR_MISSING"}
+            baseline = await self.validation.capture_baseline(
+                issue.issue_id, baseline_root, planned_files,
+            )
             candidate = await self.worktrees.create(issue.issue_id, issue.title)
             await self._audit(EventType.SELFDEV_WORKTREE_CREATED, issue_id=issue.issue_id)
             self.queue.transition(issue.issue_id, IssueStatus.IMPLEMENTING)
@@ -312,7 +327,10 @@ class SelfDevelopmentService:
             changed = self.worker.apply(candidate, bundle)
             await self._audit(EventType.SELFDEV_PATCH_READY, issue_id=issue.issue_id, changed_files=len(changed))
             self.queue.transition(issue.issue_id, IssueStatus.VALIDATING)
-            report = await self.validation.validate(issue.issue_id, candidate, changed)
+            report = await self.validation.validate(
+                issue.issue_id, candidate, changed, plan=plan,
+                baseline=baseline, reproduction=reproduction,
+            )
             issue.last_validation = "PASS" if report.passed else "FAIL"
             self.queue.persist()
             if not report.passed:

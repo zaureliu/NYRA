@@ -37,7 +37,8 @@ class ComputerAutonomyService:
     """Fachada das camadas 1-7 para um turno de conversa."""
 
     def __init__(self, *, state, intent_service, perception, verifier, usage,
-                 skills, desktop=None, clock=time.time) -> None:
+                 skills, desktop=None, remote_shell=None, artifacts=None,
+                 clock=time.time) -> None:
         self.state = state
         self.intents = intent_service
         self.perception = perception
@@ -45,6 +46,13 @@ class ComputerAutonomyService:
         self.usage = usage
         self.skills = skills
         self.desktop = desktop
+        if artifacts is None:
+            from app.computer.artifacts import ArtifactContextService
+
+            artifacts = ArtifactContextService(
+                desktop=desktop, remote_shell=remote_shell, state=state,
+            )
+        self.artifacts = artifacts
         self.clock = clock
         self.metrics: dict[str, float] = {}
         self.failure_metrics: dict[str, int] = {
@@ -59,6 +67,7 @@ class ComputerAutonomyService:
         self.event_bus = getattr(skills, "event_bus", None) or \
             getattr(perception, "event_bus", None)
         self._last_resolutions: dict[str, dict[str, str]] = {}
+        self._compound_executor = None
 
     # ------------------------------------------------------------- startup
 
@@ -73,6 +82,8 @@ class ComputerAutonomyService:
             if self.state is not None and hasattr(self.state, "save_context"):
                 self.state.save_context()
         finally:
+            if self.artifacts is not None:
+                self.artifacts.persist()
             for service in (self.usage, self.skills):
                 if service is not None and hasattr(service, "persist"):
                     service.persist()
@@ -84,6 +95,11 @@ class ComputerAutonomyService:
         if self._correction_target(text) and \
                 (conversation_id or "default") in self._last_resolutions:
             return True
+        if self.artifacts is not None:
+            from app.computer.artifacts import parse_artifact_request
+
+            if parse_artifact_request(text) is not None:
+                return True
         if self.intents.resolve(text, conversation_id=conversation_id,
                                 turn_id=turn_id, channel=channel) is not None:
             return True
@@ -103,7 +119,39 @@ class ComputerAutonomyService:
             "execution_ms": 0.0,
             "verification_ms": 0.0,
         }
-        if self.desktop is None or self.intents is None:
+        if self.intents is None:
+            return result
+
+        if self.artifacts is not None:
+            artifact_result = await self.artifacts.try_handle(
+                text, conversation_id=conversation_id, turn_id=turn_id,
+            )
+            if artifact_result is not None:
+                result.handled = artifact_result.handled
+                result.reply = artifact_result.reply
+                result.intent_action = artifact_result.action
+                result.target = (
+                    artifact_result.artifact.path
+                    if artifact_result.artifact is not None
+                    else ""
+                )
+                result.verified = artifact_result.verified
+                phase["context_resolve_ms"] = round(
+                    (time.perf_counter() - started) * 1000, 2,
+                )
+                phase["artifact_reference_resolved"] = (
+                    1.0 if artifact_result.artifact is not None else 0.0
+                )
+                phase["app_resolver_called"] = 0.0
+                phase["agent_run_calls"] = float(
+                    artifact_result.agent_run_calls,
+                )
+                self._finish(
+                    result, None, started, conversation_id,
+                    turn_id, phase,
+                )
+                return result
+        if self.desktop is None:
             return result
 
         correction = self._correction_target(text)
@@ -191,7 +239,25 @@ class ComputerAutonomyService:
             phase["planning_ms"] = round(
                 (time.perf_counter() - planning_started) * 1000, 2)
             execution_started = time.perf_counter()
-            plan_result = await self._run_plan(intent)
+            try:
+                plan_result = await self._run_plan(intent)
+            except Exception as error:  # noqa: BLE001 - deterministic owner must not leak to Agent Run
+                logger.warning(
+                    "computer_plan_failed type=%s", type(error).__name__,
+                )
+                plan_result = {
+                    "success": False,
+                    "effect_verified": False,
+                    "message": f"Não consegui concluir a ação no {intent.target}.",
+                    "steps": [{
+                        "step": "compound_executor",
+                        "ok": False,
+                        "error_type": type(error).__name__,
+                    }],
+                    "app": intent.target,
+                    "remote_shell_calls": 0,
+                    "agent_run_calls": 0,
+                }
             phase["execution_ms"] = round(
                 (time.perf_counter() - execution_started) * 1000, 2)
             result.handled = True
@@ -266,6 +332,19 @@ class ComputerAutonomyService:
             phase["verification_ms"] = round(
                 (time.perf_counter() - verification_started) * 1000, 2)
             result.verified = effect.verified
+            # Presentation is a distinct boundary: the raw operation remains
+            # available for verification/diagnostics, while only this sentence
+            # reaches the assistant response and TTS pipeline.
+            from app.desktop.presenter import ActionResultPresenter
+
+            user_facing = ActionResultPresenter.present(
+                operation,
+                requested_action=intent.action,
+                requested_app=intent.target,
+            )
+            if user_facing:
+                operation["user_facing_response"] = user_facing
+                result.reply = user_facing
         self._note_state(intent, result.verified)
         try:
             self._learn(intent, effect, started, conversation_id, channel)
@@ -300,6 +379,14 @@ class ComputerAutonomyService:
     # ------------------------------------------------------------- helpers
 
     async def _run_plan(self, intent) -> dict[str, Any]:
+        if intent.arguments.get("plan_kind") == "compound_app":
+            from app.desktop.compound import CompoundActionExecutor
+
+            if self._compound_executor is None:
+                self._compound_executor = CompoundActionExecutor(self.desktop)
+            return await self._compound_executor.execute(
+                intent, turn_id=intent.turn_id or None,
+            )
         from app.desktop.multistep import notepad_write_and_save
 
         return await notepad_write_and_save(
@@ -359,6 +446,7 @@ class ComputerAutonomyService:
         }
         kind = kind_map.get(intent.action, "app")
         process_names: tuple[str, ...] = ()
+        hwnd: int | None = None
         title_tokens: tuple[str, ...] = (intent.target.casefold(),)
         operation = getattr(self.desktop, "last_operation_result", None)
         if operation and isinstance(operation.get("windows"), list) and operation["windows"]:
@@ -367,6 +455,7 @@ class ComputerAutonomyService:
             proc = proc.casefold().removesuffix(".exe")
             if proc:
                 process_names = (proc,)
+            hwnd = int(first.get("hwnd") or 0) or None
         path = intent.resolved.path if intent.resolved else None
         canonical = self._canonical_target(intent, operation or {})
         self.state.note_action(
@@ -374,10 +463,29 @@ class ComputerAutonomyService:
             verified=bool(verified), conversation_id=intent.conversation_id,
             turn_id=intent.turn_id or None,
             process_names=process_names, title_tokens=title_tokens, path=path,
+            hwnd=hwnd,
         )
 
     def _note_plan_state(self, intent, plan_result: dict[str, Any],
                          verified: bool | None) -> None:
+        if intent.arguments.get("plan_kind") == "compound_app":
+            display_name = str(plan_result.get("app") or intent.target)
+            process_names: tuple[str, ...] = ()
+            candidate = plan_result.get("candidate")
+            if isinstance(candidate, dict):
+                process_names = tuple(candidate.get("process_names") or ())
+            self.state.note_action(
+                action="PLAN",
+                kind="app",
+                display_name=display_name,
+                verified=bool(verified),
+                conversation_id=intent.conversation_id,
+                turn_id=intent.turn_id or None,
+                process_names=process_names,
+                title_tokens=(display_name.casefold(),),
+                hwnd=int(plan_result.get("hwnd") or 0) or None,
+            )
+            return
         path = str(plan_result.get("file") or "") or None
         filename = intent.arguments.get("filename") or intent.target
         self.state.note_action(
@@ -390,6 +498,31 @@ class ComputerAutonomyService:
             value, _ = self.state.get("last_target_file")
             self.state.update("last_created_artifact", value, source="filesystem",
                               ttl_seconds=1800, stale_after_seconds=7200)
+            if self.artifacts is not None:
+                self.artifacts.register(
+                    path, kind="file",
+                    conversation_id=intent.conversation_id,
+                    source_turn_id=intent.turn_id or None,
+                    exists_state="verified",
+                    source_type="operator_created",
+                )
+
+    def observe_tool_result(self, tool_name: str, payload: dict[str, Any],
+                            result, turn_id: str | None = None) -> None:
+        if self.artifacts is not None:
+            self.artifacts.observe_tool_result(
+                tool_name, payload, result, turn_id,
+            )
+
+    def observe_assistant_response(
+        self, response: str, *, conversation_id: str,
+        turn_id: str | None, grounded: bool = False,
+    ) -> None:
+        if self.artifacts is not None:
+            self.artifacts.observe_assistant_response(
+                response, conversation_id=conversation_id,
+                turn_id=turn_id, grounded=grounded,
+            )
 
     def _learn(self, intent, effect, started: float, conversation_id: str,
                channel: str) -> None:

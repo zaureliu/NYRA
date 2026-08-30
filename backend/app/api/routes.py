@@ -50,6 +50,7 @@ from app.api.models import (
     VTSSettingsUpdate,
     Live2DLipSyncRequest,
     Live2DCursorRequest,
+    VTSPresenceReport,
     ShellApprovalDecision,
     AudioSettingsUpdate,
     InterruptionRequest,
@@ -86,8 +87,10 @@ from app.integrations.home_assistant_profiles import (
 from app.integrations.openwrt import config as openwrt_ui_config
 from app.integrations.proxmox import config as proxmox_ui_config
 from app.speech.external_bridge import VoiceProcessorBridge
+from app.speech.queue import SpeechPriority
 from app.events import Event, EventType
 from app.memory.models import MemoryCategory, MemoryCreate
+from app.operator.monitoring import MonitorCreateRequest
 from app.speech.profile import load_voice_profile
 from app.speech.prosody import ProsodyProcessor
 from app.speech.pronunciation.engine import PronunciationEngine, reload_engine
@@ -96,7 +99,27 @@ from app.speech.reference import REFERENCE_PATH, inspect_reference, normalize_re
 
 
 router = APIRouter(prefix="/api")
-SAFE_AUDIO = re.compile(r"^nyra(?:-edge|-processed)?-[a-f0-9]+\.(?:wav|mp3)$")
+SAFE_AUDIO = re.compile(
+    r"^(?:nyra(?:-edge|-processed)?-[a-f0-9]+|voice-cache-[a-f0-9]{64})\.(?:wav|mp3)$"
+)
+from app.speech.tts_identity import NYRA_IDENTITY_ID, NYRA_VOICE_ID
+PLAYBACK_CONFIRMATION_SECONDS = 12.0
+
+
+def _voice_satellite_event_allowed(event: Event, satellite_id: str | None) -> bool:
+    """Do not turn unrelated backend failures into blocking Satellite errors."""
+    if not satellite_id or event.type != EventType.ERROR:
+        return True
+    owner = str(event.payload.get("satellite_id") or "")
+    return bool(event.payload.get("satellite_action_required")) and owner == satellite_id
+
+
+class UsbDeviceUpdateRequest(BaseModel):
+    friendly_name: str | None = Field(default=None, max_length=120)
+    category: str | None = Field(default=None, max_length=80)
+    trusted: bool | None = None
+    note: str | None = Field(default=None, max_length=240)
+    registered: bool | None = None
 
 
 @router.get("/health")
@@ -141,6 +164,72 @@ async def health(request: Request) -> dict:
     }
 
 
+# ------------------------------------------------------------------ USB V1
+
+@router.get("/usb/status")
+async def usb_status(request: Request) -> dict:
+    return await request.app.state.services.usb.status_snapshot()
+
+
+@router.get("/usb/devices")
+async def usb_devices(request: Request, include_internal: bool = False) -> dict:
+    return {"devices": await request.app.state.services.usb.devices(
+        include_internal=include_internal
+    )}
+
+
+@router.get("/usb/devices/connected")
+async def usb_connected_devices(request: Request, include_internal: bool = False) -> dict:
+    return {"devices": await request.app.state.services.usb.connected(
+        include_internal=include_internal
+    )}
+
+
+@router.get("/usb/devices/known")
+async def usb_known_devices(request: Request) -> dict:
+    return {"devices": await request.app.state.services.usb.known()}
+
+
+@router.get("/usb/devices/{device_id}")
+async def usb_device_detail(request: Request, device_id: str) -> dict:
+    device = await request.app.state.services.usb.get_device(device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Dispositivo USB não encontrado.")
+    return device
+
+
+@router.get("/usb/history")
+async def usb_history(request: Request, limit: int = 200,
+                      event_type: str | None = None) -> dict:
+    return {"history": await request.app.state.services.usb.history(
+        limit=max(1, min(1000, limit)), event_type=event_type
+    )}
+
+
+@router.post("/usb/refresh")
+async def usb_refresh(request: Request) -> dict:
+    return await request.app.state.services.usb.refresh(reason="api")
+
+
+@router.put("/usb/devices/{device_id}")
+async def usb_update_device(payload: UsbDeviceUpdateRequest, request: Request,
+                            device_id: str) -> dict:
+    try:
+        return await request.app.state.services.usb.update_device(
+            device_id, payload.model_dump(exclude_unset=True)
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Dispositivo USB não encontrado.") from error
+
+
+@router.delete("/usb/devices/{device_id}")
+async def usb_forget_device(request: Request, device_id: str) -> dict:
+    try:
+        return await request.app.state.services.usb.forget_device(device_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Dispositivo USB não encontrado.") from error
+
+
 @router.post("/chat")
 async def chat(payload: ChatRequest, request: Request):
     services = request.app.state.services
@@ -163,6 +252,10 @@ async def chat(payload: ChatRequest, request: Request):
             intent = parse_universal_intent(payload.message) if desktop is not None else None
         if intent is None and desktop is not None:
             intent = parse_notepad_multistep(payload.message)
+        if intent is None:
+            usb = getattr(services, "usb", None)
+            if usb is not None and usb.can_handle_chat(payload.message):
+                intent = True
         if intent is None:
             skill_memory = getattr(services, "skill_memory", None)
             usage = getattr(services, "usage_learning", None)
@@ -252,9 +345,12 @@ async def audio_settings(request: Request):
     return {
         "settings": services.conversation.audio_settings(),
         "status": services.conversation.status(),
-        "voices": ([
-            {"id": "pf_dora", "name": "Dora", "language": "pt-BR", "provider": "kokoro"},
-        ] if getattr(services.tts, "primary_name", services.tts.name) == "kokoro" else []),
+        "voices": [{
+            "id": NYRA_VOICE_ID,
+            "name": "Ava Multilingual Neural",
+            "language": "pt-BR",
+            "provider": "edge_tts",
+        }],
     }
 
 
@@ -269,14 +365,110 @@ async def test_runtime_voice(request: Request):
     text = "Olá. Este é um teste da voz atual da NYRA."
     prepared = ProsodyProcessor().prepare(text, provider=services.tts.name)
     started = time.perf_counter()
+    response_id = f"turn_{uuid4().hex}"
+    playback_started = asyncio.Event()
+    playback_started_at: float | None = None
+
+    async def confirm_playback(event: Event) -> None:
+        nonlocal playback_started_at
+        if (
+            event.type == EventType.PLAYBACK_STARTED
+            and str(event.payload.get("response_id") or "") == response_id
+        ):
+            playback_started_at = time.perf_counter()
+            playback_started.set()
+
+    await services.event_bus.subscribe(confirm_playback)
+    services.telemetry.start(response_id, speech_end=started)
+    services.telemetry.mark(response_id, "t_tts_start")
     try:
-        output = await services.tts.synthesize(prepared.speech_text, "neutral")
+        await services.event_bus.publish(
+            EventType.USER_TEXT_RECEIVED,
+            response_id=response_id,
+            turn_id=response_id,
+            source="voice_test",
+        )
+        await services.event_bus.publish(
+            EventType.TTS_STARTED,
+            response_id=response_id,
+            turn_id=response_id,
+            state="neutral",
+            source="voice_test",
+            streaming=False,
+        )
+        output = await services.speech_queue.synthesize(
+            services.tts,
+            prepared.speech_text,
+            "neutral",
+            SpeechPriority.USER,
+            response_id=response_id,
+            turn_id=response_id,
+        )
+        services.telemetry.mark(response_id, "t_first_audio")
+        services.telemetry.mark(response_id, "t_response_complete")
+        finished_metrics = services.telemetry.finish(response_id)
+        audio_url = f"/api/audio/{output.name}"
+        await services.event_bus.publish(
+            EventType.TTS_FINISHED,
+            response_id=response_id,
+            turn_id=response_id,
+            state="neutral",
+            audio_url=audio_url,
+            source="voice_test",
+            streaming=False,
+        )
+        try:
+            await asyncio.wait_for(playback_started.wait(), PLAYBACK_CONFIRMATION_SECONDS)
+        except TimeoutError as exc:
+            await services.event_bus.publish(
+                EventType.TTS_FAILED,
+                response_id=response_id,
+                turn_id=response_id,
+                reason="playback_not_confirmed",
+                source="voice_test",
+            )
+            raise HTTPException(
+                status_code=504,
+                detail="Áudio gerado, mas nenhum player confirmou o playback",
+            ) from exc
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
+        if services.telemetry.active(response_id):
+            services.telemetry.mark(response_id, "t_response_complete")
+            services.telemetry.finish(response_id)
+        logger.exception(
+            "voice_test_failed stage=TTS exception_type=%s message=%s",
+            type(exc).__name__,
+            str(exc),
+        )
+        await services.event_bus.publish(
+            EventType.TTS_FAILED,
+            response_id=response_id,
+            turn_id=response_id,
+            reason=type(exc).__name__,
+            source="voice_test",
+        )
         raise HTTPException(status_code=502, detail=f"Falha no TTS atual: {type(exc).__name__}") from exc
+    finally:
+        await services.event_bus.unsubscribe(confirm_playback)
+    metrics = dict(services.telemetry.last_metrics)
+    if metrics.get("response_id") != response_id:
+        metrics = dict(finished_metrics)
+    if metrics.get("playback_start_ms") is None and playback_started_at is not None:
+        metrics["playback_start_ms"] = round((playback_started_at - started) * 1000, 1)
     return {
-        "audio_url": f"/api/audio/{output.name}",
+        "audio_url": audio_url,
         "provider": services.tts.name,
-        "synthesis_ms": round((time.perf_counter() - started) * 1000, 1),
+        "primary_engine": services.tts.engine_id,
+        "active_engine": services.tts.active_engine,
+        "voice": services.tts.active_voice,
+        "fallback_active": services.tts.fallback_active,
+        "fallback_reason": services.tts.fallback_reason,
+        "synthesis_ms": metrics.get("tts_first_audio_ms") or round((time.perf_counter() - started) * 1000, 1),
+        "response_id": response_id,
+        "playback_started": metrics.get("playback_start_ms") is not None,
+        "playback_start_ms": metrics.get("playback_start_ms"),
     }
 
 
@@ -445,6 +637,11 @@ async def live2d_disconnect(request: Request):
 async def live2d_lip_sync(payload: Live2DLipSyncRequest, request: Request):
     await request.app.state.services.avatar.update(mouth_open=payload.value)
     return {"mouth_open": payload.value}
+
+
+@router.post("/live2d/presence-status")
+async def live2d_presence_status(payload: VTSPresenceReport, request: Request):
+    return request.app.state.services.vtube_studio.record_presence(payload.model_dump(mode="json"))
 
 
 @router.post("/live2d/cursor")
@@ -899,6 +1096,7 @@ async def listening_playback(payload: PlaybackStateRequest, request: Request):
     status = await services.listening.playback(payload.playing)
     if payload.playing and payload.response_id:
         services.telemetry.playback_started(payload.response_id)
+        services.speech_queue.playback_started(payload.response_id)
         await services.event_bus.publish(EventType.PLAYBACK_STARTED, response_id=payload.response_id)
     return status
 
@@ -942,20 +1140,34 @@ async def listening_utterance(
     content = await audio.read(25 * 1024 * 1024 + 1)
     if len(content) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Áudio excede 25 MB")
-    path = DATA_ROOT / "recordings" / f"always-{uuid4().hex}{suffix}"
-    await asyncio.to_thread(path.write_bytes, content)
-    await services.event_bus.publish(EventType.USER_SPEECH_RECEIVED, source="always_listening")
+    recordings = (DATA_ROOT / "recordings").resolve()
+    path = recordings / f"always-{uuid4().hex}{suffix}"
     try:
+        await asyncio.to_thread(recordings.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(path.write_bytes, content)
+        await services.event_bus.publish(EventType.USER_SPEECH_RECEIVED, source="always_listening")
         return await services.conversation.listening_audio_turn(
             path,
             client_id,
             speech_end=speech_end,
         )
+    except PipelineFailure as exc:
+        # Full message/path/traceback are recorded by ConversationEngine. The
+        # browser receives only a safe stage and exception type.
+        raise HTTPException(
+            status_code=422,
+            detail=f"Falha na etapa {str(exc.error.stage).upper()}: {exc.error.exception_type}",
+        ) from exc
     except Exception as exc:
-        await services.event_bus.publish(EventType.ERROR, operation="always_listening", error=type(exc).__name__)
-        raise HTTPException(status_code=422, detail=f"Falha na escuta local: {type(exc).__name__}") from exc
+        logger.exception(
+            "always_listening_route_failed stage=UPLOAD exception_type=%s message=%s path=%s",
+            type(exc).__name__,
+            str(exc),
+            str(path),
+        )
+        raise HTTPException(status_code=500, detail=f"Falha ao preparar áudio: {type(exc).__name__}") from exc
     finally:
-        path.unlink(missing_ok=True)
+        await asyncio.to_thread(path.unlink, missing_ok=True)
 
 
 @router.get("/network-watch/settings")
@@ -1467,7 +1679,7 @@ async def save_voice_profile(payload: VoiceProfileUpdate, request: Request):
     path = IDENTITY_ROOT / "voice_profile.json"
     current = json.loads(path.read_text(encoding="utf-8"))
     current.update(payload.model_dump())
-    current["profile_id"] = "NYRA_VOICE"
+    current["profile_id"] = NYRA_IDENTITY_ID
     await asyncio.to_thread(
         path.write_text, json.dumps(current, ensure_ascii=False, indent=2) + "\n", "utf-8"
     )
@@ -1750,13 +1962,15 @@ async def websocket_endpoint(websocket: WebSocket):
     services = websocket.app.state.services
     event_bus = services.event_bus
     outbound_lock = asyncio.Lock()
-    hello_state = {"handshake": False}
+    hello_state: dict[str, Any] = {"handshake": False, "satellite_id": None}
 
     async def _send(payload: dict) -> None:
         async with outbound_lock:
             await websocket.send_json(payload)
 
     async def forward(event: Event) -> None:
+        if not _voice_satellite_event_allowed(event, hello_state.get("satellite_id")):
+            return
         await _send(event.model_dump(mode="json"))
 
     async def receiver() -> None:
@@ -1771,6 +1985,7 @@ async def websocket_endpoint(websocket: WebSocket):
             message_type = str(message.get("type") or "")
             if message_type == "hello":
                 hello_state["handshake"] = True
+                hello_state["satellite_id"] = str(message.get("satellite_id") or "") or None
                 logger.info("voice_hello", extra={
                     "protocol": str(message.get("protocol_version") or "nyra.voice.v1"),
                     "satellite_id": str(message.get("satellite_id") or "unknown"),
@@ -1814,6 +2029,44 @@ def _v2(request: Request):
     if service is None:
         raise HTTPException(status_code=503, detail="Operator V2 indisponível")
     return service
+
+
+@router.post("/monitors")
+async def monitor_create(payload: MonitorCreateRequest, request: Request) -> dict:
+    from app.operator.monitoring import MonitorJobError
+
+    try:
+        return await _v2(request).monitor_jobs.create(payload)
+    except MonitorJobError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": exc.code, "message": str(exc)},
+        ) from exc
+
+
+@router.get("/monitors")
+async def monitor_list(request: Request, include_terminal: bool = True,
+                       limit: int = 100) -> dict:
+    return await _v2(request).monitor_jobs.list(
+        include_terminal=include_terminal, limit=limit,
+    )
+
+
+@router.get("/monitors/{monitor_id}")
+async def monitor_status(request: Request, monitor_id: str) -> dict:
+    result = await _v2(request).monitor_jobs.status(monitor_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail="MonitorJob não encontrado")
+    return result
+
+
+@router.post("/monitors/{monitor_id}/cancel")
+async def monitor_cancel(request: Request, monitor_id: str) -> dict:
+    result = await _v2(request).monitor_jobs.cancel(monitor_id)
+    if not result.get("success"):
+        status = 404 if result.get("error_code") == "MONITOR_NOT_FOUND" else 409
+        raise HTTPException(status_code=status, detail=result)
+    return result
 
 
 @router.get("/operator/v2/status")

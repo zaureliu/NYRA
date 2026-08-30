@@ -21,6 +21,18 @@ interface JobRow {
   duration_seconds?: number
 }
 
+interface MonitorRow {
+  monitor_id: string
+  objective: string
+  probe_tool: string
+  status: string
+  interval_seconds: number
+  deadline_at?: number
+  last_reading?: { value?: unknown; observed_at?: number; ok?: boolean; summary?: string } | null
+  sample_count?: number
+  final_summary?: string
+}
+
 interface WorkflowRow {
   workflow_id: string
   name: string
@@ -37,6 +49,7 @@ interface WatchRow {
 export function TasksPage() {
   const tasks = usePolling<{ tasks: TaskRow[] }>('/api/tasks?limit=20', 6000)
   const jobs = usePolling<{ jobs: JobRow[] }>('/api/jobs', 5000)
+  const monitors = usePolling<{ monitors: MonitorRow[] }>('/api/monitors?limit=50', 5000)
   const workflows = usePolling<{ workflows: WorkflowRow[] }>('/api/workflows', 20000)
   const watches = usePolling<{ watches: WatchRow[] }>('/api/watches', 12000)
 
@@ -53,6 +66,7 @@ export function TasksPage() {
       setNotice(`Ação concluída (${key.split(':')[1]}).`)
       tasks.refresh()
       jobs.refresh()
+      monitors.refresh()
       workflows.refresh()
       watches.refresh()
     } catch (issue) {
@@ -104,6 +118,44 @@ export function TasksPage() {
                       {!['COMPLETED', 'CANCELLED', 'FAILED'].includes(task.state.toUpperCase()) && (
                         <ActionButton small variant="danger" busy={busyKey === `task:${task.task_id}`}
                           onClick={() => void mutate(`task:${task.task_id}:cancel`, `/api/tasks/${task.task_id}/cancel`, 'POST')}>
+                          Cancelar
+                        </ActionButton>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <h2 className="ops-section-title">MonitorJobs</h2>
+      <Card>
+        {(monitors.data?.monitors ?? []).length === 0 ? (
+          <Empty text="Nenhum monitoramento registrado." />
+        ) : (
+          <div className="table-scroll">
+            <table className="ops-table">
+              <thead><tr><th>Objetivo</th><th>Estado</th><th>Última leitura</th><th>Intervalo</th><th>Amostras</th><th></th></tr></thead>
+              <tbody>
+                {(monitors.data?.monitors ?? []).map((monitor) => (
+                  <tr key={monitor.monitor_id} title={monitor.final_summary || monitor.probe_tool}>
+                    <td><strong>{monitor.objective}</strong><div className="ops-hint">{monitor.probe_tool}</div></td>
+                    <td><StatusBadge state={monitor.status} /></td>
+                    <td>{monitor.last_reading?.ok === false
+                      ? (monitor.last_reading.summary || 'erro')
+                      : monitor.last_reading?.value == null
+                        ? '—'
+                        : typeof monitor.last_reading.value === 'object'
+                          ? JSON.stringify(monitor.last_reading.value).slice(0, 80)
+                          : String(monitor.last_reading.value)}</td>
+                    <td>{monitor.interval_seconds}s</td>
+                    <td>{monitor.sample_count ?? 0}</td>
+                    <td>
+                      {monitor.status.toUpperCase() === 'ACTIVE' && (
+                        <ActionButton small variant="danger" busy={busyKey === `monitor:${monitor.monitor_id}`}
+                          onClick={() => void mutate(`monitor:${monitor.monitor_id}`, `/api/monitors/${monitor.monitor_id}/cancel`, 'POST')}>
                           Cancelar
                         </ActionButton>
                       )}

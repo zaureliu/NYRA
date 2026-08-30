@@ -62,7 +62,10 @@ impl BackendManager {
     }
 
     fn pid(&self) -> Option<u32> {
-        self.child_pid.lock().ok().and_then(|mut guard| guard.take())
+        self.child_pid
+            .lock()
+            .ok()
+            .and_then(|mut guard| guard.take())
     }
 
     fn is_owned(&self) -> bool {
@@ -102,7 +105,9 @@ fn probe_backend() -> Option<bool> {
         .set_read_timeout(Some(HEALTH_TIMEOUT))
         .and_then(|_| stream.set_write_timeout(Some(HEALTH_TIMEOUT)))
         .ok()?;
-    let request = format!("GET /health HTTP/1.1\r\nHost: {BACKEND_HOST}:{BACKEND_PORT}\r\nConnection: close\r\n\r\n");
+    let request = format!(
+        "GET /health HTTP/1.1\r\nHost: {BACKEND_HOST}:{BACKEND_PORT}\r\nConnection: close\r\n\r\n"
+    );
     stream.write_all(request.as_bytes()).ok()?;
     let mut response = String::new();
     stream.read_to_string(&mut response).ok()?;
@@ -111,7 +116,9 @@ fn probe_backend() -> Option<bool> {
 
 fn backend_exe_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     let resource_dir = app.path().resource_dir().ok()?;
-    let candidate = resource_dir.join("backend-runtime").join("nyra-backend.exe");
+    let candidate = resource_dir
+        .join("backend-runtime")
+        .join("nyra-backend.exe");
     candidate.is_file().then_some(candidate)
 }
 
@@ -129,7 +136,9 @@ fn spawn_backend(app: &AppHandle) -> Result<Child, String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    command.spawn().map_err(|error| format!("spawn falhou: {error}"))
+    command
+        .spawn()
+        .map_err(|error| format!("spawn falhou: {error}"))
 }
 
 fn await_health(deadline: Instant) -> bool {
@@ -158,8 +167,11 @@ fn supervise(app: AppHandle) {
             return; // não é nosso: nada a supervisionar nem a matar
         }
         Some(false) => {
-            emit_state(&app, "BACKEND_PORT_CONFLICT",
-                "porta 8000 ocupada por processo externo; NYRA não iniciou backend próprio");
+            emit_state(
+                &app,
+                "BACKEND_PORT_CONFLICT",
+                "porta 8000 ocupada por processo externo; NYRA não iniciou backend próprio",
+            );
             return; // §5: NUNCA matar o processo externo
         }
         None => {} // porta livre: iniciar backend empacotado
@@ -177,13 +189,20 @@ fn supervise(app: AppHandle) {
     app.state::<BackendManager>().set_child(Some(pid), true);
 
     if !await_health(Instant::now() + HEALTH_WAIT_LIMIT) {
-        emit_state(&app, "BACKEND_START_TIMEOUT",
-            "backend não ficou saudável dentro do timeout");
+        emit_state(
+            &app,
+            "BACKEND_START_TIMEOUT",
+            "backend não ficou saudável dentro do timeout",
+        );
         let _ = child.kill();
         app.state::<BackendManager>().set_child(None, false);
         return;
     }
-    emit_state(&app, "READY", format!("backend próprio saudável (pid {pid})"));
+    emit_state(
+        &app,
+        "READY",
+        format!("backend próprio saudável (pid {pid})"),
+    );
 
     // Observa o processo enquanto o app existir.
     let status = child.wait();
@@ -194,13 +213,22 @@ fn supervise(app: AppHandle) {
         return; // shutdown intencional: NÃO relançar (§6/§8)
     }
     if code == Some(EXIT_CODE_RESTART) {
-        emit_state(&app, "RESTARTING", "restart completo pedido; nova sessão do backend");
+        emit_state(
+            &app,
+            "RESTARTING",
+            "restart completo pedido; nova sessão do backend",
+        );
         std::thread::sleep(Duration::from_millis(1200)); // dá tempo da porta fechar
         supervise(app); // §7: abre nova sessão do backend sozinho
         return;
     }
-    emit_state(&app, "BACKEND_EXITED",
-        format!("backend saiu de forma inesperada (code={code:?}); auto-restart desabilitado no pacote"));
+    emit_state(
+        &app,
+        "BACKEND_EXITED",
+        format!(
+            "backend saiu de forma inesperada (code={code:?}); auto-restart desabilitado no pacote"
+        ),
+    );
 }
 
 /// Cleanup no fim do processo Tauri (§6): encerra apenas o backend OWNED.

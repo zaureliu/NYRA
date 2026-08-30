@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TurnFilter, extractTurnId } from './turns'
+import { TurnFilter, adoptInputTurn, extractTurnId, isTurnStartEvent } from './turns'
 
 const event = (type: string, turnId: string) => ({ type, payload: { turn_id: turnId } })
 
@@ -46,5 +46,26 @@ describe('extractTurnId', () => {
     expect(extractTurnId({ turn_id: 'turn_ab', response_id: 'cd' })).toBe('turn_ab')
     expect(extractTurnId({ response_id: 'cd' })).toBe('cd')
     expect(extractTurnId({})).toBeNull()
+  })
+})
+
+describe('global input turn ownership', () => {
+  it('moves the playback owner to a turn started outside the Presence', () => {
+    const filter = new TurnFilter()
+    filter.begin('turn_presence')
+
+    expect(adoptInputTurn(filter, 'USER_TEXT_RECEIVED', 'turn_satellite')).toBe(true)
+    expect(filter.accept('turn_presence')).toBe(false)
+    expect(filter.accept('turn_satellite')).toBe(true)
+  })
+
+  it('does not treat output events as a new turn', () => {
+    const filter = new TurnFilter()
+    filter.begin('turn_current')
+
+    expect(isTurnStartEvent('TTS_CHUNK_FINISHED')).toBe(false)
+    expect(adoptInputTurn(filter, 'TTS_CHUNK_FINISHED', 'turn_late')).toBe(false)
+    expect(filter.accept('turn_late')).toBe(false)
+    expect(filter.accept('turn_current')).toBe(true)
   })
 })

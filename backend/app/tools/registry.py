@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 import json
 import logging
 import re
@@ -21,6 +22,7 @@ from app.tools.network import (
 )
 from app.tools.shell_models import ShellExecuteInput
 from app.tools.remote_models import RemoteShellExecuteInput
+from app.core.turn import get_current_turn_id
 
 
 logger = logging.getLogger("nyra.tools")
@@ -96,6 +98,12 @@ def classify_domain(text: str) -> str:
         return DOMAIN_RUNTIME
     if re.search(r"\b(workflow|fluxo|rotina|automa[cç][aã]o)\b", value):
         return DOMAIN_WORKFLOW
+    if re.search(
+        r"\b(monitora|monitore|monitorar|acompanha|acompanhe|acompanhar|"
+        r"avisa|avise|avisar)\b|\bquando\b.{0,80}\b(?:mudar|ficar|chegar|terminar)\b",
+        value,
+    ):
+        return DOMAIN_GENERIC
     return DOMAIN_CONVERSATION
 
 
@@ -123,9 +131,15 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, ToolDefinition] = {}
         self._remote_shell_service = None
+        self._result_observers: list[Callable[..., Any]] = []
 
     def register(self, definition: ToolDefinition) -> None:
         self._tools[definition.name] = definition
+
+    def add_result_observer(self, observer: Callable[..., Any]) -> None:
+        """Observa metadados de resultados sem alterar execução ou grounding."""
+        if observer not in self._result_observers:
+            self._result_observers.append(observer)
 
     def descriptions(self) -> list[dict[str, Any]]:
         return [
@@ -156,6 +170,7 @@ class ToolRegistry:
                     if domain == DOMAIN_DESKTOP
                     else {"system_shell", "remote_shell", "desktop_windows", "desktop_find_application"}
                 )
+                support_names |= {"monitor_create", "monitor_status", "monitor_list", "monitor_cancel"}
                 support = [
                     tool for tool in tools
                     if tool.name in support_names and _tool_domain(tool.name) != domain
@@ -176,6 +191,13 @@ class ToolRegistry:
     def should_route_to_agent(self, text: str) -> bool:
         """Use tool schemas only for requests that require observable state or action."""
         value = " ".join(text.casefold().split())
+        if re.search(
+            r"\b(monitora|monitore|monitorar|monitoramento|acompanha|acompanhe|acompanhar|"
+            r"avisa|avise|avisar|fica\s+de\s+olho)\b|"
+            r"\bquando\b.{0,100}\b(?:mudar|ficar|chegar|cair|subir|terminar|concluir)\b",
+            value,
+        ):
+            return True
         if re.search(r"\b(clipboard|transfer\w*)\b", value) and re.search(
             r"\b(status|estado|copia|copie|copiar|cola|cole|colar|limpa|limpar|texto)\b",
             value,
@@ -289,13 +311,26 @@ class ToolRegistry:
             "tool_executed",
             extra={"tool": name, "risk": actual_risk.value, "ok": ok, "elapsed_ms": elapsed_ms},
         )
-        return ToolResult(
+        result = ToolResult(
             tool=name,
             risk=actual_risk,
             ok=ok,
             data=data,
             elapsed_ms=elapsed_ms,
         )
+        for observer in tuple(self._result_observers):
+            try:
+                observed = observer(
+                    name, dict(payload), result, get_current_turn_id(),
+                )
+                if inspect.isawaitable(observed):
+                    await observed
+            except Exception as error:  # noqa: BLE001
+                logger.warning(
+                    "tool_result_observer_failed tool=%s type=%s",
+                    name, type(error).__name__,
+                )
+        return result
 
 
 def create_tool_registry(shell_service=None, remote_shell_service=None) -> ToolRegistry:

@@ -55,7 +55,12 @@ pub fn clamp_position_into_work_area(
 
 pub fn show_on_start_enabled() -> bool {
     std::env::var("NYRA_DESKTOP_PRESENCE_SHOW_ON_START")
-        .map(|value| !matches!(value.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"))
+        .map(|value| {
+            !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off"
+            )
+        })
         .unwrap_or(true)
 }
 
@@ -104,7 +109,13 @@ mod tests {
         match std::env::var("NYRA_DESKTOP_PRESENCE_SHOW_ON_START") {
             Ok(value) => {
                 let enabled = show_on_start_enabled();
-                assert_eq!(enabled, !matches!(value.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"));
+                assert_eq!(
+                    enabled,
+                    !matches!(
+                        value.trim().to_ascii_lowercase().as_str(),
+                        "0" | "false" | "no" | "off"
+                    )
+                );
             }
             Err(_) => assert!(show_on_start_enabled()),
         }

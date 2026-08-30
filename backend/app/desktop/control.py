@@ -200,6 +200,8 @@ class DesktopController:
         process_names: list[str] | tuple[str, ...] | None = None,
         title_tokens: list[str] | tuple[str, ...] | None = None,
         path: str | None = None,
+        hwnd: int | None = None,
+        canonical_id: str = "",
     ) -> None:
         """Contexto para referências como 'fecha ele'/'abre de novo' (§18).
 
@@ -215,6 +217,10 @@ class DesktopController:
             context["title_tokens"] = "|".join(dict.fromkeys(title_tokens))
         if path:
             context["path"] = path
+        if hwnd:
+            context["hwnd"] = str(hwnd)
+        if canonical_id:
+            context["canonical_id"] = canonical_id
         self.last_controlled = context
 
     def _context_hints(self) -> dict[str, list[str]]:
@@ -392,6 +398,24 @@ class DesktopController:
             return payload
 
         clean = query.strip()
+        identity = (
+            await asyncio.to_thread(self.universal.resolve_identity, clean)
+            if self.universal is not None else {"status": "NOT_FOUND"}
+        )
+        if identity.get("status") == "AMBIGUOUS" and float(identity.get("confidence") or 0) >= 1.0:
+            options = [
+                {"id": entry.app_id, "display_name": entry.display_name}
+                for entry in identity.get("entries", [])[:4]
+            ]
+            return done(
+                success=False,
+                error_code="AMBIGUOUS_APPLICATION",
+                message="A consulta corresponde a aplicativos canonicamente diferentes.",
+                execution_success=False,
+                effect_verified=False,
+                verification_status="NOT_EXECUTED",
+                detail={"options": options},
+            )
         # Fast path do Universal Registry (nyra-full §41): alias aprendido/exato
         # resolve sem busca fuzzy completa. Resolução roda FORA do event loop:
         # cache expirado dispara reindex completo (Start Menu/PowerShell) e
@@ -401,6 +425,10 @@ class DesktopController:
             if self.universal is not None else []
         )
         fast_candidate = fast_candidates[0] if fast_candidates else None
+        fast_processes_before = (
+            _matching_process_pids(fast_candidate)
+            if fast_candidate is not None else set()
+        )
         if fast_candidate is not None and not force_new:
             existing = self._existing_instance_windows(fast_candidate)
             # Só focamos janelas VISÍVEIS. Instância oculta em tray segue o
@@ -418,6 +446,8 @@ class DesktopController:
                         kind="app",
                         process_names=[existing[0].process_name or ""],
                         title_tokens=[fast_candidate.display_name],
+                        hwnd=existing[0].hwnd,
+                        canonical_id=fast_candidate.id,
                     )
                     return done(
                         success=True,
@@ -435,12 +465,23 @@ class DesktopController:
                 origin=origin,
             )
             if successful_candidate is not None:
+                if fast_processes_before and raw_result.get("effect_verified") is True:
+                    raw_result["already_open"] = True
+                    raw_result["pre_existing_pids"] = sorted(fast_processes_before)
                 self.universal.record_success(
                     successful_candidate.id,
                     alias_query=clean,
                     launch_candidate=successful_candidate,
                 )
-                self._note_controlled(successful_candidate.display_name)
+                result_windows = raw_result.get("windows") or []
+                result_hwnd = int(result_windows[0].get("hwnd") or 0) if result_windows else 0
+                self._note_controlled(
+                    successful_candidate.display_name,
+                    process_names=successful_candidate.process_names,
+                    title_tokens=(successful_candidate.display_name,),
+                    hwnd=result_hwnd or None,
+                    canonical_id=successful_candidate.id,
+                )
             else:
                 self.universal.record_failure(fast_candidate.id)
             return self._finish_dynamic_attempt(done, raw_result)
@@ -459,6 +500,8 @@ class DesktopController:
                 launch_method=candidate_data.get("launch_method", ""),
                 target=candidate_data.get("target", ""),
                 confidence=float(candidate_data.get("confidence", 0.0)),
+                process_names=tuple(candidate_data.get("process_names") or ()),
+                aliases=tuple(candidate_data.get("aliases") or ()),
             )
             if self.universal is not None:
                 launch_candidates = await asyncio.to_thread(
@@ -489,6 +532,8 @@ class DesktopController:
                             kind="app",
                             process_names=[existing[0].process_name or ""],
                             title_tokens=[candidate.display_name],
+                            hwnd=existing[0].hwnd,
+                            canonical_id=candidate.id,
                         )
                         return done(
                             success=True,
@@ -511,7 +556,15 @@ class DesktopController:
                         alias_query=clean,
                         launch_candidate=successful_candidate,
                     )
-                self._note_controlled(successful_candidate.display_name)
+                result_windows = raw_result.get("windows") or []
+                result_hwnd = int(result_windows[0].get("hwnd") or 0) if result_windows else 0
+                self._note_controlled(
+                    successful_candidate.display_name,
+                    process_names=successful_candidate.process_names,
+                    title_tokens=(successful_candidate.display_name,),
+                    hwnd=result_hwnd or None,
+                    canonical_id=successful_candidate.id,
+                )
             elif self.universal is not None:
                 self.universal.record_failure(candidate.id)
             return self._finish_dynamic_attempt(done, raw_result)
@@ -1555,6 +1608,18 @@ class DesktopController:
         else:
             handled, reply = await self._universal_window_op(action_value, target_query, hints=hints)
 
+        if self.last_operation_result is not None:
+            from app.desktop.presenter import ActionResultPresenter
+
+            user_facing = ActionResultPresenter.present(
+                self.last_operation_result,
+                requested_action=action_value,
+                requested_app=target_query,
+            )
+            if user_facing:
+                self.last_operation_result["user_facing_response"] = user_facing
+                reply = user_facing
+
         self._remember_dedup(turn_id, intent.dedup_key, reply)
         return handled, reply
 
@@ -1564,10 +1629,21 @@ class DesktopController:
         filesystem_list_files nem Agent Loop."""
         from app.desktop.intents import FOLDER_SHELL_URIS
 
+        explicit = Path(name_query.strip().strip('"')).expanduser()
+        explicit_folder = (
+            explicit.resolve()
+            if explicit.is_absolute() and explicit.is_dir()
+            else None
+        )
         key = normalize(name_query)
         resolved: tuple[str, str] | None = None  # (display_name, uri_or_path)
         entry = FOLDER_SHELL_URIS.get(key)
-        if entry is not None:
+        if explicit_folder is not None:
+            resolved = (
+                explicit_folder.name or str(explicit_folder),
+                str(explicit_folder),
+            )
+        elif entry is not None:
             resolved = entry
         elif key == "home":
             resolved = ("Home", str(Path.home()))
@@ -1613,18 +1689,23 @@ class DesktopController:
                                     duration_ms=(time.perf_counter() - started) * 1000, **kwargs)
 
         result = await self._launch_candidate(candidate, done, origin="fastpath")
+        result["subject_kind"] = "folder"
+        result.pop("user_facing_response", None)
         self.last_operation_result = result
         if result.get("already_open"):
             self._note_controlled(display_name, kind="folder",
-                                  process_names=("explorer",), title_tokens=(display_name,))
+                                  process_names=("explorer",), title_tokens=(display_name,),
+                                  path=None if target_uri.startswith("shell:") else target_uri)
             return True, f"Pasta {display_name} já estava aberta; janela existente em primeiro plano."
         if result.get("success") and result.get("effect_verified"):
             self._note_controlled(display_name, kind="folder",
-                                  process_names=("explorer",), title_tokens=(display_name,))
+                                  process_names=("explorer",), title_tokens=(display_name,),
+                                  path=None if target_uri.startswith("shell:") else target_uri)
             return True, f"Pasta {display_name} aberta no Explorador."
         if result.get("success"):
             self._note_controlled(display_name, kind="folder",
-                                  process_names=("explorer",), title_tokens=(display_name,))
+                                  process_names=("explorer",), title_tokens=(display_name,),
+                                  path=None if target_uri.startswith("shell:") else target_uri)
             return True, f"Comando da pasta {display_name} enviado; janela ainda não confirmada."
         return True, f"Não consegui abrir a pasta {display_name}: {result.get('message', '')}"
 
@@ -1768,7 +1849,17 @@ class DesktopController:
             name = result.get("app") or cleaned
             # Contexto (§18) vale para TODO sucesso — inclusive abertura em
             # background/tray sem confirmação de janela.
-            self._note_controlled(name, kind="app", title_tokens=(name,))
+            result_windows = result.get("windows") or []
+            result_candidate = result.get("candidate") or {}
+            self._note_controlled(
+                name,
+                kind="app",
+                process_names=tuple(result_candidate.get("process_names") or ()),
+                title_tokens=(name,),
+                hwnd=(int(result_windows[0].get("hwnd") or 0) or None)
+                if result_windows else None,
+                canonical_id=str(result_candidate.get("id") or ""),
+            )
             if result.get("already_open"):
                 return True, f"{name} já estava aberto; janela existente em primeiro plano."
             if verified:
@@ -1842,9 +1933,20 @@ class DesktopController:
 
         windows = self._resolve_window_targets(target_query, hints=hints)
         if not windows:
-            return True, (
-                f"Nenhuma janela visível de \"{target_query}\" neste momento — nada foi alterado."
+            result_payload = operation_result(
+                app=target_query,
+                action=f"universal_{action_value.casefold()}",
+                success=False,
+                error_code="WINDOW_NOT_FOUND",
+                message=(
+                    f"Nenhuma janela visível de \"{target_query}\" neste momento — nada foi alterado."
+                ),
+                execution_success=False,
+                effect_verified=False,
+                verification_status="NOT_EXECUTED",
             )
+            self.last_operation_result = result_payload
+            return True, str(result_payload["message"])
 
         affected = 0
         details: list[str] = []
@@ -1889,6 +1991,7 @@ class DesktopController:
             execution_success=affected > 0,
             effect_verified=bool(affected),
             verification_status="VERIFIED" if affected else "VERIFICATION_FAILED",
+            subject_kind=kind,
             windows=[w.model_dump(mode="json") for w in windows[:5]],
         )
         self.last_operation_result = result_payload

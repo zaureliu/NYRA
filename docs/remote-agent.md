@@ -1,6 +1,6 @@
 # Trusted SSH e Agent Runs
 
-`remote_shell` executa comandos SSH finitos somente em hosts presentes em `config/network_aliases.json`. O modelo fornece apenas `host` lógico, `command`, timeout/cwd opcionais, razão e eventual `approval_id`. Address, port, username, private key, known_hosts e SSH agent são resolvidos no backend e nunca entram no schema do LLM.
+`remote_shell` executa comandos SSH finitos somente em hosts presentes no registry local configurado (por padrão, `config/network_aliases.local.json`). O modelo fornece apenas `host` lógico, `command`, timeout/cwd opcionais, razão e eventual `approval_id`. Address, port, username, private key, known_hosts e SSH agent são resolvidos no backend e nunca entram no schema do LLM.
 
 ## Confiança e autenticação
 

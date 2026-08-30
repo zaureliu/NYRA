@@ -8,6 +8,7 @@ from num2words import num2words
 IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 CIDR = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}/\d{1,2}\b")
 MAC = re.compile(r"\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b")
+TIME = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
 VERSION = re.compile(r"\b(?:v(?:ers(?:ão|ao)?)?\s*)?\d+\.\d+(?:\.\d+)?\b", re.I)
 PERCENT = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*%")
 RATE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*(Kbps|Mbps|Gbps|B/s|KB/s|MB/s|GB/s|KiB|MiB|GiB|TiB|KB|MB|GB|TB|GHz|MHz|ms|°C)\b", re.I)
@@ -42,12 +43,26 @@ def normalize_numbers(text: str) -> tuple[str, list[dict]]:
     text = MAC.sub(hold, text)
     text = IPV4.sub(hold, text)
 
+    def clock(match: re.Match) -> str:
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        hour_unit = "hora" if hour == 1 else "horas"
+        if minute == 0:
+            spoken = f"{words(str(hour))} {hour_unit}"
+        else:
+            minute_unit = "minuto" if minute == 1 else "minutos"
+            spoken = f"{words(str(hour))} {hour_unit} e {words(str(minute))} {minute_unit}"
+        applied.append({"term": match.group(0), "strategy": "clock_time", "spoken_form": spoken})
+        return spoken
+
+    text = TIME.sub(clock, text)
+
     def rate(match: re.Match) -> str:
         number, unit = match.groups()
-        unit_map = {"mbps": "megabits por segundo", "gbps": "gigabits por segundo", "kbps": "quilobits por segundo", "mb/s": "megabytes por segundo", "gb/s": "gigabytes por segundo", "kb/s": "quilobytes por segundo", "b/s": "bytes por segundo", "ghz": "gigahertz", "mhz": "megahertz", "ms": "milissegundos", "°c": "graus Celsius"}
+        unit_map = {"mbps": "megabits por segundo", "gbps": "gigabits por segundo", "kbps": "quilobits por segundo", "mb/s": "megabytes por segundo", "gb/s": "gigabytes por segundo", "kb/s": "quilobytes por segundo", "b/s": "bytes por segundo", "kib": "quibibytes", "mib": "mebibytes", "gib": "gibibytes", "tib": "tebibytes", "kb": "quilobytes", "mb": "megabytes", "gb": "gigabytes", "tb": "terabytes", "ghz": "gigahertz", "mhz": "megahertz", "ms": "milissegundos", "°c": "graus Celsius"}
         spoken_unit = unit_map.get(unit.casefold(), unit)
         if number.replace(',', '.').strip() in {'1', '1.0', '1,0'}:
-            spoken_unit = spoken_unit.replace('gigabits', 'gigabit').replace('megabits', 'megabit').replace('quilobits', 'quilobit').replace('gigabytes', 'gigabyte').replace('megabytes', 'megabyte').replace('quilobytes', 'quilobyte').replace('milissegundos', 'milissegundo')
+            spoken_unit = spoken_unit.replace('gigabits', 'gigabit').replace('megabits', 'megabit').replace('quilobits', 'quilobit').replace('gigabytes', 'gigabyte').replace('megabytes', 'megabyte').replace('quilobytes', 'quilobyte').replace('quibibytes', 'quibibyte').replace('mebibytes', 'mebibyte').replace('gibibytes', 'gibibyte').replace('tebibytes', 'tebibyte').replace('terabytes', 'terabyte').replace('milissegundos', 'milissegundo')
         spoken = f"{words(number)} {spoken_unit}"
         applied.append({"term": match.group(0), "strategy": "technical_number", "spoken_form": spoken})
         return spoken

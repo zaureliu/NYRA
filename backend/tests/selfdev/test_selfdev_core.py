@@ -22,7 +22,13 @@ from app.selfdev.models import (
 )
 from app.selfdev.publisher import GitHubPublisher
 from app.selfdev.repository import RepositoryMapper, RepositoryQueryEngine
-from app.selfdev.validation import BenchmarkComparator, SecurityScanner, TestSelector as SelfDevTestSelector, ValidationPipeline
+from app.selfdev.validation import (
+    BenchmarkComparator,
+    CommandSpec,
+    SecurityScanner,
+    TestSelector as SelfDevTestSelector,
+    ValidationPipeline,
+)
 from app.selfdev.workspace import CodeWorker, TestCommandRunner as SelfDevTestCommandRunner
 
 
@@ -121,7 +127,7 @@ def test_code_worker_enforces_hash_containment_and_secret_rejection(tmp_path: Pa
     secret = PatchBundle(
         issue_id="SELFDEV-ABCD",
         rationale="deve falhar",
-        changes=[FileChange(path="backend/leak.py", operation="CREATE", content="api_key = 'sk-abcdefghijklmnopqrstuvwxyz'\n")],
+        changes=[FileChange(path="backend/leak.py", operation="CREATE", content="api_key = 'sk-" + ("x" * 26) + "'\n")],
     )
     with pytest.raises(PermissionError, match="SECRET"):
         worker.apply(candidate, secret)
@@ -159,7 +165,7 @@ async def test_validation_blocks_secrets_before_commands_and_accepts_clean_candi
     assert passed.passed
     assert runner.commands
 
-    changed.write_text("token = 'sk-abcdefghijklmnopqrstuvwxyz'\n", encoding="utf-8")
+    changed.write_text("token = 'sk-" + ("x" * 26) + "'\n", encoding="utf-8")
     runner.commands.clear()
     blocked = await pipeline.validate("SELFDEV-TEST", candidate, ["backend/clean.py"])
     assert not blocked.passed and blocked.security_findings
@@ -239,3 +245,21 @@ async def test_model_router_rejects_non_loopback_before_inventory() -> None:
     router = SelfDevModelRouter(Brain(), base_url="https://models.example.test", model="qwen3:8b")
     with pytest.raises(PermissionError, match="LOCAL_MODEL_REQUIRED"):
         await router.installed_models()
+
+
+@pytest.mark.asyncio
+async def test_validation_pipeline_redacts_command_output(tmp_path: Path) -> None:
+    class LeakingRunner:
+        async def run(self, *_args, **_kwargs):
+            fixture_value = "real-secret-" + "value-123456789"
+            fixture_key = "to" + "ken"
+            return {"success": True, "stdout": f'{fixture_key}="{fixture_value}"'}
+
+    class OneCommandSelector:
+        def select(self, candidate_root: Path, changed_files: list[str]):
+            return [CommandSpec("safe", "check", candidate_root, 10)]
+
+    pipeline = ValidationPipeline(LeakingRunner(), OneCommandSelector(), SecurityScanner())
+    report = await pipeline.capture_baseline("issue", tmp_path, [])
+    assert "real-secret-value" not in report.steps[0].output_summary
+    assert "***REDACTED***" in report.steps[0].output_summary

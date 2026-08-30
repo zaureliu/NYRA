@@ -9,11 +9,14 @@ export interface AudioSettingsValue {
   conversation_mode: 'push_to_talk' | 'wake_word' | 'hands_free'
   always_listening: boolean
   allow_interruption: boolean
+  emotion_mode: 'automatic' | 'neutral_only'
+  expressiveness: 'low' | 'normal' | 'high'
 }
 
 const DEFAULT_AUDIO: AudioSettingsValue = {
   microphone: 'default', speaker: 'default', voice: 'pf_dora', speech_speed: .97, volume: .9,
   conversation_mode: 'hands_free', always_listening: false, allow_interruption: true,
+  emotion_mode: 'automatic', expressiveness: 'normal',
 }
 
 export function reconcileAudioDevices(settings: AudioSettingsValue, devices: MediaDeviceInfo[]): Partial<AudioSettingsValue> {

@@ -1,6 +1,8 @@
 export type EmotionalState =
-  | 'neutral' | 'happy' | 'curious' | 'focused'
-  | 'concerned' | 'amused' | 'tired' | 'surprised'
+  | 'neutral' | 'friendly' | 'focused' | 'confident' | 'positive'
+  | 'happy' | 'relieved' | 'concerned' | 'warning' | 'serious'
+  | 'empathetic' | 'curious' | 'surprised' | 'amused'
+  | 'apologetic' | 'uncertain' | 'calm' | 'tired'
 
 export type ActivityStatus = 'IDLE' | 'LISTENING' | 'USER_SPEAKING' | 'TRANSCRIBING' | 'THINKING' | 'TOOL_EXECUTION' | 'SPEAKING' | 'INTERRUPTED' | 'ERROR' | 'OFFLINE'
 export type MouthState =
@@ -36,6 +38,7 @@ export interface ChatResponse {
   display_text: string
   speech_text: string
   state: EmotionalState
+  emotion_intensity?: number
   audio_url: string | null
   audio_urls?: string[]
   response_id?: string | null

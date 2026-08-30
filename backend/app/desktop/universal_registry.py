@@ -68,6 +68,11 @@ class UniversalAppEntry:
     install_location: str = ""
     source: str = ""
     confidence: float = 0.0
+    executable_paths: list[str] = field(default_factory=list)
+    start_menu_entries: list[str] = field(default_factory=list)
+    aumids: list[str] = field(default_factory=list)
+    package_ids: list[str] = field(default_factory=list)
+    process_names: list[str] = field(default_factory=list)
     launch_options: list[dict[str, Any]] = field(default_factory=list)
     preferred_launch_method: str = ""
     preferred_target: str = ""
@@ -141,6 +146,11 @@ class UniversalAppRegistry:
                                 start_menu_link=str(item.get("start_menu_link") or ""),
                                 source=str(item.get("source") or ""),
                                 confidence=float(item.get("confidence") or 0.0),
+                                executable_paths=[str(value) for value in item.get("executable_paths", [])][:32],
+                                start_menu_entries=[str(value) for value in item.get("start_menu_entries", [])][:32],
+                                aumids=[str(value) for value in item.get("aumids", [])][:32],
+                                package_ids=[str(value) for value in item.get("package_ids", [])][:32],
+                                process_names=[str(value) for value in item.get("process_names", [])][:32],
                                 launch_options=[
                                     dict(option)
                                     for option in item.get("launch_options", [])
@@ -169,7 +179,7 @@ class UniversalAppRegistry:
         with self._lock:
             entries = [entry.__dict__.copy() for entry in self.entries.values()]
             payload = {
-                "version": 1,
+                "version": 2,
                 "refreshed_at": self.last_refresh,
                 "sources": self.sources_count,
                 "entries": entries,
@@ -191,7 +201,9 @@ class UniversalAppRegistry:
 
     def refresh(self, force: bool = True) -> dict[str, int]:
         """Reconstrói o índice a partir das fontes do discovery (nyra-full §6)."""
-        candidates = self.discovery.index(force=force)
+        from app.desktop.canonical_apps import canonicalize_candidates
+
+        candidates = canonicalize_candidates(self.discovery.index(force=force))
         now = time.time()
         entries: dict[str, UniversalAppEntry] = {}
         sources: dict[str, int] = {}
@@ -248,6 +260,21 @@ class UniversalAppRegistry:
                 entry.last_verified = now
         with self._lock:
             self.entries = entries
+            migrated_aliases: dict[str, str] = {}
+            for alias, old_app_id in self.learned_aliases.items():
+                if old_app_id in entries:
+                    migrated_aliases[alias] = old_app_id
+                    continue
+                matches = [
+                    entry.app_id for entry in entries.values()
+                    if alias in {
+                        normalize(value.removeprefix("learned:"))
+                        for value in entry.aliases
+                    }
+                ]
+                if len(matches) == 1:
+                    migrated_aliases[alias] = matches[0]
+            self.learned_aliases = migrated_aliases
             self.sources_count = sources
             self.last_refresh = now
         self.save_index()
@@ -270,9 +297,25 @@ class UniversalAppRegistry:
             start_menu_link=candidate.target if method == LaunchMethod.START_MENU else "",
             source=candidate.source,
             confidence=candidate.confidence,
+            executable_paths=(
+                [expand_launch_target(candidate.target)]
+                if method == LaunchMethod.EXE else []
+            ),
+            start_menu_entries=(
+                [candidate.target] if method == LaunchMethod.START_MENU else []
+            ),
+            aumids=(
+                [candidate.target]
+                if method == LaunchMethod.APP_USER_MODEL_ID else []
+            ),
+            package_ids=(
+                [candidate.target.split("!", 1)[0]]
+                if method == LaunchMethod.APP_USER_MODEL_ID else []
+            ),
+            process_names=list(candidate.process_names),
             launch_options=[UniversalAppRegistry._option_from_candidate(candidate)],
         )
-        entry.aliases = build_aliases(entry)
+        entry.aliases = list(dict.fromkeys([*build_aliases(entry), *candidate.aliases]))
         return entry
 
     @staticmethod
@@ -283,6 +326,8 @@ class UniversalAppRegistry:
             "source": candidate.source,
             "confidence": float(candidate.confidence),
             "expected_window": bool(candidate.expected_window),
+            "process_names": list(candidate.process_names),
+            "aliases": list(candidate.aliases),
         }
 
     @staticmethod
@@ -297,6 +342,8 @@ class UniversalAppRegistry:
             target=str(option.get("target") or entry.target),
             confidence=float(option.get("confidence") or entry.confidence),
             expected_window=bool(option.get("expected_window", True)),
+            process_names=tuple(option.get("process_names") or entry.process_names),
+            aliases=tuple(option.get("aliases") or entry.aliases),
         )
 
     @classmethod
@@ -320,10 +367,25 @@ class UniversalAppRegistry:
         method = str(candidate.launch_method)
         if method == LaunchMethod.EXE and not entry.executable:
             entry.executable = Path(candidate.target).name
+        if method == LaunchMethod.EXE:
+            expanded = expand_launch_target(candidate.target)
+            if expanded and expanded not in entry.executable_paths:
+                entry.executable_paths.append(expanded)
         elif method == LaunchMethod.APP_USER_MODEL_ID and not entry.aumid:
             entry.aumid = candidate.target
+        if method == LaunchMethod.APP_USER_MODEL_ID:
+            if candidate.target not in entry.aumids:
+                entry.aumids.append(candidate.target)
+            package = candidate.target.split("!", 1)[0]
+            if package and package not in entry.package_ids:
+                entry.package_ids.append(package)
         elif method == LaunchMethod.START_MENU and not entry.start_menu_link:
             entry.start_menu_link = candidate.target
+        if method == LaunchMethod.START_MENU and candidate.target not in entry.start_menu_entries:
+            entry.start_menu_entries.append(candidate.target)
+        entry.process_names = list(dict.fromkeys([
+            *entry.process_names, *candidate.process_names,
+        ]))
         if candidate.confidence > entry.confidence:
             entry.display_name = candidate.display_name
             entry.launch_method = method
@@ -331,6 +393,7 @@ class UniversalAppRegistry:
             entry.source = candidate.source
             entry.confidence = candidate.confidence
         entry.aliases = list(dict.fromkeys([*entry.aliases, *build_aliases(entry)]))
+        entry.aliases = list(dict.fromkeys([*entry.aliases, *candidate.aliases]))
 
     # ------------------------------------------------------------- resolution
 
@@ -356,10 +419,17 @@ class UniversalAppRegistry:
             entry_exact = self.entries.get(key)
             app_id = entry_exact.app_id if entry_exact else None
         if app_id is None:
-            for entry in self.entries.values():
-                if key in {normalize(alias.removeprefix("learned:")) for alias in entry.aliases}:
-                    app_id = entry.app_id
-                    break
+            matches = [
+                entry for entry in self.entries.values()
+                if key in {
+                    normalize(alias.removeprefix("learned:"))
+                    for alias in entry.aliases
+                }
+            ]
+            # Exact shared aliases are a real ambiguity only when they map to
+            # canonically different entries.  Never pick the first by order.
+            if len(matches) == 1:
+                app_id = matches[0].app_id
         if not app_id:
             return None
         return self.entries.get(app_id)
@@ -400,6 +470,45 @@ class UniversalAppRegistry:
             preferred_method=preferred_method,
             preferred_target=preferred_target,
         )
+
+    def resolve_identity(self, query: str) -> dict[str, Any]:
+        """Resolve query to canonical apps, separate from their launch routes."""
+        key = normalize(query)
+        if not key:
+            return {"status": "NOT_FOUND", "entries": []}
+        learned_id = self.learned_aliases.get(key)
+        if learned_id in self.entries:
+            return {"status": "EXACT_MATCH", "entry": self.entries[learned_id],
+                    "entries": [self.entries[learned_id]], "confidence": 1.0}
+
+        from app.desktop.discovery import score_match
+
+        ranked: list[tuple[float, UniversalAppEntry]] = []
+        for entry in self.entries.values():
+            names = [entry.display_name, entry.app_id, *entry.aliases]
+            confidence = max((score_match(query, name.removeprefix("learned:"))
+                              for name in names if name), default=0.0)
+            if confidence > 0:
+                ranked.append((confidence, entry))
+        ranked.sort(key=lambda item: (-item[0], -item[1].last_launch_success,
+                                      item[1].display_name))
+        exact = [item for item in ranked if item[0] >= 1.0]
+        if len(exact) == 1:
+            return {"status": "EXACT_MATCH", "entry": exact[0][1],
+                    "entries": [exact[0][1]], "confidence": exact[0][0]}
+        if len(exact) > 1:
+            return {"status": "AMBIGUOUS", "entries": [item[1] for item in exact[:4]],
+                    "confidence": 1.0}
+        high = [item for item in ranked if item[0] >= 0.85]
+        if len(high) == 1:
+            return {"status": "HIGH_CONFIDENCE", "entry": high[0][1],
+                    "entries": [high[0][1]], "confidence": high[0][0]}
+        if len(high) > 1:
+            return {"status": "AMBIGUOUS", "entries": [item[1] for item in high[:4]],
+                    "confidence": high[0][0]}
+        return {"status": "NOT_FOUND" if not ranked else "AMBIGUOUS",
+                "entries": [item[1] for item in ranked[:4]],
+                "confidence": ranked[0][0] if ranked else 0.0}
 
     def resolve_fast(self, query: str) -> ApplicationCandidate | None:
         """Return the preferred exact/learned candidate without fuzzy search."""
@@ -454,6 +563,7 @@ class UniversalAppRegistry:
         if entry is None:
             return []
         names: list[str] = []
+        names.extend(entry.process_names)
         if entry.executable:
             stem = Path(entry.executable).stem.casefold()
             names.extend({f"{stem}.exe", stem})
@@ -472,7 +582,7 @@ class UniversalAppRegistry:
 
 def build_aliases(entry: UniversalAppEntry) -> list[str]:
     """Alias engine automática (nyra-full §4): nome oficial + exe + seeds."""
-    aliases: set[str] = set()
+    aliases: set[str] = {entry.app_id}
     display = entry.display_name.strip()
     if display:
         aliases.add(display.casefold())
@@ -488,4 +598,8 @@ def build_aliases(entry: UniversalAppEntry) -> list[str]:
         aliases.add(link_stem.casefold())
     for seed in _GENERIC_ALIASES.get(f"{exe_stem.casefold()}.exe", ()):  # fallback apenas
         aliases.add(seed)
+    from app.desktop.canonical_apps import aliases_for_canonical_id
+
+    aliases.update(aliases_for_canonical_id(entry.app_id))
+    aliases.update(entry.process_names)
     return [alias for alias in aliases if alias]

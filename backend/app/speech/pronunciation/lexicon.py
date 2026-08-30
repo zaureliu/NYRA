@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.core.paths import DATA_ROOT, IDENTITY_ROOT
+from app.core.paths import DATA_ROOT, IDENTITY_ROOT, RESOURCE_ROOT
 from .models import PronunciationDictionary, PronunciationRule
 
 
 DEFAULT_PATH = IDENTITY_ROOT / "pronunciation_ptbr.defaults.json"
 LEGACY_PATH = IDENTITY_ROOT / "pronunciation_ptbr.json"
+PACKAGED_DEFAULT_PATH = RESOURCE_ROOT / "identity" / "pronunciation_ptbr.defaults.json"
+PACKAGED_LEGACY_PATH = RESOURCE_ROOT / "identity" / "pronunciation_ptbr.json"
 OVERRIDE_PATH = DATA_ROOT / "pronunciation" / "user_overrides.json"
 
 
@@ -20,27 +22,37 @@ def _load(path: Path) -> dict:
 
 
 def load_dictionary() -> PronunciationDictionary:
-    defaults = _load(DEFAULT_PATH)
-    legacy = _load(LEGACY_PATH)
+    default_sources = [PACKAGED_DEFAULT_PATH]
+    legacy_sources = [PACKAGED_LEGACY_PATH]
+    if DEFAULT_PATH.resolve() != PACKAGED_DEFAULT_PATH.resolve():
+        default_sources.append(DEFAULT_PATH)
+    if LEGACY_PATH.resolve() != PACKAGED_LEGACY_PATH.resolve():
+        legacy_sources.append(LEGACY_PATH)
     overrides = _load(OVERRIDE_PATH)
     rules: dict[str, PronunciationRule] = {}
-    for entry in defaults.get("rules", []):
-        try:
-            rule = PronunciationRule.model_validate(entry)
-            rules[rule.canonical.casefold()] = rule
-        except Exception:
-            continue
+    version = 4
+    for source in default_sources:
+        defaults = _load(source)
+        version = max(version, int(defaults.get("version", 4)))
+        for entry in defaults.get("rules", []):
+            try:
+                rule = PronunciationRule.model_validate(entry)
+                rules[rule.canonical.casefold()] = rule
+            except Exception:
+                continue
     # Keep the V3 lexicon backwards compatible while migrating to rule entries.
-    for canonical, spoken in legacy.get("terms", {}).items():
-        key = canonical.casefold()
-        rules.setdefault(key, PronunciationRule(canonical=canonical, spoken_form=spoken, aliases=[canonical]))
+    for source in legacy_sources:
+        legacy = _load(source)
+        for canonical, spoken in legacy.get("terms", {}).items():
+            key = canonical.casefold()
+            rules.setdefault(key, PronunciationRule(canonical=canonical, spoken_form=spoken, aliases=[canonical]))
     for entry in overrides.get("rules", []):
         try:
             rule = PronunciationRule.model_validate(entry)
             rules[rule.canonical.casefold()] = rule
         except Exception:
             continue
-    return PronunciationDictionary(version=int(defaults.get("version", 4)), rules=list(rules.values()))
+    return PronunciationDictionary(version=version, rules=list(rules.values()))
 
 
 def save_override(rule: PronunciationRule) -> None:

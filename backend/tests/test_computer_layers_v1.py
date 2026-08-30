@@ -372,7 +372,7 @@ async def test_pipeline_open_app_verified_and_learned(layer, tmp_path):
     pipeline, state, usage, skills = build_pipeline(layer, controller, tmp_path)
     result = await pipeline.handle_user_request("abre o bloco de notas",
                                                 turn_id="p1")
-    assert result.handled and "Aberto" in result.reply
+    assert result.handled and result.reply == "Bloco de Notas aberto."
     assert result.verified is True
     assert ("OPEN_APP", "bloco de notas") in controller.calls
     events = usage.recent_events()

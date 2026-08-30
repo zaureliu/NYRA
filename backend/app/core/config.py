@@ -14,6 +14,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.core.paths import CONFIG_ROOT, DATA_ROOT, PROJECT_ROOT, resolve_packaged_path
 
 
+def _private_config_path(local_name: str, public_name: str) -> Path:
+    """Prefer ignored operator config and fall back to a safe public template."""
+    local_path = CONFIG_ROOT / local_name
+    return local_path if local_path.is_file() else CONFIG_ROOT / public_name
+
+
 def _yaml_defaults() -> dict[str, Any]:
     path = CONFIG_ROOT / "default.yaml"
     if not path.exists():
@@ -58,12 +64,15 @@ class Settings(BaseSettings):
     stt_cpu_threads: int = Field(4, ge=0, le=64)
     stt_workers: int = Field(1, ge=1, le=8)
     silence_threshold: float = Field(0.018, ge=0, le=1)
-    tts_provider: Literal["auto", "chatterbox", "xtts", "kokoro", "pyttsx3", "edge_tts", "disabled"] = "kokoro"
+    tts_provider: Literal["auto", "chatterbox", "xtts", "kokoro", "pyttsx3", "edge_tts", "disabled"] = "edge_tts"
     tts_language: str = "pt-BR"
     tts_model_path: Path = Path("data/models/kokoro-v1.0.int8.onnx")
     tts_voices_path: Path = Path("data/models/voices-v1.0.bin")
-    tts_voice: str = "pf_dora"
+    tts_voice: str = "en-US-AvaMultilingualNeural"
+    tts_voice_identity_version: str = "ava-v1"
     tts_speaking_rate: float = Field(0.97, ge=0.7, le=1.3)
+    voice_emotion_mode: Literal["automatic", "neutral_only"] = "automatic"
+    voice_expressiveness: Literal["low", "normal", "high"] = "normal"
     tts_fallback_provider: Literal["pyttsx3", "edge_tts", "disabled"] = "pyttsx3"
     chatterbox_python: Path = Path(".venv-chatterbox/Scripts/python.exe")
     chatterbox_device: Literal["cpu", "cuda", "mps"] = "cpu"
@@ -152,7 +161,9 @@ class Settings(BaseSettings):
     ssh_command_timeout_seconds: int = Field(30, ge=1, le=300)
     ssh_max_timeout_seconds: int = Field(300, ge=1, le=3600)
     ssh_max_output_chars: int = Field(50_000, ge=1_000, le=1_000_000)
-    trusted_hosts_path: Path = CONFIG_ROOT / "network_aliases.json"
+    trusted_hosts_path: Path = Field(
+        default_factory=lambda: _private_config_path("network_aliases.local.json", "network_aliases.json")
+    )
 
     agent_enabled: bool = True
     agent_max_steps: int = Field(12, ge=1, le=50)
@@ -164,11 +175,10 @@ class Settings(BaseSettings):
     agent_max_identical_repeats: int = Field(2, ge=1, le=10)
     agent_max_consecutive_failures: int = Field(3, ge=1, le=10)
 
-    # Self-Development Engine V1. Publicação permanece OFF durante o bootstrap
-    # da 0.3.0 e só pode ser habilitada depois dos gates de release.
+    # Self-Development Engine. Publicação automática permanece opt-in.
     selfdev_mode: Literal["OFF", "OBSERVE_ONLY", "AUTONOMOUS_SAFE", "AUTONOMOUS_ADVANCED"] = "AUTONOMOUS_SAFE"
     selfdev_model: str = "qwen3:8b"
-    selfdev_workspace: Path = PROJECT_ROOT.parent / "nyra-selfdev"
+    selfdev_workspace: Path = PROJECT_ROOT.parent / "Nyra-Auto-Code"
     selfdev_canonical_root: Path = PROJECT_ROOT
     selfdev_public_snapshot: Path = PROJECT_ROOT.parent / "NYRA-GitHub-Public"
     selfdev_run_when_idle: bool = True
@@ -252,7 +262,9 @@ class Settings(BaseSettings):
 
     homelab_enabled: bool = True
     homelab_mutations_enabled: bool = False
-    homelab_registry_path: Path = CONFIG_ROOT / "homelab_hosts.yaml"
+    homelab_registry_path: Path = Field(
+        default_factory=lambda: _private_config_path("homelab_hosts.local.yaml", "homelab_hosts.example.yaml")
+    )
     homelab_default_timeout_seconds: float = Field(5, ge=1, le=30)
     homelab_overview_cache_seconds: float = Field(5, ge=0, le=60)
     homelab_offline_failure_threshold: int = Field(2, ge=1, le=10)
@@ -353,9 +365,19 @@ class Settings(BaseSettings):
             if not state_path.is_file():
                 continue
             try:
-                values.update(json.loads(state_path.read_text(encoding="utf-8")))
+                persisted = json.loads(state_path.read_text(encoding="utf-8"))
+                values.update(persisted)
             except (OSError, ValueError):
                 pass
+        # Existing releases retain their copied settings in LocalAppData. The
+        # user-approved Ava identity supersedes both legacy Dora and the
+        # rejected blended voice exactly once through an explicit version.
+        if values.get("tts_voice_identity_version") != "ava-v1":
+            values.update({
+                "tts_provider": "edge_tts",
+                "tts_voice": "en-US-AvaMultilingualNeural",
+                "tts_voice_identity_version": "ava-v1",
+            })
         values.update(overrides)
         # Deployment environment (.env/process) wins over persisted UI choices,
         # which win over YAML.  Removing those keys lets BaseSettings parse and

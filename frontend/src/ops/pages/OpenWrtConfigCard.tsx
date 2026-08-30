@@ -147,7 +147,7 @@ export function OpenWrtConfigCard({ onNotify }: { onNotify: (message: string) =>
       <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
         <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
           Host/URL
-          <input type="text" placeholder="http://192.168.1.1" value={editing.url}
+          <input type="text" placeholder="http://router.local" value={editing.url}
             style={inputStyle}
             onChange={(event) => setForm({ ...editing, url: event.target.value })} />
         </label>

@@ -79,4 +79,8 @@ def operation_result(
     if detail:
         payload.update(detail)
     payload.update(extra)
-    return payload
+    # Keep internal evidence (message/PID/HWND/windows/verification) intact,
+    # while exposing a separately formatted sentence for chat and TTS.
+    from app.desktop.presenter import attach_user_facing_response
+
+    return attach_user_facing_response(payload)

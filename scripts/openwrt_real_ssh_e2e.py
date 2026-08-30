@@ -1,5 +1,6 @@
-"""E2E REAL: Credential Broker -> AsyncSSH password -> root@192.168.1.1 -> ubus."""
+"""E2E REAL: Credential Broker -> AsyncSSH password -> configured OpenWrt -> ubus."""
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -12,6 +13,10 @@ from app.tools.password_ssh_executor import AsyncSSHPasswordExecutor  # noqa: E4
 
 
 async def main() -> int:
+    address = os.environ.get("NYRA_E2E_OPENWRT_ADDRESS", "").strip()
+    if not address:
+        print("RESULT=SKIP (configure NYRA_E2E_OPENWRT_ADDRESS locally)")
+        return 0
     settings = get_settings()
     config = load_config(settings)
     password = resolve_password(settings)
@@ -24,7 +29,7 @@ async def main() -> int:
     for label, command in (("echo", "echo NYRA_SSH_OK"), ("ubus", "ubus call system info")):
         raw = await executor.execute(
             host_id="gateway",
-            address="192.168.1.1",
+            address=address,
             port=22,
             username=config.get("username") or "root",
             password=password,

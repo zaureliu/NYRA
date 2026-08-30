@@ -26,3 +26,11 @@ def parameter_values(state, mapping: dict[str,list[str]]) -> list[dict]:
             "thinking":1 if state.neural_link=="thinking" else 0,
             "concern":1 if state.expression=="concerned" else 0,"amused":1 if state.expression=="amused" else 0}
     return [{"id":pid,"value":values.get(key,0),"weight":1} for key,ids in mapping.items() for pid in ids]
+
+
+def mouth_parameter_values(state, mapping: dict[str, list[str]]) -> list[dict]:
+    """Inject only lip-sync; VTS remains owner of head, eyes and tracking."""
+    return [
+        {"id": parameter_id, "value": state.mouth_open, "weight": 1}
+        for parameter_id in mapping.get("mouth_open", [])
+    ]

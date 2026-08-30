@@ -26,6 +26,18 @@ def curated_candidates() -> list[VoiceCandidate]:
             notes=["Experimental em pt-BR; voice design é mais estável em inglês/chinês segundo o projeto.", "Checkpoint de 2,45 GB; CPU Windows é viável para triagem, não para baixa latência."],
         ),
         dict(
+            id="kokoro-nyra-voice-v2", name="Kokoro · NYRA Feminina V2",
+            source="hexgrad/Kokoro-82M + kokoro-onnx", source_url="https://huggingface.co/hexgrad/Kokoro-82M",
+            type="Synthetic", license="Apache-2.0", license_url="https://huggingface.co/hexgrad/Kokoro-82M",
+            allowed_use="TTS local direto com embedding sintético estável composto de vozes do pacote Apache-2.0.",
+            reference_allowed=False, redistributable=False, commercial_use=True,
+            identity_terms="Identidade sintética própria da NYRA; não representa nem imita uma pessoa real.", size_bytes=326000000,
+            provider="kokoro", provider_voice="nyra_voice_v2", location="LOCAL", naturalness_estimate=7.8,
+            integration_difficulty="LOW", status=CandidateStatus.SAFE_FOR_DIRECT_TTS,
+            scores=_scores(8.9, 8.6, 7.8, 7.6, 7.4, 7.8, 8.9, 9.2, 9.8), top_candidate=True,
+            notes=["Embedding 85% af_heart + 15% pf_dora; tokenizer pt-BR.", "A/B obrigatório preservado em .tmp/voice-change-v2."],
+        ),
+        dict(
             id="kokoro-pf-dora", name="Kokoro · Dora",
             source="hexgrad/Kokoro-82M + kokoro-onnx", source_url="https://huggingface.co/hexgrad/Kokoro-82M",
             type="Synthetic", license="Apache-2.0", license_url="https://huggingface.co/hexgrad/Kokoro-82M",

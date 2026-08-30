@@ -9,11 +9,23 @@ from app.memory import MemoryRepository
 
 class EmotionalState(StrEnum):
     NEUTRAL = "neutral"
+    FRIENDLY = "friendly"
+    CONFIDENT = "confident"
+    POSITIVE = "positive"
     HAPPY = "happy"
+    RELIEVED = "relieved"
     CURIOUS = "curious"
     FOCUSED = "focused"
     CONCERNED = "concerned"
+    WARNING = "warning"
+    SERIOUS = "serious"
+    EMPATHETIC = "empathetic"
     AMUSED = "amused"
+    APOLOGETIC = "apologetic"
+    UNCERTAIN = "uncertain"
+    CALM = "calm"
+    # Kept only for persisted V1 presentation state compatibility. The V2
+    # speech planner allowlist deliberately does not generate it.
     TIRED = "tired"
     SURPRISED = "surprised"
 

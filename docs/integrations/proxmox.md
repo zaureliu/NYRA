@@ -2,7 +2,7 @@
 
 ## Pré-requisitos
 
-- Proxmox VE acessível (baseline do homelab: `https://192.168.1.2:8006`).
+- Proxmox VE acessível pela URL configurada pelo operador.
 - **API Token dedicado** — nunca senha de root.
 
 ## Criação do token (no host Proxmox)
@@ -28,7 +28,7 @@ Guarde o `token ID` (`nyra-observer@pve!nyra`) e o `secret` exibido **uma única
 
 ```env
 NYRA_PROXMOX_ENABLED=true
-NYRA_PROXMOX_URL=https://192.168.1.2:8006
+NYRA_PROXMOX_URL=https://proxmox.example.invalid:8006
 NYRA_PROXMOX_TOKEN_ID=nyra-observer@pve!nyra   # não é secret por si só
 NYRA_PROXMOX_TOKEN_SECRET=<SECRET>
 NYRA_PROXMOX_VERIFY_SSL=true
@@ -61,7 +61,7 @@ python scripts/homelab-smoke.py --only proxmox
 Ou manual:
 
 ```bash
-curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET" https://192.168.1.2:8006/api2/json/version
+curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=REDACTED" https://proxmox.example.invalid:8006/api2/json/version
 ```
 
 ## Tools expostas

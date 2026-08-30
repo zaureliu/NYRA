@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import tempfile
 
 import pytest
 
@@ -16,7 +17,11 @@ class FakeTTS:
     async def synthesize(self, text: str, state: str) -> Path:
         self.calls.append(text)
         await asyncio.sleep(self.delay)
-        return Path(f"{text}.wav")
+        output_dir = Path(tempfile.gettempdir()) / "nyra-speech-queue-tests"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output = output_dir / f"{text}.wav"
+        output.write_bytes(b"RIFF" + b"\0" * 128)
+        return output.resolve()
 
 
 @pytest.mark.asyncio
@@ -62,7 +67,42 @@ async def test_same_turn_sentences_play_in_order():
     assert len(results) == 3
     assert order == ["s0", "s1", "s2"]
     assert queue.counters["tts_order_violations"] == 0
-    assert queue.counters["tts_items_played"] == 3
+    assert queue.counters["tts_items_synthesized"] == 3
+    assert queue.counters["tts_items_played"] == 0
+    assert queue.playback_started("r") is True
+    assert queue.playback_started("r") is False
+    assert queue.counters["tts_items_played"] == 1
+
+
+@pytest.mark.asyncio
+async def test_chunk_order_index_resets_for_each_turn():
+    queue = SpeechQueue()
+    tts = FakeTTS(delay=0.0)
+    try:
+        await asyncio.gather(*[
+            queue.synthesize(tts, f"a{i}", "speaking", response_id="a", chunk_index=i, turn_id="turn_a")
+            for i in range(3)
+        ])
+        await asyncio.gather(*[
+            queue.synthesize(tts, f"b{i}", "speaking", response_id="b", chunk_index=i, turn_id="turn_b")
+            for i in range(2)
+        ])
+        assert queue.counters["tts_order_violations"] == 0
+    finally:
+        await queue.stop()
+
+
+@pytest.mark.asyncio
+async def test_missing_tts_output_is_rejected_before_playback(tmp_path: Path):
+    class MissingTTS:
+        async def synthesize(self, _text: str, _state: str) -> Path:
+            return (tmp_path / "missing.wav").resolve()
+
+    queue = SpeechQueue()
+    with pytest.raises(FileNotFoundError):
+        await queue.synthesize(MissingTTS(), "teste", "neutral")  # type: ignore[arg-type]
+    assert queue.counters["tts_items_synthesized"] == 0
+    assert queue.counters["tts_items_played"] == 0
 
 
 @pytest.mark.asyncio

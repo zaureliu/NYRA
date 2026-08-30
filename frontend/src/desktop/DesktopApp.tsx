@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { LogicalSize, getCurrentWindow } from '@tauri-apps/api/window'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { LogicalSize, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
@@ -14,8 +14,10 @@ import { useAudioSettings } from '../hooks/useAudioSettings'
 import { useStreamingAudioQueue } from '../hooks/useStreamingAudioQueue'
 import { microphoneStatusLabel } from '../hooks/audioDevices'
 import { useGlobalCursorFollow } from './useGlobalCursorFollow'
-import { TurnFilter, extractTurnId } from '../runtime/turns'
+import { TurnFilter, adoptInputTurn, extractTurnId } from '../runtime/turns'
 import { sendChat } from '../runtime/conversation'
+import { backendPresenceReport, canReplaceInternalAvatar, nativePresenceConfig, type NativePresenceStatus, type VtsBackendStatus } from './vtsPresence'
+import { computePresenceMenuLayout, PRESENCE_MENU_LIMITS, type PresenceMenuLayout } from './presenceMenu'
 import type { ActivityStatus, AvatarControl, EmotionalState } from '../types'
 
 const API = 'http://127.0.0.1:8000'
@@ -30,6 +32,8 @@ export function DesktopApp() {
   const [menu, setMenu] = useState(false)
   const [draft, setDraft] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsLayout, setSettingsLayout] = useState<PresenceMenuLayout | null>(null)
+  const settingsRef = useRef<HTMLElement | null>(null)
   const [startup, setStartup] = useState(false)
   const [showOnline, setShowOnline] = useState(true)
   const [visual, setVisual] = useVisualSettings()
@@ -57,6 +61,10 @@ export function DesktopApp() {
   useEffect(() => audio.reconcileDevices(always.devices), [always.devices, audio.reconcileDevices])
   useGlobalCursorFollow(live2dExternal, updateGlobalCursorAvailability)
 
+  useEffect(() => {
+    void invoke('vts_presence_set_internal_visible', { visible: !live2dExternal }).catch(() => undefined)
+  }, [live2dExternal])
+
   const playbackGuard = useCallback(async (playing: boolean, responseId?: string) => {
     await fetch(`${API}/api/listening/playback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playing, response_id: responseId }) }).catch(() => undefined)
   }, [])
@@ -70,9 +78,8 @@ export function DesktopApp() {
 
   const onEvent = useCallback((event: NyraEvent) => {
     const eventTurnId = extractTurnId(event.payload)
-    if (event.type === 'USER_TEXT_RECEIVED' && pendingTurnRequests.current > 0) {
-      pendingTurnRequests.current -= 1
-      turnFilter.current.begin(eventTurnId)
+    if (adoptInputTurn(turnFilter.current, event.type, eventTurnId)) {
+      pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1)
     }
     // Turn isolation: bubble/áudio ignoram eventos tardios de turnos encerrados.
     if (event.type === 'NYRA_RESPONSE' && !turnFilter.current.accept(eventTurnId)) return
@@ -84,7 +91,12 @@ export function DesktopApp() {
     }
     if (event.type === 'TTS_FINISHED' && event.payload.audio_url) {
       setStatus('SPEAKING')
-      void playbackGuard(true).then(() => play(`${API}${event.payload.audio_url}`, () => { setStatus('IDLE'); void playbackGuard(false) })).catch(() => { setStatus('IDLE'); void playbackGuard(false) })
+      const responseId = String(event.payload.response_id ?? '') || undefined
+      void play(
+        `${API}${event.payload.audio_url}`,
+        () => { setStatus('IDLE'); void playbackGuard(false) },
+        () => { void playbackGuard(true, responseId) },
+      ).catch(() => { setStatus('IDLE'); void playbackGuard(false) })
     }
     if (event.type === 'TTS_CHUNK_FINISHED' && event.payload.audio_url) {
       if (visual.speechBubble && event.payload.display_text) setBubble(String(event.payload.display_text))
@@ -93,6 +105,7 @@ export function DesktopApp() {
         responseId: String(event.payload.response_id ?? 'stream'), index: Number(event.payload.index ?? 0),
       })
     }
+    if (event.type === 'TTS_FINISHED') turnFilter.current.end(eventTurnId)
     if (event.type === 'AVATAR_STATE_CHANGED') setAvatarControl(event.payload as Partial<AvatarControl>)
     if (event.type === 'SHELL_EXECUTION_STARTED') {
       setStatus('THINKING')
@@ -125,6 +138,9 @@ export function DesktopApp() {
     }
     if (event.type === 'SENTINEL_ALERT' && event.payload.desktop !== false) {
       setBubble(String(event.payload.display_text ?? event.payload.message ?? 'Novo alerta do Sentinel.'))
+    }
+    if (event.type === 'MONITOR_NOTIFICATION') {
+      setBubble(String(event.payload.message ?? 'Atualização de monitoramento.').slice(0, 220))
     }
     if (event.type === 'SENTINEL_STATUS_CHANGED') {
       const next = String(event.payload.state ?? '')
@@ -184,16 +200,119 @@ export function DesktopApp() {
     void isAutostartEnabled().then(setStartup).catch(() => setStartup(false))
   }, [visual.alwaysOnTop, visual.characterView, visual.clickThrough, visual.overlayScale])
 
+  const updateSettingsLayout = useCallback(async () => {
+    const element = settingsRef.current
+    if (!element) return
+    const windowHandle = getCurrentWindow()
+    const [position, size, monitor, scaleFactor] = await Promise.all([
+      windowHandle.outerPosition(),
+      windowHandle.outerSize(),
+      currentMonitor(),
+      windowHandle.scaleFactor(),
+    ])
+    if (!monitor) return
+    const next = computePresenceMenuLayout({
+      windowRect: { x: position.x, y: position.y, width: size.width, height: size.height },
+      workArea: {
+        x: monitor.workArea.position.x,
+        y: monitor.workArea.position.y,
+        width: monitor.workArea.size.width,
+        height: monitor.workArea.size.height,
+      },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      desiredMenu: {
+        width: Math.max(PRESENCE_MENU_LIMITS.minWidth, element.scrollWidth),
+        height: Math.max(PRESENCE_MENU_LIMITS.minHeight, element.scrollHeight),
+      },
+      scaleFactor,
+    })
+    setSettingsLayout((current) => current
+      && current.x === next.x && current.y === next.y
+      && current.width === next.width && current.maxHeight === next.maxHeight
+      && current.horizontal === next.horizontal && current.vertical === next.vertical
+      ? current
+      : next)
+  }, [])
+
   useEffect(() => {
-    const poll=()=>void fetch(`${API}/api/live2d/settings`).then(r=>r.json()).then(value=>setLive2dExternal(Boolean(value.model_loaded)&&value.config?.renderer!=='CURRENT')).catch(()=>setLive2dExternal(false))
-    poll();const timer=window.setInterval(poll,5000);return()=>window.clearInterval(timer)
-  },[])
+    if (!settingsOpen) { setSettingsLayout(null); return }
+    const windowHandle = getCurrentWindow()
+    let disposed = false
+    let frame = 0
+    let unlistenMoved = () => {}
+    let unlistenResized = () => {}
+    const schedule = () => {
+      if (disposed) return
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => void updateSettingsLayout().catch(() => undefined))
+    }
+    const observer = new ResizeObserver(schedule)
+    if (settingsRef.current) observer.observe(settingsRef.current)
+    void Promise.all([
+      windowHandle.onMoved(schedule),
+      windowHandle.onResized(schedule),
+    ]).then(([moved, resized]) => {
+      if (disposed) { moved(); resized(); return }
+      unlistenMoved = moved
+      unlistenResized = resized
+    }).catch(() => undefined)
+    window.addEventListener('resize', schedule)
+    schedule()
+    return () => {
+      disposed = true
+      window.cancelAnimationFrame(frame)
+      observer.disconnect()
+      window.removeEventListener('resize', schedule)
+      unlistenMoved()
+      unlistenResized()
+    }
+  }, [settingsOpen, updateSettingsLayout])
+
+  useEffect(() => {
+    let disposed = false
+    const configure = async () => {
+      try {
+        const response = await fetch(`${API}/api/live2d/settings`)
+        const value = await response.json() as VtsBackendStatus
+        if (!disposed) await invoke('vts_presence_configure', { config: nativePresenceConfig(value) })
+      } catch { if (!disposed) setLive2dExternal(false) }
+    }
+    void configure()
+    const timer = window.setInterval(() => void configure(), 2500)
+    return () => { disposed = true; window.clearInterval(timer) }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    let lastReport = ''
+    let reportInFlight = false
+    const read = async () => {
+      try {
+        const value = await invoke<NativePresenceStatus>('vts_presence_status')
+        if (disposed) return
+        setLive2dExternal(canReplaceInternalAvatar(value))
+        const report = backendPresenceReport(value)
+        const serialized = JSON.stringify(report)
+        if (serialized !== lastReport && !reportInFlight) {
+          reportInFlight = true
+          void fetch(`${API}/api/live2d/presence-status`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: serialized,
+          }).then((response) => {
+            if (response.ok) lastReport = serialized
+          }).catch(() => undefined).finally(() => { reportInFlight = false })
+        }
+      } catch { if (!disposed) setLive2dExternal(false) }
+    }
+    void read()
+    const timer = window.setInterval(() => void read(), 500)
+    return () => { disposed = true; window.clearInterval(timer) }
+  }, [])
 
   useEffect(() => {
     let unlisten = () => {}
     void listen<string>('nyra-desktop', (event) => {
       if (event.payload === 'talk-menu') setMenu(true)
-      if (event.payload === 'settings') setSettingsOpen(true)
+      if (event.payload === 'settings') { setMenu(false); setSettingsOpen(true) }
       if (event.payload === 'talk-start') void startTalking()
       if (event.payload === 'talk-stop') stop()
       if (event.payload === 'interactive') setVisual({ ...visual, clickThrough: false })
@@ -228,10 +347,19 @@ export function DesktopApp() {
     await sendChat({ message: text, synthesize: true }).catch(() => setStatus('OFFLINE')).finally(() => { pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1) })
   }
 
+  const settingsStyle = settingsLayout ? {
+    left: `${settingsLayout.x}px`,
+    top: `${settingsLayout.y}px`,
+    right: 'auto',
+    bottom: 'auto',
+    width: `${settingsLayout.width}px`,
+    maxHeight: `${settingsLayout.maxHeight}px`,
+  } as CSSProperties : undefined
+
   return <main className={`desktop-presence state-${state} status-${status.toLowerCase()}`} data-transparent="true" data-live2d={live2dExternal} data-global-cursor={globalCursorAvailable ? 'available' : 'fallback'}>
     {bubble && visual.speechBubble && <aside className="speech-bubble"><strong>NYRA</strong>{bubble}</aside>}
     <button className="drag-region" aria-label="Arrastar NYRA" onPointerDown={() => void getCurrentWindow().startDragging()} />
-    <button className="avatar-button" aria-label="Abrir conversa com NYRA" onClick={() => setMenu((value) => !value)}>
+    <button className="avatar-button" aria-label="Abrir conversa com NYRA" onClick={() => { setSettingsOpen(false); setMenu((value) => !value) }}>
       {!live2dExternal&&<AvatarRenderer
         state={state} status={recording ? 'LISTENING' : status} mouth={mouth} variant="desktop"
         avatarVersion={visual.avatarVersion} renderer={visual.renderer}
@@ -245,7 +373,7 @@ export function DesktopApp() {
     {(!connected || showOnline) && <div className={`presence-status ${connected ? 'online' : 'offline'}`}><i/>{connected ? 'ONLINE' : 'OFFLINE'}</div>}
     {(always.config?.privacy_indicator ?? true) && <div className={`mic-indicator ${always.status?.muted || !always.micActive ? 'off' : always.processing ? 'processing' : always.listening ? 'listening' : 'on'}`}><i/>MIC {always.status?.muted ? 'MUTED' : always.micActive ? (always.processing ? 'PROCESSING' : always.listening ? 'LISTENING' : 'ON') : microphoneStatusLabel(always.microphoneAvailability, false)}</div>}
     {menu && <section className="context-card"><textarea autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} placeholder="Digite para a NYRA..."/><div><button onClick={() => void send()}>ENVIAR</button><button onClick={() => void invoke('open_dashboard')}>PAINEL</button><button onClick={() => void getCurrentWindow().hide()}>OCULTAR</button></div></section>}
-    {settingsOpen && <section className="context-card desktop-settings"><strong>DESKTOP PRESENCE · AVATAR V2</strong>
+    {settingsOpen && <section ref={settingsRef} className="context-card desktop-settings" style={settingsStyle} data-horizontal={settingsLayout?.horizontal ?? 'start'} data-vertical={settingsLayout?.vertical ?? 'end'}><strong>DESKTOP PRESENCE · AVATAR V2</strong>
       <label>Escala<select value={visual.overlayScale} onChange={(e) => setVisual({ ...visual, overlayScale: Number(e.target.value) })}>{[.5,.75,1,1.25,1.5].map((value) => <option key={value} value={value}>{Math.round(value*100)}%</option>)}</select></label>
       <label>Character View<select value="bust" disabled><option value="bust">Avatar V2 / Portrait</option></select></label>
       <label><input type="checkbox" checked={visual.alwaysOnTop} onChange={(e) => setVisual({ ...visual, alwaysOnTop: e.target.checked })}/> Always on top</label>

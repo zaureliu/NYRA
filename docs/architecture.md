@@ -112,10 +112,31 @@ ComputerPipeline -> Desktop/Operator capabilities -> EffectVerificationService
 
 `app.computer` acrescenta contexto operacional e aprendizado ao operador existente sem criar um segundo executor. A percepção produz snapshots limitados de processos, janelas, arquivos recentes e metadados do clipboard; UIA é consultada sob demanda e pixels/OCR continuam sendo fallback. `ComputerStateService` mantém freshness por slot e referências naturais isoladas por conversa. Texto e voz convergem no mesmo `IntentResolver`, e `ComputerPipeline` só aceita o resultado estruturado do operador como evidência — texto livre da resposta nunca vira execução nem prova de sucesso.
 
+Para controle comum de aplicativos, `ActionResultPresenter` é a fronteira entre o resultado estruturado e a conversa. PID, HWND, janelas, processo, método, tentativas e `effect_verified` permanecem no resultado interno para auditoria, diagnóstico e consultas técnicas explícitas. Somente `user_facing_response`, produzido depois de ACT→VERIFY, alimenta a resposta principal e o TTS; uma verificação negativa produz uma resposta de impossibilidade de confirmação, nunca sucesso.
+
 Cada ação mutável continua pertencendo a uma capability tipada do Desktop/Operator, `system_shell` ou `remote_shell`, com as políticas e approvals já existentes. O clipboard comum usa `clipboard_write_text`/`clipboard_clear` (`LOW_RISK`); nenhuma resposta, evento ou Agent Run persiste seu conteúdo, e o campo é redigido antes do fingerprint persistente. Um efeito confirmado alimenta o estado, os eventos e o aprendizado de uso. Aliases e sequências só ganham confiança após efeitos verificados; correções negativas reduzem a associação errada. Skills aprendidas são estruturas versionadas com precondições, passos permitidos, verificação por passo, degradação e fallback. Estado de uso e skills fica local no perfil do operador e não armazena conteúdo do clipboard, áudio, tokens nem chain-of-thought.
+
+### Contexto recente de artefatos
+
+Referências de artefatos passam por um fast-path anterior ao App Resolver:
+
+    User Intent
+      -> Artifact Context Reference Resolver
+      -> Recent Artifact Memory (metadados, path, host, turn, estado)
+      -> Artifact Action Router
+      -> DesktopController local | RemoteShellService read-only
+      -> App Resolver somente quando o alvo realmente é aplicativo
+
+O módulo app.computer.artifacts mantém no máximo 50 itens recentes por contexto ativo e persiste somente metadados locais, nunca o conteúdo. Resultados estruturados de tools registram paths grounded; uma menção de texto livre fica planned/unknown até verificação real. Logs POSIX preservam o host lógico de origem e abrir/mostrar/ler/tail usa uma leitura remota mínima, sem Agent Run nem descoberta de aplicativo. Resolver target continua separado de autorizar a ação.
 
 ## Self-Development Engine V1
 
 `app.selfdev` permanece separado de identidade, LLM, memória, eventos, voz, ferramentas e UI. O fluxo é `RuntimeObserver → ImprovementDetector/Queue → SelfDevPlanner/RiskClassifier → WorktreeManager/CodeWorker → ValidationPipeline → PromotionManager → RestartValidator/RollbackManager`. O índice incremental persiste somente metadados e relações; código-fonte só é lido localmente durante planejamento. Toda execução de Git/test/build passa pelo `system_shell` e patches do modelo obedecem a um schema Pydantic, hashes e contenção de caminhos.
 
-O repositório estável é a raiz canônica configurada, o workspace de candidatos fica fora dela e a publicação usa apenas um snapshot público separado. Estado mutável fica sob `%LOCALAPPDATA%\NYRA\selfdev`. `AUTONOMOUS_SAFE` promove apenas LOW_RISK; áreas de segurança/approval/credenciais/shell/publicação são HIGH_RISK. Auto Publish permanece OFF por padrão e nenhum texto gerado concede approval. Veja [self-development.md](self-development.md).
+O repositório estável, o workspace de candidatos e o snapshot público são roots configuráveis e separados. Estado mutável fica sob `%LOCALAPPDATA%\NYRA\selfdev` por padrão. `AUTONOMOUS_SAFE` promove apenas LOW_RISK; áreas de segurança/approval/credenciais/shell/publicação são HIGH_RISK. Auto Publish permanece OFF por padrão e nenhum texto gerado concede approval. Veja [self-development.md](self-development.md).
+
+## Intelligence Platform V2
+
+`app.intelligence` acrescenta uma camada integrada, sem substituir os executores ou as políticas existentes. O fluxo é `ContextEngine -> ModelRouterV2 -> policy/ActionBudget -> CapabilityRegistryV2/SkillRegistry -> tools existentes -> effect verification -> memory/trace/events`. Memory V2, RAG, tasks, eventos e traces compartilham o SQLite local, mas possuem tabelas, índices e ciclos de retenção logicamente separados. Conteúdo de documentos e web é envelopado como não confiável e nunca ganha autoridade de instrução.
+
+Detalhes dos contratos, schemas, defaults, APIs, estados de degradação e validação estão em [intelligence-platform-v2.md](intelligence-platform-v2.md).

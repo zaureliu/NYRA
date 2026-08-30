@@ -28,7 +28,12 @@ from app.realtime.sentence_assembler import SentenceAssembler
 from app.realtime.settings import V4SettingsManager
 from app.realtime.telemetry import RealtimeTelemetry
 from app.speech.queue import SpeechPriority
+from app.speech.profile import load_voice_profile
 from app.speech.voice_processor import VoiceProcessor
+from app.operator.monitoring import (
+    enforce_monitor_promise,
+    is_monitor_cancel_request,
+)
 
 
 logger = logging.getLogger("nyra.realtime")
@@ -61,6 +66,8 @@ class RealtimeOrchestrator(ChatOrchestrator):
         self.skills = None
         self.remote_shell = None
         self.agent = None
+        self.monitor_jobs = None
+        self.usb_devices = None
         self.turns = turn_registry or TurnRegistry()
         # Universal Operator (nyra-full): injetado pelo main quando disponível.
         self.desktop = None
@@ -174,11 +181,31 @@ class RealtimeOrchestrator(ChatOrchestrator):
         direct_response = "Oi. O que precisa?" if is_standalone_greeting(clean_text) else None
         resume_agent_run_id: str | None = None
         route_to_agent = bool(self.tools is not None and self.tools.should_route_to_agent(clean_text))
+        if (
+            self.monitor_jobs is not None
+            and direct_response is None
+            and is_monitor_cancel_request(clean_text)
+        ):
+            cancelled = await self.monitor_jobs.cancel_from_text(clean_text)
+            direct_response = str(cancelled.get("message") or "Não consegui cancelar o monitoramento.")
+            route_to_agent = False
         # UNIVERSAL OPERATOR fast path (nyra-full §25/§41 / nyra-7c §75):
         # pipeline unificado das 7 camadas quando presente; sem ele, o bloco
         # legacy abaixo mantém o comportamento anterior (compatibilidade).
         computer = getattr(self, "computer", None)
         universal_handled = False
+        if self.usb_devices is not None and direct_response is None:
+            try:
+                usb_response = await self.usb_devices.handle_chat(clean_text)
+                if usb_response is not None:
+                    direct_response = usb_response
+                    route_to_agent = False
+                    universal_handled = True
+            except Exception as error:  # noqa: BLE001 - USB opcional não derruba chat
+                logger.warning(
+                    "usb_chat_intent_failed",
+                    extra={"turn_id": turn_id, "exception_type": type(error).__name__},
+                )
         if computer is not None and direct_response is None:
             try:
                 handle_result = await computer.handle_user_request(
@@ -325,7 +352,17 @@ class RealtimeOrchestrator(ChatOrchestrator):
         audio_urls: list[str] = []
         speech_degraded = asyncio.Event()
         speech_task = asyncio.create_task(
-            self._speech_worker(response_id, turn_id, state.value, speech_input, audio_urls, cancel_event, speech_degraded),
+            self._speech_worker(
+                response_id,
+                turn_id,
+                clean_text,
+                state.value,
+                speech_input,
+                audio_urls,
+                cancel_event,
+                speech_degraded,
+                {"technical": bool(route_to_agent or not fast_conversation)},
+            ),
             name=f"nyra-speech-stream-{response_id[:8]}",
         ) if synthesize and await self.tts.health() else None
         sentence_index = 0
@@ -351,6 +388,13 @@ class RealtimeOrchestrator(ChatOrchestrator):
                     self.llm, self.tools,
                     self.shell.settings.shell_max_calls_per_turn if self.shell is not None else 10,
                 ).run(messages, turn_id=turn_id)
+            agent_response = enforce_monitor_promise(
+                agent_response,
+                job_created=bool(
+                    self.monitor_jobs is not None
+                    and self.monitor_jobs.has_job_for_turn(turn_id)
+                ),
+            )
             self.telemetry.measure(
                 response_id,
                 "tools_ms",
@@ -394,14 +438,43 @@ class RealtimeOrchestrator(ChatOrchestrator):
             raise
 
         response = apply_response_style("".join(turn.content_buffer))
+        response = enforce_monitor_promise(
+            response,
+            job_created=bool(
+                self.monitor_jobs is not None
+                and self.monitor_jobs.has_job_for_turn(turn_id)
+            ),
+        )
         if not response:
             raise RuntimeError("LLM returned an empty response")
+        if computer is not None and not universal_handled:
+            computer.observe_assistant_response(
+                response,
+                conversation_id=turn.conversation_id,
+                turn_id=turn_id,
+                grounded=bool(route_to_agent),
+            )
         await self.memory.add(MemoryCreate(category=MemoryCategory.SHORT_TERM, role="assistant", content=response, importance=5))
         await self.memory.retain()
         prepared = self.prosody.prepare(response, provider=self.tts.name)
+        if audio_urls:
+            emotion_plan = self.emotion_planner.dominant(turn_id)
+        else:
+            planning_started = time.perf_counter()
+            emotion_plan = self.emotion_planner.plan(
+                clean_text,
+                response,
+                context={"technical": bool(route_to_agent or not fast_conversation)},
+                turn_id=turn_id,
+            )
+            self.telemetry.measure(response_id, "emotion_planning_ms", (time.perf_counter() - planning_started) * 1000)
+            emotion_plan = self.emotion_planner.dominant(turn_id, emotion_plan)
+        state = await self.state_machine.transition(state.__class__(emotion_plan.emotion.value))
         await self.event_bus.publish(
             EventType.NYRA_RESPONSE, response_id=response_id, turn_id=turn_id, text=response,
             display_text=prepared.display_text, speech_text=prepared.speech_text, state=state.value,
+            emotion_intensity=emotion_plan.intensity,
+            emotion_engine_supported=self.tts.capabilities().supports_emotion,
         )
         self.telemetry.mark(response_id, "t_response_complete")
         metrics = self.telemetry.finish(response_id)
@@ -430,6 +503,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
         return ChatResult(
             response_id=response_id, turn_id=turn_id, pipeline_status=final_status.value, response=response,
             display_text=prepared.display_text, speech_text=prepared.speech_text, state=state.value,
+            emotion_intensity=emotion_plan.intensity,
             audio_url=None, audio_urls=audio_urls, tts_provider=self.tts.name if audio_urls else None,
             timing={key: value for key, value in metrics.items() if isinstance(value, (int, float)) and value is not None},
         )
@@ -446,10 +520,11 @@ class RealtimeOrchestrator(ChatOrchestrator):
             await queue.put((index, styled))
         return index + 1
 
-    async def _speech_worker(self, response_id: str, turn_id: str, state: str, queue: asyncio.Queue,
+    async def _speech_worker(self, response_id: str, turn_id: str, user_text: str, state: str, queue: asyncio.Queue,
                              audio_urls: list[str], cancel_event: asyncio.Event,
-                             degraded: asyncio.Event) -> None:
+                             degraded: asyncio.Event, emotion_context: dict[str, object]) -> None:
         first = True
+        last_state = state
         while True:
             item = await queue.get()
             if item is None:
@@ -459,15 +534,38 @@ class RealtimeOrchestrator(ChatOrchestrator):
                 raise asyncio.CancelledError
             if response_id in self._speech_cancelled_ids:
                 return
+            planning_started = time.perf_counter()
+            plan = self.emotion_planner.plan(
+                user_text,
+                sentence,
+                context=emotion_context,
+                turn_id=turn_id,
+                sentence_index=index,
+            )
+            self.telemetry.measure(response_id, "emotion_planning_ms", (time.perf_counter() - planning_started) * 1000)
+            last_state = plan.emotion.value
+            capabilities = self.tts.capabilities()
+            acoustic_state = last_state if capabilities.supports_emotion else "neutral"
+            _profile, defaults = load_voice_profile()
+            options = defaults.with_emotion(plan)
             prepared = self.prosody.prepare(sentence, provider=self.tts.name)
             if first:
-                await self.event_bus.publish(EventType.TTS_STARTED, state=state, response_id=response_id, turn_id=turn_id, streaming=True)
+                await self.event_bus.publish(
+                    EventType.TTS_STARTED,
+                    state=last_state,
+                    emotion_intensity=plan.intensity,
+                    emotion_engine_supported=capabilities.supports_emotion,
+                    response_id=response_id,
+                    turn_id=turn_id,
+                    streaming=True,
+                )
                 self.telemetry.mark(response_id, "t_tts_start")
-            await self.event_bus.publish(EventType.TTS_CHUNK_STARTED, response_id=response_id, turn_id=turn_id, index=index, state=state)
+            await self.event_bus.publish(EventType.TTS_CHUNK_STARTED, response_id=response_id, turn_id=turn_id, index=index, state=last_state, emotion_intensity=plan.intensity)
             try:
                 output = await self.speech_queue.synthesize(
-                    self.tts, prepared.speech_text, state, SpeechPriority.USER,
+                    self.tts, prepared.speech_text, acoustic_state, SpeechPriority.USER,
                     response_id=response_id, chunk_index=index, turn_id=turn_id,
+                    options=options,
                 )
             except asyncio.CancelledError:
                 if response_id in self._speech_cancelled_ids:
@@ -488,14 +586,14 @@ class RealtimeOrchestrator(ChatOrchestrator):
             if first:
                 self.telemetry.mark(response_id, "t_first_audio")
                 await self._set_status(RealtimeStatus.SPEAKING, response_id, turn_id)
-                await self.avatar.mode("speaking", state)
+                await self.avatar.mode("speaking", last_state)
                 first = False
             await self.event_bus.publish(
                 EventType.TTS_CHUNK_FINISHED, response_id=response_id, turn_id=turn_id, index=index,
-                audio_url=audio_url, state=state, display_text=sentence,
+                audio_url=audio_url, state=last_state, emotion_intensity=plan.intensity, display_text=sentence,
             )
         if not first:
-            await self.event_bus.publish(EventType.TTS_FINISHED, state=state, response_id=response_id, turn_id=turn_id, streaming=True)
+            await self.event_bus.publish(EventType.TTS_FINISHED, state=last_state, response_id=response_id, turn_id=turn_id, streaming=True)
 
     async def interrupt(self, reason: str = "user_barge_in") -> bool:
         response_id = self._active_response_id
@@ -517,6 +615,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
         if not response_id:
             return False
         self._speech_cancelled_ids.add(response_id)
+        self.emotion_planner.cancel_turn(f"turn_{response_id}")
         cancelled = await self.speech_queue.cancel(response_id)
         await self.event_bus.publish(EventType.USER_INTERRUPTED, response_id=response_id, reason=reason, speech_only=True)
         await self.event_bus.publish(EventType.SPEECH_CANCELLED, response_id=response_id, reason=reason)
@@ -526,6 +625,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
         return cancelled > 0 or self.status == RealtimeStatus.LISTENING
 
     async def _cancelled(self, response_id: str, reason: str) -> None:
+        self.emotion_planner.cancel_turn(f"turn_{response_id}")
         self.telemetry.record("USER_INTERRUPTED", response_id=response_id, reason=reason)
         await self._set_status(RealtimeStatus.INTERRUPTED, response_id)
         await self.event_bus.publish(EventType.USER_INTERRUPTED, response_id=response_id, reason=reason)

@@ -2,7 +2,7 @@
 
 O registry preserva tools estruturadas `READ_ONLY` e agora expõe `system_shell` por schema nativo do Ollama. Nomes inexistentes são rejeitados e texto livre nunca é executado. O comando da tool passa por classificação dinâmica, approval vinculado quando sensível, timeout, limite de saída, redaction e auditoria.
 
-O mesmo `config/network_aliases.json` é o Trusted Host Registry para `remote_shell`. Somente hosts com `remote_shell.enabled=true` podem receber SSH, e o modelo nunca escolhe address/user/port/key. Capabilities de Proxmox/OpenWrt e allowlists de remediação são validadas no backend.
+O registry local configurado (por padrão, `config/network_aliases.local.json`) é a fonte do Trusted Host Registry para `remote_shell`. Somente hosts com `remote_shell.enabled=true` podem receber SSH, e o modelo nunca escolhe address/user/port/key. Capabilities de Proxmox/OpenWrt e allowlists de remediação são validadas no backend.
 
 Ferramentas estruturadas: ping, DNS, conexão TCP, métricas locais, interfaces e HTTP/HTTPS. Elas permanecem preferíveis quando fornecem dados validados. Diagnósticos ad hoc podem usar PowerShell/CMD real via `system_shell`. Uso geral entra em `logs/tools.log`; comandos locais também entram em `logs/shell.log` e no histórico limitado `shell_executions`.
 

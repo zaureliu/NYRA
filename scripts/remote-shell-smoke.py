@@ -20,14 +20,12 @@ from app.tools.system_shell import SystemShellService
 
 
 CHECKS = [
-    ("local_ping_proxmox", "local", "proxmox", "ping 192.168.1.2 -n 2"),
     ("proxmox_hostname", "remote", "proxmox", "hostname"),
     ("proxmox_uptime", "remote", "proxmox", "uptime"),
     ("proxmox_memory", "remote", "proxmox", "free -h"),
     ("proxmox_storage", "remote", "proxmox", "df -h"),
     ("proxmox_version", "remote", "proxmox", "pveversion"),
     ("proxmox_vms", "remote", "proxmox", "qm list"),
-    ("local_ping_openwrt", "local", "gateway", "ping 192.168.1.1 -n 2"),
     ("openwrt_uptime", "remote", "openwrt", "uptime"),
     ("openwrt_addresses", "remote", "openwrt", "ip addr"),
     ("openwrt_routes", "remote", "openwrt", "ip route"),

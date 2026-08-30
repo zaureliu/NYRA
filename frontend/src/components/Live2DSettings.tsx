@@ -1,13 +1,86 @@
 import { useCallback, useEffect, useState } from 'react'
 
-type Config={enabled:boolean;renderer:'AUTO'|'LIVE2D'|'CURRENT';host:string;port:number;auto_connect:boolean;model_id:string|null;lip_sync:boolean;cursor_attention:boolean;physics_intensity:number;target_fps:number;debug:boolean}
-type Status={state:string;installed:boolean;connected:boolean;authenticated:boolean;model_loaded:boolean;model?:string;parameter_count:number;update_hz:number;last_error?:string;token_configured:boolean;config:Config}
+type Renderer = 'AUTO' | 'INTERNAL' | 'VTUBE_STUDIO' | 'CURRENT' | 'LIVE2D'
+type Config = {
+  enabled: boolean; renderer: Renderer; host: string; port: number; auto_connect: boolean
+  model_id: string | null; lip_sync: boolean; cursor_attention: boolean
+  physics_intensity: number; target_fps: number; spout_sender: string
+  presence_scale: number; presence_offset_x: number; presence_offset_y: number
+  frame_watchdog_seconds: number; state_hotkeys: Record<string, string>; debug: boolean
+}
+type Presence = {
+  state?: string; alpha?: string; fallback_active?: boolean; sender?: string
+  width?: number; height?: number; receiver_fps?: number; error?: string
+}
+type Status = {
+  state: string; installed: boolean; connected: boolean; authenticated: boolean
+  model_loaded: boolean; model?: string; model_id?: string; parameter_count: number
+  hotkeys?: Array<{ id?: string; name?: string; type?: string }>; last_error?: string
+  token_configured: boolean; config: Config; vts_presence?: Presence
+}
 
-export function Live2DSettings(){
- const [value,setValue]=useState<Status|null>(null);const [busy,setBusy]=useState(false)
- const load=useCallback(()=>fetch('/api/live2d/settings').then(r=>r.json()).then(setValue).catch(()=>setValue(null)),[]);useEffect(()=>{void load()},[load])
- const save=async(config:Config)=>{setBusy(true);try{const r=await fetch('/api/live2d/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(config)});setValue(await r.json())}finally{setBusy(false)}}
- const call=async(path:string)=>{setBusy(true);try{const r=await fetch(`/api/live2d/${path}`,{method:'POST'});setValue(await r.json())}finally{setBusy(false)}}
- if(!value)return <div className="settings-group"><h3>VISUAL · LIVE2D</h3><p>Carregando…</p></div>;const c=value.config;const change=<K extends keyof Config>(key:K,next:Config[K])=>void save({...c,[key]:next})
- return <div className="settings-group live2d-settings"><h3>VISUAL · LIVE2D</h3><p><b>{value.state}</b> · {value.installed?'VTube Studio instalado':'VTube Studio não encontrado'} · modelo {value.model??'ausente'} · {value.parameter_count} parâmetros</p><div className="settings-grid"><label>ENABLED<input type="checkbox" checked={c.enabled} onChange={e=>change('enabled',e.target.checked)}/></label><label>RENDERER<select value={c.renderer} onChange={e=>change('renderer',e.target.value as Config['renderer'])}><option>AUTO</option><option>LIVE2D</option><option>CURRENT</option></select></label><label>HOST<input value={c.host} onChange={e=>change('host',e.target.value)}/></label><label>PORT<input type="number" value={c.port} onChange={e=>change('port',Number(e.target.value))}/></label><label>TARGET FPS<select value={c.target_fps} onChange={e=>change('target_fps',Number(e.target.value))}><option value={30}>30</option><option value={60}>60</option></select></label><label>PHYSICS<input type="range" min="0" max="1" step=".05" value={c.physics_intensity} onChange={e=>change('physics_intensity',Number(e.target.value))}/></label></div><div className="toggle-grid"><label><input type="checkbox" checked={c.auto_connect} onChange={e=>change('auto_connect',e.target.checked)}/> Auto Connect</label><label><input type="checkbox" checked={c.lip_sync} onChange={e=>change('lip_sync',e.target.checked)}/> Final Audio Lip Sync</label><label><input type="checkbox" checked={c.cursor_attention} onChange={e=>change('cursor_attention',e.target.checked)}/> Cursor Attention</label><label><input type="checkbox" checked={c.debug} onChange={e=>change('debug',e.target.checked)}/> Debug</label></div><div className="inline-actions"><button disabled={busy||!c.enabled} onClick={()=>void call('connect')}>CONNECT</button><button disabled={busy||!c.enabled} onClick={()=>void call('authorize')}>AUTHORIZE</button><button disabled={busy} onClick={()=>void call('disconnect')}>DISCONNECT</button></div><div className="inline-actions">{['neutral','happy','curious','focused','concerned','amused','surprised','thinking','head_tilt'].map(mode=><button key={mode} onClick={()=>void fetch(`/api/live2d/test/${mode}`,{method:'POST'})}>{mode}</button>)}</div>{!value.authenticated&&c.enabled&&<small>ACTION REQUIRED: habilite “Allow Plugin API access” no VTube Studio e clique AUTHORIZE; aprove o popup manualmente.</small>}</div>
+const normalizedRenderer = (value: Renderer): 'AUTO' | 'INTERNAL' | 'VTUBE_STUDIO' => {
+  if (value === 'CURRENT') return 'INTERNAL'
+  if (value === 'LIVE2D') return 'VTUBE_STUDIO'
+  return value
+}
+
+export function Live2DSettings() {
+  const [value, setValue] = useState<Status | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(() => fetch('/api/live2d/settings').then((response) => response.json()).then(setValue).catch(() => setValue(null)), [])
+  useEffect(() => {
+    void load()
+    const timer = window.setInterval(() => void load(), 2500)
+    return () => window.clearInterval(timer)
+  }, [load])
+
+  const save = async (config: Config) => {
+    setBusy(true)
+    try {
+      const response = await fetch('/api/live2d/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
+      })
+      setValue(await response.json())
+    } finally { setBusy(false) }
+  }
+  const call = async (path: string) => {
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/live2d/${path}`, { method: 'POST' })
+      setValue(await response.json())
+    } finally { setBusy(false) }
+  }
+  if (!value) return <div className="settings-group"><h3>DESKTOP PRESENCE · VTUBE STUDIO</h3><p>Carregando…</p></div>
+  const c = value.config
+  const presence = value.vts_presence ?? {}
+  const change = <K extends keyof Config>(key: K, next: Config[K]) => void save({ ...c, [key]: next })
+  const renderer = normalizedRenderer(c.renderer)
+  const spoutLabel = presence.sender
+    ? `${presence.sender} · ${presence.state ?? 'WAITING'}${presence.width ? ` · ${presence.width}×${presence.height}` : ''}`
+    : `${presence.state ?? 'INTERNAL_ACTIVE'}${presence.error ? ` · ${presence.error}` : ''}`
+
+  return <div className="settings-group live2d-settings">
+    <h3>DESKTOP PRESENCE · VTUBE STUDIO</h3>
+    <p>API <b>{value.state}</b> · modelo <b>{value.model ?? 'ausente'}</b></p>
+    <p>Spout <b>{spoutLabel}</b> · alpha {presence.alpha ?? 'UNKNOWN'} · fallback {presence.fallback_active === false ? 'OFF' : 'ON'}</p>
+    <div className="settings-grid">
+      <label>RENDERER<select value={renderer} onChange={(event) => change('renderer', event.target.value as Renderer)}><option>AUTO</option><option>INTERNAL</option><option>VTUBE_STUDIO</option></select></label>
+      <label>API HOST<input value={c.host} onChange={(event) => change('host', event.target.value)}/></label>
+      <label>API PORT<input type="number" value={c.port} onChange={(event) => change('port', Number(event.target.value))}/></label>
+      <label>SPOUT SENDER<input value={c.spout_sender ?? 'AUTO'} onChange={(event) => change('spout_sender', event.target.value || 'AUTO')}/></label>
+    </div>
+    <div className="toggle-grid">
+      <label><input type="checkbox" checked={c.enabled} onChange={(event) => change('enabled', event.target.checked)}/> Usar VTube Studio</label>
+      <label><input type="checkbox" checked={c.auto_connect} onChange={(event) => change('auto_connect', event.target.checked)}/> Auto Connect</label>
+      <label><input type="checkbox" checked={c.lip_sync} onChange={(event) => change('lip_sync', event.target.checked)}/> Lip Sync da fala</label>
+    </div>
+    <div className="inline-actions">
+      <button disabled={busy || !c.enabled} onClick={() => void call('connect')}>CONNECT</button>
+      <button disabled={busy || !c.enabled || value.authenticated} onClick={() => void call('authorize')}>AUTHORIZE</button>
+      <button disabled={busy} onClick={() => void call('disconnect')}>DISCONNECT</button>
+    </div>
+    {!value.authenticated && c.enabled && <small>Autorize “NYRA Avatar Bridge” uma vez no popup oficial do VTube Studio. O avatar interno permanece ativo até API, frames e alpha estarem válidos.</small>}
+    <small>Hotkeys NYRA descobertos: {value.hotkeys?.filter((item) => item.name?.toUpperCase().startsWith('NYRA_')).map((item) => item.name).join(', ') || 'nenhum (mapeamento visual opcional)'}. Head/eyes continuam sob controle do tracking do VTube Studio.</small>
+  </div>
 }

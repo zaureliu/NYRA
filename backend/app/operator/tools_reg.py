@@ -12,10 +12,15 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.tools.models import RiskLevel
 from app.tools.registry import ToolDefinition
+from app.operator.monitoring import (
+    ConditionOperator,
+    MonitorCondition,
+    MonitorCreateRequest,
+)
 
 
 # ------------------------------------------------------------------ input models
@@ -181,6 +186,87 @@ class TaskIdInput(BaseModel):
     task_id: str = Field(min_length=6, max_length=64)
 
 
+class MonitorIdInput(BaseModel):
+    monitor_id: str = Field(min_length=6, max_length=64)
+
+
+class MonitorCreateInput(BaseModel):
+    """Flat LLM schema; converted to the structured persistent request."""
+
+    objective: str = Field(min_length=3, max_length=500)
+    probe_tool: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    probe_params: dict[str, Any] = Field(default_factory=dict)
+    condition_path: str = Field(min_length=1, max_length=240)
+    condition_operator: str = Field(
+        pattern=r"^(LT|LTE|GT|GTE|EQ|NE|CONTAINS|CHANGED|TRUTHY|FALSY)$"
+    )
+    target_value: Any = None
+    interval_seconds: float = Field(default=30.0, ge=1.0, le=86400.0)
+    duration_seconds: float = Field(default=3600.0, ge=2.0, le=2592000.0)
+    significant_change: float | None = Field(default=None, ge=0)
+    significant_change_percent: float = Field(default=10.0, ge=0, le=1000)
+    notification_cooldown_seconds: float = Field(default=60.0, ge=0, le=86400)
+    voice: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_monitor_shape(cls, value):
+        """Repair the compact shape emitted by some local tool-call models."""
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        probe_aliases = {
+            "network_watch": "get_network_status",
+            "network_watch_status": "get_network_status",
+            "network_status": "get_network_status",
+        }
+        probe = str(data.get("probe_tool") or data.get("tool") or "").strip()
+        if probe:
+            data["probe_tool"] = probe_aliases.get(probe.casefold(), probe)
+
+        raw_condition = data.get("condition")
+        if isinstance(raw_condition, dict):
+            data.setdefault("condition_path", raw_condition.get("path"))
+            data.setdefault("condition_operator", raw_condition.get("operator"))
+            if "target_value" not in data and "target" in raw_condition:
+                data["target_value"] = raw_condition.get("target")
+        elif isinstance(raw_condition, str):
+            normalized = raw_condition.casefold()
+            if "timestamp" in normalized:
+                data.setdefault("condition_path", "snapshot.timestamp")
+            elif "lat" in normalized:
+                data.setdefault("condition_path", "snapshot.internet_latency_ms")
+            elif "status" in normalized or "state" in normalized or "estado" in normalized:
+                data.setdefault("condition_path", "status")
+            if any(term in normalized for term in ("change", "changed", "mudar", "mudan")):
+                data.setdefault("condition_operator", "CHANGED")
+
+        if "condition_path" not in data and "path" in data:
+            data["condition_path"] = data.get("path")
+        if "condition_operator" not in data and "operator" in data:
+            data["condition_operator"] = data.get("operator")
+        if "target_value" not in data and "threshold" in data:
+            data["target_value"] = data.get("threshold")
+        if "interval_seconds" not in data and "interval" in data:
+            data["interval_seconds"] = data.get("interval")
+        if "duration_seconds" not in data and "duration" in data:
+            data["duration_seconds"] = data.get("duration")
+
+        subject = data.get("target")
+        if not data.get("objective") and subject not in (None, ""):
+            if isinstance(subject, dict):
+                subject = (
+                    subject.get("name") or subject.get("path")
+                    or subject.get("metric") or data.get("condition_path")
+                )
+            data["objective"] = f"acompanhar {str(subject)[:440]}"
+        if not data.get("objective") and data.get("probe_tool") and data.get("condition_path"):
+            data["objective"] = (
+                f"acompanhar {data['condition_path']} via {data['probe_tool']}"
+            )
+        return data
+
+
 class WatchRegisterInput(BaseModel):
     event_types: list[str] = Field(min_length=1, max_length=8)
     filters: dict[str, str] = Field(default_factory=dict)
@@ -227,6 +313,7 @@ def register_operator_v2_tools(registry, service) -> None:
     _register_credential_tools(registry, service)
     _register_elevated_tools(registry, service)
     _register_job_tools(registry, service)
+    _register_monitor_tools(registry, service)
     _register_task_tools(registry, service)
     _register_watch_tools(registry, service)
     _register_workflow_tools(registry, service)
@@ -681,6 +768,70 @@ def _register_task_tools(registry, service) -> None:
     registry.register(ToolDefinition(
         "task_cancel", "Cancela tarefa em execução (§157).", RiskLevel.LOW_RISK, TaskIdInput, task_cancel,
         dynamic_risk=True, preflight=_local_preflight("task", "LOW_RISK"),
+    ))
+
+
+def _register_monitor_tools(registry, service) -> None:
+    monitors = service.monitor_jobs
+
+    async def monitor_create(**payload):
+        flat = MonitorCreateInput.model_validate(payload)
+        request = MonitorCreateRequest(
+            objective=flat.objective,
+            probe_tool=flat.probe_tool,
+            probe_params=flat.probe_params,
+            condition=MonitorCondition(
+                path=flat.condition_path,
+                operator=ConditionOperator(flat.condition_operator),
+                target=flat.target_value,
+            ),
+            interval_seconds=flat.interval_seconds,
+            duration_seconds=flat.duration_seconds,
+            significant_change=flat.significant_change,
+            significant_change_percent=flat.significant_change_percent,
+            notification_cooldown_seconds=flat.notification_cooldown_seconds,
+            voice=flat.voice,
+        )
+        return await monitors.create(request)
+
+    async def monitor_status(monitor_id, **_):
+        return await monitors.status(str(monitor_id))
+
+    async def monitor_list(**_):
+        return await monitors.list(include_terminal=False)
+
+    async def monitor_cancel(monitor_id, **_):
+        return await monitors.cancel(str(monitor_id))
+
+    registry.register(ToolDefinition(
+        "monitor_create",
+        "Cria MonitorJob REAL e persistente. Executa agora a primeira leitura de uma probe_tool READ_ONLY e repete em background até a condição ou o prazo. "
+        "condition_path aponta para o resultado data da tool (ex.: snapshot.internet_latency_ms); condition_operator: LT/LTE/GT/GTE/EQ/NE/CONTAINS/CHANGED/TRUTHY/FALSY. "
+        "Use sempre que prometer monitorar, acompanhar, verificar depois ou avisar quando algo mudar. Só confirme monitoramento se success=true e houver monitor_id.",
+        RiskLevel.LOW_RISK,
+        MonitorCreateInput,
+        monitor_create,
+        preflight=lambda payload: {
+            "risk_level": "LOW_RISK",
+            "resource_key": f"monitor:{str(payload.get('objective') or 'observation')[:60]}",
+            "host": "local",
+        },
+    ))
+    registry.register(ToolDefinition(
+        "monitor_status",
+        "Mostra condição, última leitura real, histórico curto e estado de um MonitorJob persistente.",
+        RiskLevel.READ_ONLY, MonitorIdInput, monitor_status,
+        preflight=_local_preflight("monitor", "READ_ONLY"),
+    ))
+    registry.register(ToolDefinition(
+        "monitor_list", "Lista MonitorJobs ativos e seus objetivos.",
+        RiskLevel.READ_ONLY, EmptyV2Input, monitor_list,
+        preflight=_local_preflight("monitor", "READ_ONLY"),
+    ))
+    registry.register(ToolDefinition(
+        "monitor_cancel", "Cancela um MonitorJob persistente e gera seu resumo final.",
+        RiskLevel.LOW_RISK, MonitorIdInput, monitor_cancel,
+        dynamic_risk=True, preflight=_local_preflight("monitor", "LOW_RISK"),
     ))
 
 

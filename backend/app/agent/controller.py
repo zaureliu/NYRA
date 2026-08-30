@@ -18,6 +18,7 @@ from app.llm import LLMMessage, LLMProvider
 from app.tools.agent import ToolAgentLoop
 from app.tools.grounding import ToolObservation, initial_verification_status
 from app.tools.redaction import redact_secrets
+from app.intelligence.budget import ActionBudget, BudgetExceeded, BudgetLimits
 
 
 logger = logging.getLogger("nyra.agent")
@@ -51,6 +52,8 @@ class AgentController:
         self._resource_locks: dict[str, asyncio.Lock] = {}
         self._resource_owners: dict[str, str] = {}
         self._runs_by_turn: dict[str, str] = {}
+        self._budgets: dict[str, ActionBudget] = {}
+        self._last_budget: dict[str, Any] | None = None
 
     async def initialize(self) -> None:
         await self.store.initialize()
@@ -64,6 +67,13 @@ class AgentController:
             "max_tool_calls": self.settings.agent_max_tool_calls,
             "max_runtime_seconds": self.settings.agent_max_runtime_seconds,
             "active_runs": [run_id for run_id, task in self._tasks.items() if not task.done()],
+            "action_budget": {
+                "active": len(self._budgets),
+                "last": self._last_budget,
+                "max_tool_calls": self.settings.agent_max_tool_calls,
+                "max_planner_iterations": self.settings.agent_max_steps,
+                "max_consecutive_failures": self.settings.agent_max_consecutive_failures,
+            },
         }
 
     async def run(
@@ -91,6 +101,17 @@ class AgentController:
         if conversation_id and not run.conversation_id:
             run.conversation_id = conversation_id
         cancellation = self._cancellations.setdefault(run.id, asyncio.Event())
+        action_budget = ActionBudget(BudgetLimits(
+            max_tool_calls=self.settings.agent_max_tool_calls,
+            max_retries=max(0, self.settings.agent_max_identical_repeats - 1),
+            max_planner_iterations=self.settings.agent_max_steps,
+            max_consecutive_failures=self.settings.agent_max_consecutive_failures,
+            timeout_seconds=self.settings.agent_max_runtime_seconds,
+            max_restarts=0,
+            destructive_actions=0,
+            network_actions=self.settings.agent_max_tool_calls,
+        ))
+        self._budgets[run.id] = action_budget
         current_task = asyncio.current_task()
         if current_task:
             self._tasks[run.id] = current_task
@@ -122,6 +143,19 @@ class AgentController:
             )
 
         async def record_step(tool: str, arguments: dict, preflight: dict, result: dict, observation: ToolObservation | None = None) -> None:
+            try:
+                action_budget.consume("tool")
+                result_data_for_budget = result.get("data", result)
+                if bool(result_data_for_budget.get("success", result.get("ok", False))):
+                    action_budget.success()
+                else:
+                    action_budget.consume("failure")
+            except BudgetExceeded as error:
+                # AgentLoopRuntime remains the execution authority and permits
+                # a bounded read-only verification after the primary-call cap.
+                # Record the central budget signal without aborting that safety
+                # verification or replacing its established stop reason.
+                setattr(action_budget, "last_exceeded", error.code)
             run.tool_calls += 1
             target = str(preflight.get("host") or ("local" if tool == "system_shell" else tool))
             if tool == "remote_shell" and target not in run.host_targets:
@@ -279,6 +313,11 @@ class AgentController:
             raise
         finally:
             current_agent_run_id.reset(token)
+            self._last_budget = {
+                "run_id": run.id, **action_budget.snapshot(),
+                "last_exceeded": getattr(action_budget, "last_exceeded", None),
+            }
+            self._budgets.pop(run.id, None)
             if self._tasks.get(run.id) is current_task:
                 self._tasks.pop(run.id, None)
             for resource, owner in list(self._resource_owners.items()):

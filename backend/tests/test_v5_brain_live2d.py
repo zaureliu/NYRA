@@ -7,7 +7,7 @@ import pytest
 from app.avatar.controller import AvatarState
 from app.avatar.vtube_studio.auth import VTSAuth
 from app.avatar.vtube_studio.models import VTSConnectionState, VTubeStudioConfig
-from app.avatar.vtube_studio.parameters import discover_ids, parameter_values, resolve_mapping
+from app.avatar.vtube_studio.parameters import discover_ids, mouth_parameter_values, parameter_values, resolve_mapping
 from app.avatar.vtube_studio.protocol import request
 from app.avatar.vtube_studio.provider import VTubeStudioAvatarProvider
 from app.brain.manager import BrainManager
@@ -34,24 +34,31 @@ def test_vts_discovers_standard_eye_and_head_cursor_parameters():
 
 
 @pytest.mark.asyncio
-async def test_vts_cursor_keeps_eyes_stronger_than_head(monkeypatch):
-    provider = VTubeStudioAvatarProvider(VTubeStudioConfig(enabled=True, renderer="LIVE2D"))
+async def test_vts_presence_does_not_fight_existing_head_or_eye_tracking():
+    provider = VTubeStudioAvatarProvider(VTubeStudioConfig(enabled=True, renderer="VTUBE_STUDIO"))
     provider.state = VTSConnectionState.MODEL_LOADED
     provider.mapping = {"eye_x": ["ParamEyeBallX"], "eye_y": ["ParamEyeBallY"], "head_x": ["ParamAngleX"], "head_y": ["ParamAngleY"]}
-    captured = []
+    assert not await provider.apply_cursor(AvatarState(expression="focused"), 1, -.5)
+    assert provider.last_cursor == {"input_x": 1.0, "input_y": -.5, "applied": False}
 
-    async def capture(state):
-        captured.append(state)
-        provider.last_update += 1
 
-    monkeypatch.setattr(provider, "apply", capture)
-    assert await provider.apply_cursor(AvatarState(expression="focused"), 1, -.5)
-    state = captured[0]
-    assert state.expression == "focused"
-    assert state.eye_x == pytest.approx(.88)
-    assert state.eye_y == pytest.approx(-.36)
-    assert state.head_x == pytest.approx(.16)
-    assert state.head_y == pytest.approx(-.06)
+def test_presence_defaults_to_auto_with_bounded_watchdog_and_mouth_only_injection():
+    config = VTubeStudioConfig()
+    assert config.enabled and config.renderer == "AUTO" and config.spout_sender == "AUTO"
+    assert config.frame_watchdog_seconds == 12 and not config.cursor_attention
+    mapping = resolve_mapping({"ParamMouthOpenY", "ParamAngleX", "ParamEyeBallX"})
+    values = mouth_parameter_values(AvatarState(mouth_open=.42, head_x=1, eye_x=1), mapping)
+    assert values == [{"id": "ParamMouthOpenY", "value": .42, "weight": 1}]
+
+
+def test_vts_state_hotkeys_are_optional_and_presence_health_is_recorded():
+    provider = VTubeStudioAvatarProvider(VTubeStudioConfig(state_hotkeys={"thinking": "FOCUS"}))
+    provider.hotkeys = [{"hotkeyID": "h1", "name": "FOCUS"}, {"hotkeyID": "h2", "name": "NYRA_ALERT"}]
+    assert provider._resolve_hotkey("thinking") == "h1"
+    assert provider._resolve_hotkey("alert") == "h2"
+    assert provider._resolve_hotkey("speaking") is None
+    status = provider.record_presence({"state": "VTS_ACTIVE", "alpha": "VALID", "fallback_active": False, "token": "never"})
+    assert status["state"] == "VTS_ACTIVE" and "token" not in status
 
 
 def test_vts_token_is_local_and_round_trips(tmp_path: Path):
@@ -161,4 +168,3 @@ async def test_ollama_complete_retries_single_empty_message(monkeypatch):
     with pytest.raises(RuntimeError, match="neither content nor tool calls"):
         await provider.complete([LLMMessage(role="user", content="oi")])
     assert calls["count"] == 2
-

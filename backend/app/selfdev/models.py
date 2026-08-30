@@ -155,6 +155,15 @@ class ValidationStep(BaseModel):
     output_summary: str = Field(default="", max_length=4000)
 
 
+class LifecycleGate(BaseModel):
+    name: Literal[
+        "REPRODUCE", "ROOT_CAUSE_ANALYSIS", "STATIC_ANALYSIS",
+        "REGRESSION_BENCHMARK", "CANARY_VALIDATION", "BEHAVIOR_COMPARISON",
+    ]
+    status: Literal["PASS", "FAIL", "BLOCKED", "NOT_RUN"]
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+
 class ValidationReport(BaseModel):
     issue_id: str
     candidate_path: str
@@ -164,6 +173,8 @@ class ValidationReport(BaseModel):
     steps: list[ValidationStep] = Field(default_factory=list)
     security_findings: list[str] = Field(default_factory=list)
     changed_files: list[str] = Field(default_factory=list)
+    lifecycle_gates: list[LifecycleGate] = Field(default_factory=list)
+    baseline: dict[str, Any] = Field(default_factory=dict)
 
 
 class BenchmarkMeasurement(BaseModel):

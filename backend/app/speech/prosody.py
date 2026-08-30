@@ -19,6 +19,14 @@ PERCENT = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*%")
 DURATION = re.compile(r"\b(\d+)d\s+(\d+)h\b", re.IGNORECASE)
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 EMOJI = re.compile("[\U0001F000-\U0001FAFF\U00002600-\U000027BF\uFE0F]")
+EMOTION_MARKER = re.compile(
+    r"(?:<\/?emotion\b[^>]*>|<emotion\s*=\s*[^>]+>|^\s*\[(?:emotion|style)\s*:[^]]+]\s*)",
+    re.IGNORECASE | re.MULTILINE,
+)
+INTERNAL_TRACE = re.compile(
+    r"^\s*(?:TOOL|TRACE|METADATA|SYSTEM|RUNTIME|AGENT)_[A-Z0-9_]+\s*=.*$",
+    re.MULTILINE,
+)
 
 
 @dataclass(frozen=True)
@@ -45,7 +53,7 @@ class PronunciationDictionary:
         return self.pattern.sub(lambda match: self._casefold[match.group(0).casefold()], text)
 
 
-class ProsodyProcessor:
+class SpeechTextNormalizer:
     def __init__(self, pronunciation: PronunciationDictionary | None = None, engine: PronunciationEngine | None = None) -> None:
         self.pronunciation = pronunciation or PronunciationDictionary()
         self._legacy_override = pronunciation is not None
@@ -53,6 +61,14 @@ class ProsodyProcessor:
 
     def prepare(self, display_text: str, max_chunk_chars: int = 280, provider: str = "default", literal_required: bool = False) -> PreparedSpeech:
         text = display_text.replace("\r\n", "\n")
+        text = EMOTION_MARKER.sub("", text)
+        text = INTERNAL_TRACE.sub("", text)
+        try:
+            structured = json.loads(text)
+            if isinstance(structured, (dict, list)):
+                text = "Detalhes estruturados disponÃ­veis na tela."
+        except (json.JSONDecodeError, TypeError):
+            pass
         text = CODE_BLOCK.sub(" Código disponível na tela. ", text)
         text = MARKDOWN_LINK.sub(r"\1", text)
         text = RAW_URL.sub("endereço disponível na tela", text)
@@ -116,3 +132,7 @@ class ProsodyProcessor:
             if current:
                 output.append(current)
         return output or [""]
+
+
+class ProsodyProcessor(SpeechTextNormalizer):
+    """Backward-compatible name for the V1/V3 call sites."""

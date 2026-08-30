@@ -147,6 +147,36 @@ def test_browser_url_validation():
     assert result["success"] is False and result["error_code"] == "INVALID_URL"
 
 
+@pytest.mark.asyncio
+async def test_browser_close_uses_verified_tab_disappearance_when_cdp_body_is_empty(monkeypatch):
+    from app.desktop import browser as module
+
+    controller = module.BrowserController()
+    controller.manager.port = 9222
+    controller.manager.browser = "chrome"
+    async def ensure_running(_browser=""):
+        return True, {"port": 9222, "browser": "chrome"}
+    controller.manager.ensure_running = ensure_running
+    controller.manager.status = lambda: {"reachable": True, "port": 9222}
+    listings = iter([
+        [{"id": "tab-1", "title": "Local", "url": "http://127.0.0.1", "type": "page"}],
+        [],
+    ])
+    monkeypatch.setattr(module, "_tabs", lambda _port: next(listings))
+    monkeypatch.setattr(module, "_http_json", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(module, "_sleep", lambda _seconds: _no_wait())
+
+    result = await controller.close_tab("tab-1")
+
+    assert result["success"] is True
+    assert result["execution_success"] is True
+    assert result["effect_verified"] is True
+
+
+async def _no_wait():
+    return None
+
+
 def test_registry_hive_validation():
     from pathlib import Path as _Path
 

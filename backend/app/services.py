@@ -92,3 +92,7 @@ class Services:
     computer_perception: Any = None
     usage_learning: Any = None
     skill_memory: Any = None
+    usb: Any = None
+    # Plataforma integrada V2; inicializada após o container reunir as
+    # autoridades legadas de policy, tools, capabilities e SelfDev.
+    intelligence: Any = None

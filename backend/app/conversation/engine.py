@@ -2,17 +2,33 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+import logging
+from pathlib import Path
 import time
 from typing import Any
 from uuid import uuid4
 
 from app.conversation.models import AudioSettingsUpdate, ConversationState, InterruptionTarget
 from app.core.runtime_settings import save_runtime_settings
-from app.core.turn import TurnContext, new_turn_id
+from app.core.turn import PipelineFailure, TurnContext, TurnError, new_turn_id
 from app.events import Event, EventBus, EventType
+from app.listening.models import ListeningMode
+from app.speech.tts_identity import NYRA_IDENTITY_ID, NYRA_VOICE_ID
 
 
 TTSSwitcher = Callable[[str, str, float], Awaitable[dict[str, Any]]]
+logger = logging.getLogger("nyra.conversation.engine")
+
+
+def _voice_stage_status(*, stt: str, decision: str, llm: str, tts: str, playback: str) -> dict[str, str]:
+    """Stable, UI-safe stage summary for local voice turns."""
+    return {
+        "STT": stt,
+        "DECISION": decision,
+        "LLM": llm,
+        "TTS": tts,
+        "PLAYBACK": playback,
+    }
 
 
 class ConversationEngine:
@@ -36,6 +52,10 @@ class ConversationEngine:
         self._last_error: str | None = None
 
     async def start(self) -> None:
+        self.orchestrator.emotion_planner.configure(
+            emotion_mode=self.settings.voice_emotion_mode,
+            expressiveness=self.settings.voice_expressiveness,
+        )
         await self.event_bus.subscribe(self._observe_runtime_event)
 
     async def stop(self) -> None:
@@ -112,6 +132,8 @@ class ConversationEngine:
             if not allowed:
                 return {"accepted": False, "reason": reason, "status": self.listening.status()}
             self.listening.processing = True
+            stage = "STT"
+            response_id: str | None = None
             try:
                 response_id, transcription = await self.transcribe(path, speech_end=speech_end)
                 if not transcription.text.strip():
@@ -119,7 +141,12 @@ class ConversationEngine:
                         "accepted": False,
                         "reason": "empty_transcription",
                         "transcription": transcription.model_dump(mode="json"),
+                        "voice_stages": _voice_stage_status(
+                            stt="COMPLETED", decision="SKIPPED", llm="SKIPPED",
+                            tts="SKIPPED", playback="SKIPPED",
+                        ),
                     }
+                stage = "DECISION"
                 decision = self.listening.decide(transcription.text)
                 if decision.wake_word_detected:
                     await self.event_bus.publish(
@@ -137,6 +164,10 @@ class ConversationEngine:
                         "reason": decision.reason,
                         "transcription": transcription.model_dump(mode="json"),
                         "decision": decision.model_dump(mode="json"),
+                        "voice_stages": _voice_stage_status(
+                            stt="COMPLETED", decision="COMPLETED", llm="SKIPPED",
+                            tts="SKIPPED", playback="SKIPPED",
+                        ),
                     }
                 turn = TurnContext(
                     decision.text,
@@ -145,6 +176,7 @@ class ConversationEngine:
                 )
                 if turn.turn_id != response_id and response_id.startswith("turn_"):
                     turn.turn_id = response_id
+                stage = "LLM"
                 chat = await self.orchestrator.converse(
                     decision.text,
                     synthesize=True,
@@ -152,6 +184,16 @@ class ConversationEngine:
                     response_id=response_id,
                     turn=turn,
                 )
+                pipeline_status = str(getattr(chat, "pipeline_status", "TEXT_COMPLETE"))
+                audio_urls = list(getattr(chat, "audio_urls", None) or [])
+                audio_url = getattr(chat, "audio_url", None)
+                has_audio = bool(audio_urls or audio_url)
+                if pipeline_status == "AUDIO_DEGRADED":
+                    tts_stage = "FAILED"
+                elif has_audio:
+                    tts_stage = "COMPLETED"
+                else:
+                    tts_stage = "UNAVAILABLE"
                 return {
                     "accepted": True,
                     "reason": decision.reason,
@@ -159,11 +201,46 @@ class ConversationEngine:
                     "transcription": transcription.model_dump(mode="json"),
                     "decision": decision.model_dump(mode="json"),
                     "chat": chat.model_dump(mode="json"),
+                    # Playback is owned by the Desktop Presence and is only
+                    # confirmed later through /listening/playback.
+                    "voice_stages": _voice_stage_status(
+                        stt="COMPLETED", decision="COMPLETED", llm="COMPLETED",
+                        tts=tts_stage, playback="PENDING" if has_audio else "NOT_AVAILABLE",
+                    ),
                 }
             except Exception as exc:
-                self._last_error = type(exc).__name__
-                await self.transition(ConversationState.ERROR, error=self._last_error)
-                raise
+                if isinstance(exc, PipelineFailure):
+                    failure_stage = str(exc.error.stage or stage).upper()
+                    exception_type = exc.error.exception_type
+                    message = exc.error.message or str(exc)
+                else:
+                    failure_stage = stage
+                    exception_type = type(exc).__name__
+                    message = str(exc)
+                absolute_path = str(Path(path).resolve())
+                logger.exception(
+                    "always_listening_stage_failed stage=%s exception_type=%s message=%s path=%s",
+                    failure_stage,
+                    exception_type,
+                    message,
+                    absolute_path,
+                )
+                self._last_error = f"{failure_stage}:{exception_type}"
+                await self.transition(
+                    ConversationState.ERROR,
+                    stage=failure_stage,
+                    error=exception_type,
+                )
+                if isinstance(exc, PipelineFailure):
+                    raise
+                raise PipelineFailure(TurnError(
+                    stage=failure_stage,
+                    error_code=f"VOICE_{failure_stage}_FAILED",
+                    exception_type=exception_type,
+                    message=message,
+                    recoverable=True,
+                    turn_id=response_id,
+                )) from exc
             finally:
                 self.listening.processing = False
 
@@ -186,32 +263,41 @@ class ConversationEngine:
             "conversation_mode": self.settings.listening_mode,
             "always_listening": self.listening.enabled,
             "allow_interruption": self.settings.voice_barge_in,
+            "emotion_mode": self.settings.voice_emotion_mode,
+            "expressiveness": self.settings.voice_expressiveness,
         }
 
     async def update_audio_settings(self, value: AudioSettingsUpdate) -> dict[str, Any]:
         updates = {
             "microphone": value.microphone,
             "speaker": value.speaker,
-            "tts_voice": value.voice,
+            "tts_voice": NYRA_VOICE_ID,
+            "tts_voice_identity_version": "ava-v1",
             "tts_speaking_rate": value.speech_speed,
             "audio_volume": value.volume,
             "listening_mode": value.conversation_mode,
             "always_listening_enabled": value.always_listening,
             "voice_barge_in": value.allow_interruption,
+            "voice_emotion_mode": value.emotion_mode,
+            "voice_expressiveness": value.expressiveness,
         }
         for key, item in updates.items():
             setattr(self.settings, key, item)
         listening_value = self.listening.config().model_copy(update={
             "enabled": value.always_listening,
-            "mode": value.conversation_mode,
+            "mode": ListeningMode(value.conversation_mode),
             "microphone": value.microphone,
             "barge_in": value.allow_interruption,
         })
         await self.listening.update(listening_value)
         await asyncio.to_thread(save_runtime_settings, updates)
+        self.orchestrator.emotion_planner.configure(
+            emotion_mode=value.emotion_mode,
+            expressiveness=value.expressiveness,
+        )
         switched = None
         if self._tts_switcher:
-            switched = await self._tts_switcher(self.settings.tts_provider, value.voice, value.speech_speed)
+            switched = await self._tts_switcher(self.settings.tts_provider, NYRA_VOICE_ID, value.speech_speed)
         return {"settings": self.audio_settings(), "tts": switched}
 
     async def transition(self, state: ConversationState, **safe: Any) -> None:
@@ -241,6 +327,21 @@ class ConversationEngine:
             "tts": {
                 "primary": getattr(self.orchestrator.tts, "primary_name", self.orchestrator.tts.name),
                 "fallback": getattr(self.orchestrator.tts, "fallback_name", None),
+                "primary_engine": self.orchestrator.tts.engine_id,
+                "active_engine": self.orchestrator.tts.active_engine,
+                "voice": self.orchestrator.tts.active_voice,
+                "fallback_active": self.orchestrator.tts.fallback_active,
+                "fallback_reason": self.orchestrator.tts.fallback_reason,
+                "state": (
+                    "FAILED" if getattr(self.orchestrator.tts, "name", "disabled") == "disabled"
+                    else "DEGRADED" if bool(getattr(self.orchestrator.tts, "last_used_fallback", False))
+                    else "READY"
+                ),
+                "identity": NYRA_IDENTITY_ID,
+                "emotion_mode": self.settings.voice_emotion_mode,
+                "expressiveness": self.settings.voice_expressiveness,
+                "emotion_engine_supported": self.orchestrator.tts.capabilities().supports_emotion,
+                "description": self.orchestrator.tts.describe(),
             },
             "ollama": self.warm_manager.status() if self.warm_manager else None,
             "performance": dict(self.telemetry.last_metrics),

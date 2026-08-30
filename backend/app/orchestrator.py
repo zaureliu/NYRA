@@ -16,6 +16,8 @@ from app.llm import LLMProvider
 from app.memory import MemoryRepository
 from app.memory.models import MemoryCategory, MemoryCreate
 from app.speech.tts import TTSProvider
+from app.speech.emotion import EmotionPlanner
+from app.speech.profile import load_voice_profile
 from app.speech.prosody import ProsodyProcessor
 from app.speech.queue import SpeechPriority, SpeechQueue
 
@@ -32,6 +34,7 @@ class ChatResult(BaseModel):
     display_text: str
     speech_text: str
     state: str
+    emotion_intensity: float = 0.0
     audio_url: str | None = None
     audio_urls: list[str] = Field(default_factory=list)
     tts_provider: str | None = None
@@ -56,6 +59,7 @@ class ChatOrchestrator:
         self.speech_queue = speech_queue or SpeechQueue()
         self.context = ContextBuilder(memory)
         self.prosody = ProsodyProcessor()
+        self.emotion_planner = EmotionPlanner()
         self.network_watch = None
         self.sentinel_watch = None
         self.tools = None
@@ -92,6 +96,12 @@ class ChatOrchestrator:
         llm_started = time.perf_counter()
         response = direct_response or apply_response_style(await self.llm.chat(messages))
         llm_ms = round((time.perf_counter() - llm_started) * 1000, 1)
+        emotion_plan = self.emotion_planner.plan(
+            clean_text,
+            response,
+            context={"technical": bool(runtime_context)},
+        )
+        state = await self.state_machine.transition(state.__class__(emotion_plan.emotion.value))
         prepared = self.prosody.prepare(response, provider=self.tts.name)
         await self.memory.add(
             MemoryCreate(
@@ -108,6 +118,8 @@ class ChatOrchestrator:
             display_text=prepared.display_text,
             speech_text=prepared.speech_text,
             state=state.value,
+            emotion_intensity=emotion_plan.intensity,
+            emotion_engine_supported=self.tts.capabilities().supports_emotion,
         )
         conversation_logger.info(
             "conversation_turn",
@@ -121,8 +133,12 @@ class ChatOrchestrator:
             try:
                 await self.event_bus.publish(EventType.TTS_STARTED, state=state.value)
                 tts_started = time.perf_counter()
+                _profile, defaults = load_voice_profile()
+                options = defaults.with_emotion(emotion_plan)
+                acoustic_state = state.value if self.tts.capabilities().supports_emotion else "neutral"
                 audio_path = await self.speech_queue.synthesize(
-                    self.tts, prepared.speech_text, state.value, SpeechPriority.USER
+                    self.tts, prepared.speech_text, acoustic_state, SpeechPriority.USER,
+                    options=options,
                 )
                 tts_ms = round((time.perf_counter() - tts_started) * 1000, 1)
                 audio_url = f"/api/audio/{Path(audio_path).name}"
@@ -138,6 +154,7 @@ class ChatOrchestrator:
             display_text=prepared.display_text,
             speech_text=prepared.speech_text,
             state=state.value,
+            emotion_intensity=emotion_plan.intensity,
             audio_url=audio_url,
             tts_provider=provider,
             timing={"llm_ms": llm_ms, "tts_ms": tts_ms, "total_ms": total_ms},

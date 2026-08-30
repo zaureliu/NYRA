@@ -4,6 +4,7 @@ import { reconcileAudioDevices, type AudioSettingsValue } from './useAudioSettin
 const value: AudioSettingsValue = {
   microphone: 'usb-mic', speaker: 'usb-speaker', voice: 'pf_dora', speech_speed: .97,
   volume: .9, conversation_mode: 'hands_free', always_listening: true, allow_interruption: true,
+  emotion_mode: 'automatic', expressiveness: 'normal',
 }
 const device = (deviceId: string, kind: MediaDeviceKind) => ({
   deviceId, kind, groupId: '', label: deviceId, toJSON: () => ({}),

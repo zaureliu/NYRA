@@ -3,9 +3,23 @@ import asyncio
 import pytest
 
 from app.core.config import Settings
-from app.events import EventBus, EventType
+from app.events import Event, EventBus, EventType
+from app.api.routes import _voice_satellite_event_allowed
 from app.listening import AlwaysListeningManager
 from app.listening.wake_word import TranscriptWakeWordProvider
+
+
+def test_voice_satellite_only_receives_actionable_owned_backend_errors():
+    unrelated = Event(type=EventType.ERROR, payload={"operation": "always_listening", "error": "NoSuchFile"})
+    actionable = Event(type=EventType.ERROR, payload={
+        "operation": "satellite_capture",
+        "satellite_id": "desktop-satellite-01",
+        "satellite_action_required": True,
+    })
+    assert _voice_satellite_event_allowed(unrelated, None) is True
+    assert _voice_satellite_event_allowed(unrelated, "desktop-satellite-01") is False
+    assert _voice_satellite_event_allowed(actionable, "desktop-satellite-01") is True
+    assert _voice_satellite_event_allowed(actionable, "another-satellite") is False
 
 
 def test_local_wake_word_extracts_command_and_rejects_mentions():

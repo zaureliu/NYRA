@@ -8,7 +8,7 @@ import { usePushToTalk } from './hooks/usePushToTalk'
 import { useStreamingAudioQueue } from './hooks/useStreamingAudioQueue'
 import type { ActivityStatus, AvatarControl, ChatMessage, ChatResponse, EmotionalState, Health, ToolActivity } from './types'
 import { dashboardOwnsRealtimeAudio } from './runtime/audioOwnership'
-import { TurnFilter, extractTurnId } from './runtime/turns'
+import { TurnFilter, adoptInputTurn, extractTurnId } from './runtime/turns'
 import { backendUrl, isTauriRuntime } from './runtime/backend'
 import { sendChat } from './runtime/conversation'
 import { readHeaderStatus } from './runtime/headerStatus'
@@ -24,10 +24,10 @@ import { NetworkPage } from './ops/pages/NetworkPage'
 import { AutonomyPage } from './ops/pages/AutonomyPage'
 import { TasksPage } from './ops/pages/TasksPage'
 import { VoicePage } from './ops/pages/VoicePage'
+import { UsbDevicesPage } from './ops/pages/UsbDevicesPage'
 import { SettingsPageV3 } from './ops/pages/SettingsPageV3'
 import { DeveloperPage } from './ops/pages/DeveloperPage'
 import { AboutPage } from './ops/pages/AboutPage'
-import { PronunciationLab } from './components/PronunciationLab'
 
 const readInitialView = (): OpsView => {
   const hash = window.location.hash.slice(1) as OpsView
@@ -59,6 +59,17 @@ const FEED_EVENT_LABELS: Record<string, string> = {
   RECOVERY_EXECUTED: 'Recovery executado',
   RUNTIME_SERVICE_RESTARTED: 'Serviço reiniciado pelo supervisor',
   PROACTIVE_ALERT_FIRED: 'Alerta proativo',
+  MONITOR_JOB_CREATED: 'MonitorJob criado',
+  MONITOR_JOB_CHANGED: 'MonitorJob detectou mudança',
+  MONITOR_JOB_COMPLETED: 'MonitorJob concluído',
+  MONITOR_JOB_FAILED: 'MonitorJob falhou',
+  MONITOR_JOB_CANCELLED: 'MonitorJob cancelado',
+  MONITOR_NOTIFICATION: 'Atualização de monitoramento',
+  'usb.device.connected': 'USB conectado',
+  'usb.device.disconnected': 'USB removido',
+  'usb.device.unknown': 'Novo USB desconhecido',
+  'usb.device.com_changed': 'Porta COM alterada',
+  usb_monitor_failure: 'Monitor USB degradado',
   ERROR: 'Erro de pipeline',
 }
 
@@ -98,10 +109,15 @@ export default function App() {
     await fetch('/api/listening/playback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playing, response_id: responseId }) }).catch(() => undefined)
   }, [])
 
-  const playResponse = useCallback(async (url: string) => {
+  const playResponse = useCallback(async (url: string, responseId?: string) => {
     setStatus('SPEAKING')
-    await setPlaybackGuard(true)
-    try { await play(url, () => { setStatus('IDLE'); void setPlaybackGuard(false) }) }
+    try {
+      await play(
+        url,
+        () => { setStatus('IDLE'); void setPlaybackGuard(false) },
+        () => { void setPlaybackGuard(true, responseId) },
+      )
+    }
     catch { setStatus('IDLE'); await setPlaybackGuard(false) }
   }, [play, setPlaybackGuard])
 
@@ -119,9 +135,26 @@ export default function App() {
     }
     const responseId = String(event.payload.response_id ?? '')
     const eventTurnId = extractTurnId(event.payload)
-    if (event.type === 'USER_TEXT_RECEIVED' && pendingTurnRequests.current > 0) {
-      pendingTurnRequests.current -= 1
-      turnFilter.current.begin(eventTurnId)
+    if (adoptInputTurn(turnFilter.current, event.type, eventTurnId)) {
+      pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1)
+    }
+    if (event.type === 'MONITOR_NOTIFICATION') {
+      const content = String(event.payload.message ?? 'Atualização de monitoramento.')
+      setMessages((current) => [...current, {
+        id: `monitor-${String(event.payload.monitor_id ?? crypto.randomUUID())}-${Date.now()}`,
+        role: 'assistant', content, timestamp: new Date(), status: 'complete',
+      }])
+    }
+    if (
+      event.type === 'TTS_FINISHED'
+      && (event.payload.source === 'monitor_job' || event.payload.source === 'voice_test')
+      && event.payload.audio_url
+      && dashboardOwnsRealtimeAudio(isTauriRuntime())
+    ) {
+      void playResponse(
+        backendUrl(String(event.payload.audio_url)),
+        String(event.payload.response_id ?? '') || undefined,
+      )
     }
     const assistantId = responseId ? `assistant-${responseId}` : eventTurnId ? `assistant-${eventTurnId}` : ''
     if (event.type === 'LLM_TOKEN_RECEIVED' && !turnFilter.current.accept(eventTurnId)) return
@@ -139,12 +172,12 @@ export default function App() {
       setMessages((current) => current.some((message) => message.id === assistantId)
         ? current.map((message) => message.id === assistantId ? { ...message, content, status: 'complete' } : message)
         : [...current, { id: assistantId, role: 'assistant', content, timestamp: new Date(), turnId: eventTurnId ?? undefined, status: 'complete' }])
-      turnFilter.current.end(eventTurnId)
     }
     if (event.type === 'TTS_CHUNK_FINISHED' && event.payload.audio_url && dashboardOwnsRealtimeAudio(isTauriRuntime())) {
       if (!turnFilter.current.accept(eventTurnId)) return
       streaming.enqueue({ url: backendUrl(String(event.payload.audio_url)), responseId: String(event.payload.response_id ?? 'stream'), index: Number(event.payload.index ?? 0) })
     }
+    if (event.type === 'TTS_FINISHED') turnFilter.current.end(eventTurnId)
     if (event.type === 'SPEECH_CANCELLED') streaming.clear()
     if (event.type === 'AVATAR_STATE_CHANGED') setAvatarControl(event.payload as Partial<AvatarControl>)
     if (event.type === 'SHELL_EXECUTION_STARTED') {
@@ -206,7 +239,7 @@ export default function App() {
         detail: event.type === 'AGENT_RUN_CANCELLED' ? 'CANCELLED' : String(event.payload.state ?? event.payload.status ?? 'COMPLETE'),
       } : item))
     }
-  }, [streaming, pushFeed])
+  }, [streaming, pushFeed, playResponse])
 
   useNyraSocket({
     setStatus: useCallback((value) => setStatus(value), []),
@@ -257,7 +290,7 @@ export default function App() {
         : [...current, { id: assistantId, role: 'assistant', content: value.response, timestamp: new Date(), turnId: value.turn_id ?? undefined, status: 'complete' }])
       if (!connected && value.audio_url) {
         setStatus('SPEAKING')
-        await playResponse(backendUrl(value.audio_url))
+        await playResponse(backendUrl(value.audio_url), value.response_id ?? undefined)
       } else if (!connected && value.audio_urls?.length) {
         value.audio_urls.forEach((url, index) => streaming.enqueue({ url: backendUrl(url), responseId: value.response_id ?? 'fallback', index }))
       } else if (!value.audio_urls?.length) setStatus('IDLE')
@@ -308,7 +341,7 @@ export default function App() {
         : [...next, { id: assistantId, role: 'assistant' as const, content: value.chat!.response, timestamp: new Date() }]
     })
     setState(value.chat.state as EmotionalState)
-    if (!connected && value.chat.audio_url) await playResponse(backendUrl(value.chat.audio_url))
+    if (!connected && value.chat.audio_url) await playResponse(backendUrl(value.chat.audio_url), value.chat.response_id ?? undefined)
     else if (!connected) value.chat.audio_urls?.forEach((url, index) => streaming.enqueue({ url: backendUrl(url), responseId: value.chat!.response_id ?? 'always', index }))
   }, [connected, playResponse, streaming])
   const always = useAlwaysListening({
@@ -353,8 +386,6 @@ export default function App() {
               onTalkEnd={stop}
               toolActivities={toolActivities}
             />
-            <div style={{ height: 14 }} />
-            <PronunciationLab speaker={speaker} />
           </div>
         )
       case 'capabilities': return <CapabilitiesPage />
@@ -365,6 +396,7 @@ export default function App() {
       case 'integrations': return <IntegrationsPage onOpenSentinel={() => navigate('sentinel')} />
       case 'sentinel': return <SentinelPage />
       case 'voice': return <VoicePage />
+      case 'usb': return <UsbDevicesPage />
       case 'settings': return <SettingsPageV3 />
       case 'developer': return <DeveloperPage />
       case 'about': return <AboutPage />

@@ -583,6 +583,67 @@ async def _collect_listening(services) -> SubsystemHealth:
     return entry
 
 
+async def _collect_usb(services) -> SubsystemHealth:
+    entry = SubsystemHealth(name="usb_monitor", dependencies=[], recovery_available=True)
+    service = getattr(services, "usb", None)
+    if service is None:
+        entry.enabled = False
+        entry.state = SubsystemState.DISABLED
+        entry.healthy = True
+        return entry
+    snapshot = await service.status_snapshot()
+    mapping = {
+        "STARTING": SubsystemState.STARTING,
+        "ACTIVE": SubsystemState.READY,
+        "DEGRADED": SubsystemState.DEGRADED,
+        "STOPPED": SubsystemState.OFFLINE,
+    }
+    entry.state = mapping.get(str(snapshot.get("monitor_state")), SubsystemState.DEGRADED)
+    entry.healthy = entry.state in {SubsystemState.READY, SubsystemState.DEGRADED}
+    entry.last_error = snapshot.get("last_error")
+    entry.last_success = snapshot.get("last_heartbeat_at")
+    entry.details = {
+        "monitor_state": snapshot.get("monitor_state"),
+        "event_source": snapshot.get("event_source"),
+        "connected": snapshot.get("connected_count", 0),
+        "unknown": snapshot.get("unknown_count", 0),
+    }
+    return entry
+
+
+def _collect_vts_presence(services) -> SubsystemHealth:
+    entry = SubsystemHealth(name="vts_presence", dependencies=["desktop"], recovery_available=True)
+    provider = getattr(services, "vtube_studio", None)
+    if provider is None:
+        entry.enabled = False; entry.state = SubsystemState.DISABLED; entry.healthy = True
+        return entry
+    status = provider.readiness(); config = status.get("config", {}); presence = status.get("vts_presence", {})
+    mode = config.get("renderer", "AUTO")
+    if not config.get("enabled", True) or mode in {"INTERNAL", "CURRENT"}:
+        entry.enabled = False; entry.state = SubsystemState.DISABLED; entry.healthy = True
+    elif presence.get("state") == "VTS_ACTIVE" and presence.get("alpha") == "VALID":
+        entry.state = SubsystemState.READY; entry.healthy = True
+    else:
+        entry.state = SubsystemState.DEGRADED; entry.healthy = True
+        entry.last_error = presence.get("error") or status.get("last_error")
+    entry.details = {
+        "mode": mode,
+        "api_state": status.get("state"),
+        "api_port": config.get("port"),
+        "model_name": status.get("model"),
+        "spout_state": presence.get("state", "INTERNAL_ACTIVE"),
+        "sender": presence.get("sender"),
+        "width": presence.get("width", 0),
+        "height": presence.get("height", 0),
+        "fps": presence.get("receiver_fps", 0),
+        "alpha": presence.get("alpha", "UNKNOWN"),
+        "last_frame_ms": presence.get("last_frame_age_ms"),
+        "renderer": "DIRECTX11_DIRECTCOMPOSITION",
+        "fallback_active": presence.get("fallback_active", True),
+    }
+    return entry
+
+
 COLLECTORS: dict[str, Callable[[Any], Any]] = {}
 
 
@@ -605,6 +666,8 @@ _register("homelab", _collect_homelab)
 _register("integrations", _collect_integrations)
 _register("conversation", _collect_conversation)
 _register("listening", _collect_listening)
+_register("usb_monitor", _collect_usb)
+_register("vts_presence", _collect_vts_presence)
 
 
 SUBSYSTEM_DEPENDENCIES = {
@@ -624,6 +687,8 @@ SUBSYSTEM_DEPENDENCIES = {
     "integrations": [],
     "conversation": ["llm"],
     "always_listening": ["voice"],
+    "usb_monitor": [],
+    "vts_presence": ["desktop"],
     "runtime_services": [],
 }
 

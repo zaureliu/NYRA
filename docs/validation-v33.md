@@ -14,7 +14,7 @@
 Execução read-only de 65 segundos no host:
 
 - interface: `Ethernet`;
-- gateway: `192.168.1.1`, respondendo em aproximadamente 1 ms;
+- gateway configurado pelo operador, respondendo em aproximadamente 1 ms;
 - Internet: disponível;
 - latência média: 57,49 ms (mínima 42,38; máxima 105,55);
 - perda: 0%;

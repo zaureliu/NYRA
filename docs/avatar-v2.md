@@ -2,11 +2,11 @@
 
 ## Fontes de verdade
 
-- Referência visual versionada: `frontend/src/assets/nyra-v2/master/nyra-avatar-master.png`.
+- Referência visual integrada: `frontend/src/assets/nyra-v2/master/nyra-avatar-master.png`.
 - SHA-256 observado antes da implementação: `50E7BD5E8A24D852D974EAD6CE8DCDE5EBF4488EEF2CEE8A4AB9DBF9B834822A`.
 - Master interna oficial: `frontend/src/assets/nyra-v2/master/nyra-avatar-master.png`.
 - Cópia servida pelo Vite: `frontend/public/avatar/nyra_v2/master/nyra-avatar-master.png`.
-- Implementação e assets derivados pertencem somente a este repositório. A referência em `E:` é read-only e nunca deve ser sobrescrita.
+- Implementação e assets derivados pertencem somente a este repositório. A master integrada é read-only e nunca deve ser sobrescrita.
 
 ## Identidade e arte oficial
 

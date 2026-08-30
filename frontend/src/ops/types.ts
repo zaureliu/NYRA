@@ -27,6 +27,39 @@ export interface CapabilitiesResponse {
   }
 }
 
+export interface IntelligenceCapability {
+  id: string
+  name: string
+  description: string
+  state: string
+  health: string | null
+  configured: boolean
+  last_error: string | null
+  dependencies: string[]
+}
+
+export interface IntelligenceStatus {
+  state: string
+  started_at: string
+  storage: { ok: boolean; state: string; schema_version: number; quick_check?: string }
+  counts: { memory: number; documents: number; chunks: number; tasks: number; events: number; traces: number }
+  capabilities: {
+    capabilities: IntelligenceCapability[]
+    summary: Record<string, number>
+    observed_at: string
+  }
+  model_router: {
+    last_route: { selected_model?: string | null; task_type?: string; reason?: string } | null
+  }
+  context: { budget_characters: number; recent_assemblies: unknown[] }
+  rag: { allowed_roots?: string[]; dimensions?: number }
+  vision: { state: string; health: string; details?: { models?: string[]; structural_vision_available?: boolean } }
+  tasks: { active_or_queued: number }
+  trace: { dropped_events: number }
+  diagnostic_domains: string[]
+  evaluation: { total?: number; passed?: number; failed?: number } | null
+}
+
 export interface SettingEntry {
   key: string
   category: string

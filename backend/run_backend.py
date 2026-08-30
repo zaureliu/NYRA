@@ -19,6 +19,13 @@ import sys
 
 
 def main() -> int:
+    if len(sys.argv) >= 2 and sys.argv[1] == "--sapi-worker":
+        # PyInstaller executables do not implement ``python -m``. Dispatch the
+        # isolated Windows SAPI worker inside the packaged backend executable.
+        from app.speech.sapi_worker import main as sapi_main
+
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        return sapi_main()
     if getattr(sys, "frozen", False):
         os.environ.setdefault("NYRA_FROZEN", "1")
         # Watchdog não existe no pacote final: sem Python global/.venv/PowerShell.

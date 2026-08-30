@@ -36,12 +36,16 @@ if missing:
 
 espeak_dir = _package_dir("espeakng_loader")
 kokoro_dir = _package_dir("kokoro_onnx")
+faster_whisper_dir = _package_dir("faster_whisper")
 tts_datas = [
     (str(model_dir / "kokoro-v1.0.int8.onnx"), "data/models"),
     (str(model_dir / "voices-v1.0.bin"), "data/models"),
     (str(espeak_dir / "espeak-ng.dll"), "espeakng_loader"),
     (str(espeak_dir / "espeak-ng-data"), "espeakng_loader/espeak-ng-data"),
     (str(kokoro_dir / "config.json"), "kokoro_onnx"),
+]
+stt_datas = [
+    (str(faster_whisper_dir / "assets" / "silero_vad_v6.onnx"), "faster_whisper/assets"),
 ]
 
 a = Analysis(
@@ -52,6 +56,7 @@ a = Analysis(
         (str(REPO / "config"), "config"),
         (str(REPO / "identity"), "identity"),
         *tts_datas,
+        *stt_datas,
     ],
     hiddenimports=["kokoro_onnx", "espeakng_loader", "phonemizer", "win32timezone"],
     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[],

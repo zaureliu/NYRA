@@ -1,0 +1,41 @@
+skills:
+  - identity: memory_search
+    description: Recupera memórias explícitas pelo registro local existente.
+    capabilities: [memory_v2]
+    tools: []
+    permissions: [local_data_read]
+    risk_class: READ_ONLY
+    dependencies: [memory_v2]
+    health_checks: [intelligence_store]
+    supported_actions: [search]
+    validators: [provenance, redaction]
+  - identity: network_status
+    description: Consulta o estado de rede pelo monitor local grounded.
+    capabilities: [network_watch, diagnostics_engine]
+    tools: [get_network_status]
+    permissions: [network_read]
+    risk_class: READ_ONLY
+    dependencies: [network_watch]
+    health_checks: [network_watch]
+    supported_actions: [status, diagnose]
+    validators: [effect_verification]
+  - identity: sentinel_status
+    description: Consulta o estado observado do Sentinel sem inferir causalidade.
+    capabilities: [sentinel, event_intelligence]
+    tools: []
+    permissions: [integration_read]
+    risk_class: READ_ONLY
+    dependencies: [sentinel]
+    health_checks: [sentinel]
+    supported_actions: [status]
+    validators: [grounding]
+  - identity: get_active_app
+    description: Lê a aplicação local atualmente em primeiro plano.
+    capabilities: [desktop_control]
+    tools: []
+    permissions: [desktop_state_read]
+    risk_class: READ_ONLY
+    dependencies: [desktop_control]
+    health_checks: [desktop_controller]
+    supported_actions: [observe]
+    validators: [window_ownership]

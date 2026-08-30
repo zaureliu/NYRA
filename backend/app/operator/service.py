@@ -13,6 +13,7 @@ from app.operator.contexts import OperatorContextRegistry
 from app.operator.credentials import CredentialBroker
 from app.operator.elevated_sessions import ElevatedSessionManager
 from app.operator.jobs import PersistentJobManager
+from app.operator.monitoring import MonitorJobManager, ProactiveMonitorNotifications
 from app.operator.proactive_rules import ProactiveOperator
 from app.operator.recovery import RecoveryEngine
 from app.operator.tasks import OperatorTaskManager
@@ -27,7 +28,9 @@ class OperatorV2Service:
     """Aggregate lifecycle + status for all operator-v2 capabilities."""
 
     def __init__(self, settings, event_bus, approvals, registry,
-                 browser_controller=None, proactive_gate=None) -> None:
+                 browser_controller=None, proactive_gate=None,
+                 speech_queue=None, tts_provider_getter=None,
+                 voice_processor=None) -> None:
         from app.operator.browser_v2 import BrowserV2Controller
         from app.operator.adapters import create_adapter_registry
         from app.operator.clipboard import ClipboardController
@@ -67,6 +70,17 @@ class OperatorV2Service:
 
         self.jobs_enabled = bool(getattr(settings, "persistent_jobs_enabled", True))
         self.jobs = PersistentJobManager(event_bus) if self.jobs_enabled else None
+        self.monitor_jobs = MonitorJobManager(
+            registry, event_bus, database_path=settings.database_path,
+        )
+        self.monitor_notifications = (
+            ProactiveMonitorNotifications(
+                settings, event_bus, speech_queue, tts_provider_getter,
+                voice_processor=voice_processor,
+            )
+            if speech_queue is not None and tts_provider_getter is not None
+            else None
+        )
 
         self.workflow_engine_enabled = bool(getattr(settings, "workflow_engine_enabled", True))
         self.workflows = WorkflowEngine(registry, event_bus) if self.workflow_engine_enabled else None
@@ -100,6 +114,10 @@ class OperatorV2Service:
         if self.jobs is not None:
             await self.jobs.initialize()
             self.jobs.start_monitor()
+        await self.monitor_jobs.initialize()
+        self.monitor_jobs.start()
+        if self.monitor_notifications is not None:
+            await self.monitor_notifications.start()
         await self.recovery.initialize()
         if self.watcher is not None:
             await self.watcher.start()
@@ -112,17 +130,29 @@ class OperatorV2Service:
         self._started = True
 
     async def stop(self) -> None:
+        if not self._started:
+            return
         if hasattr(self, "event_task") and not self.event_task.done():
             self.event_task.cancel()
             try:
                 await self.event_task
             except asyncio.CancelledError:
                 pass
+        if hasattr(self, "_event_forwarder"):
+            await self.event_bus.unsubscribe(self._event_forwarder)
         await self.tasks.shutdown()
+        await self.monitor_jobs.shutdown()
+        if self.monitor_notifications is not None:
+            await self.monitor_notifications.stop()
         if self.jobs is not None:
             await self.jobs.shutdown()
         if self.watcher is not None:
             await self.watcher.stop()
+        if self.vision is not None:
+            await asyncio.to_thread(self.vision.shutdown)
+        if self.browser_controller is not None:
+            await asyncio.to_thread(self.browser_controller.manager.shutdown)
+        self._started = False
 
     async def _subscribe_events(self) -> None:
         from app.events import Event
@@ -162,6 +192,9 @@ class OperatorV2Service:
             "tasks_active": sum(
                 1 for item in []
             ) or None,
+            "monitor_jobs_active": sum(
+                1 for item in self.monitor_jobs._jobs.values() if item.status.value == "ACTIVE"
+            ),
             "elevated_sessions": self.elevated.status()["active_sessions"],
             "proactive": self.proactive.status(),
         }
@@ -169,8 +202,14 @@ class OperatorV2Service:
 
 async def create_operator_v2_service(settings, event_bus, approvals, registry,
                                      browser_controller=None,
-                                     proactive_gate=None) -> OperatorV2Service:
+                                     proactive_gate=None,
+                                     speech_queue=None,
+                                     tts_provider_getter=None,
+                                     voice_processor=None) -> OperatorV2Service:
     service = OperatorV2Service(settings, event_bus, approvals, registry,
                                 browser_controller=browser_controller,
-                                proactive_gate=proactive_gate)
+                                proactive_gate=proactive_gate,
+                                speech_queue=speech_queue,
+                                tts_provider_getter=tts_provider_getter,
+                                voice_processor=voice_processor)
     return service

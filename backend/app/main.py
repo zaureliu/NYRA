@@ -57,6 +57,7 @@ from app.runtime import (
 from app.desktop import DesktopController, register_desktop_tools
 from app.voice_hunter import VoiceHunterService
 from app.brain import BrainManager
+from app.intelligence.api import router as intelligence_router
 
 
 settings = get_settings()
@@ -273,11 +274,13 @@ async def lifespan(app: FastAPI):
     # nyra-7c: pipeline de autonomia do computador (7 camadas, §75).
     from app.computer import (
         ComputerAutonomyService,
+        ArtifactContextService,
         ComputerPerceptionService,
         ComputerStateService,
         EffectVerificationService,
         IntentUnderstandingService,
         SkillMemoryService,
+        RecentArtifactMemory,
         UsageLearningService,
     )
 
@@ -293,6 +296,13 @@ async def lifespan(app: FastAPI):
     effect_verifier = EffectVerificationService()
     usage_learning = UsageLearningService()
     skill_memory = SkillMemoryService(event_bus=event_bus)
+    recent_artifacts = RecentArtifactMemory(
+        persistence_path=computer_state.base_dir / "recent-artifacts.json",
+    )
+    artifact_context = ArtifactContextService(
+        memory=recent_artifacts, desktop=desktop,
+        remote_shell=remote_shell, state=computer_state,
+    )
     computer = ComputerAutonomyService(
         state=computer_state,
         intent_service=computer_intents,
@@ -301,9 +311,19 @@ async def lifespan(app: FastAPI):
         usage=usage_learning,
         skills=skill_memory,
         desktop=desktop,
+        remote_shell=remote_shell,
+        artifacts=artifact_context,
     )
+    tools.add_result_observer(computer.observe_tool_result)
     orchestrator.computer = computer
     await computer.start_background()
+
+    # USB V1: serviço local usa SetupAPI/ConfigMgr, registry fora do repo e
+    # inicia em task própria para não bloquear o restante do startup.
+    from app.usb import UsbDeviceService
+
+    usb = UsbDeviceService(event_bus, computer_state=computer_state)
+    orchestrator.usb_devices = usb
 
     # nyra-full §6/§42: Universal Application Registry — startup leve e
     # refresh periódico em background (nunca bloqueia o event loop).
@@ -336,9 +356,14 @@ async def lifespan(app: FastAPI):
         settings, event_bus, shell.approvals, tools,
         browser_controller=browser_controller if (settings.local_operator_enabled and settings.browser_control_enabled) else None,
         proactive_gate=proactive,
+        speech_queue=speech_queue,
+        tts_provider_getter=lambda: orchestrator.tts,
+        voice_processor=voice_processor,
     )
     await operator_v2.start()
     register_operator_v2_tools(tools, operator_v2)
+    orchestrator.monitor_jobs = operator_v2.monitor_jobs
+    usb_start_task = asyncio.create_task(usb.start(), name="nyra-usb-start")
     attention = AttentionEngine(event_bus)
     await attention.start()
     reactions = ReactionEngine(event_bus, avatar, perception, proactive, v4_settings.value.realtime)
@@ -422,7 +447,16 @@ async def lifespan(app: FastAPI):
         computer_perception=computer_perception,
         usage_learning=usage_learning,
         skill_memory=skill_memory,
+        usb=usb,
     )
+    # Intelligence Platform V2 compõe as autoridades existentes; não substitui
+    # Approval Gate, Tool Registry, Credential Broker ou operadores grounded.
+    from app.intelligence import IntelligencePlatform
+
+    intelligence = IntelligencePlatform(app.state.services)
+    app.state.services.intelligence = intelligence
+    await intelligence.initialize()
+    orchestrator.context.intelligence = intelligence
     # VoiceProcessorBridge (prompt11 §120): lazy-friendly singleton no estado.
     from app.speech.external_bridge import VoiceProcessorBridge
 
@@ -514,6 +548,8 @@ async def _graceful_shutdown(scope: dict) -> None:
     stt_preload_task = scope.get("stt_preload_task")
     voice_hunter = scope["voice_hunter"]
     universal_refresh_task = scope.get("universal_refresh_task")
+    usb = scope.get("usb")
+    usb_start_task = scope.get("usb_start_task")
     computer = scope.get("computer")
     if computer is not None:
         # nyra-7c §83: persistência atômica de contexto/usage/skills.
@@ -539,8 +575,19 @@ async def _graceful_shutdown(scope: dict) -> None:
         if voice_hunter._task and not voice_hunter._task.done():
             await voice_hunter.cancel()
 
+    async def _stop_usb() -> None:
+        if usb_start_task and not usb_start_task.done():
+            try:
+                await usb_start_task
+            except asyncio.CancelledError:
+                pass
+        if usb is not None:
+            await usb.stop()
+
     steps = [
+        ("intelligence.stop", scope.get("intelligence").stop if scope.get("intelligence") else None),
         ("selfdev.stop", selfdev.stop if selfdev else None),
+        ("usb.stop", _stop_usb),
         ("operator_v2.stop", operator_v2.stop),
         ("runtime_supervisor.shutdown", runtime_supervisor.shutdown),
         ("conversation.stop", conversation.stop),
@@ -598,6 +645,7 @@ app.add_middleware(
     backend_port=settings.backend_port,
 )
 app.include_router(router)
+app.include_router(intelligence_router, prefix="/api")
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 

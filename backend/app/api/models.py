@@ -60,6 +60,26 @@ class Live2DCursorRequest(BaseModel):
     y: float = Field(ge=-1.0, le=1.0)
 
 
+class VTSPresenceReport(BaseModel):
+    state: str = Field(pattern=r"^(INTERNAL_ACTIVE|VTS_DISCOVERING|VTS_CONNECTING|VTS_WAITING_FRAMES|VTS_ACTIVE|VTS_DEGRADED|FALLBACK_INTERNAL)$")
+    alpha: str = Field(pattern=r"^(UNKNOWN|VALID|OPAQUE|EMPTY)$")
+    fallback_active: bool
+    sender: str | None = Field(default=None, max_length=255)
+    width: int = Field(default=0, ge=0, le=16384)
+    height: int = Field(default=0, ge=0, le=16384)
+    format: str | None = Field(default=None, max_length=80)
+    sender_fps: float = Field(default=0, ge=0, le=1000)
+    receiver_fps: float = Field(default=0, ge=0, le=1000)
+    frame_count: int = Field(default=0, ge=0)
+    dropped_frames: int = Field(default=0, ge=0)
+    last_frame_age_ms: int = Field(default=0, ge=0)
+    adapter_match: bool = False
+    sender_adapter: str | None = Field(default=None, max_length=255)
+    receiver_adapter: str | None = Field(default=None, max_length=255)
+    memory_bytes: int = Field(default=0, ge=0)
+    error: str | None = Field(default=None, max_length=128)
+
+
 class ImportanceUpdate(BaseModel):
     importance: int = Field(ge=1, le=10)
 
@@ -67,7 +87,10 @@ class ImportanceUpdate(BaseModel):
 class VoiceLabRequest(VoiceSynthesisOptions):
     provider: str = Field(pattern=r"^(chatterbox|chatterbox_multilingual_v3|chatterbox_ptbr|kokoro|edge_tts)$")
     text: str = Field(min_length=1, max_length=4000)
-    state: str = Field(default="neutral", pattern=r"^(neutral|happy|curious|focused|concerned|amused|tired|surprised)$")
+    state: str = Field(
+        default="neutral",
+        pattern=r"^(neutral|friendly|focused|confident|positive|happy|relieved|concerned|warning|serious|empathetic|curious|surprised|amused|apologetic|uncertain|calm)$",
+    )
 
 
 class VoiceProfileUpdate(VoiceSynthesisOptions):
@@ -116,7 +139,7 @@ __all__ = [
     "RealtimeSettingsUpdate", "VoiceProcessorConfig", "VoiceProcessorRequest",
     "SkillExecutionRequest", "SkillSettingsUpdate",
     "BrainBenchmarkRequest", "BrainSelectionRequest",
-    "VTSSettingsUpdate", "Live2DLipSyncRequest", "Live2DCursorRequest",
+    "VTSSettingsUpdate", "Live2DLipSyncRequest", "Live2DCursorRequest", "VTSPresenceReport",
     "ShellApprovalDecision",
     "AudioSettingsUpdate", "InterruptionRequest",
 ]

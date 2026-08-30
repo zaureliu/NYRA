@@ -45,6 +45,7 @@ class ApplicationCandidate:
     confidence: float = 0.0
     expected_window: bool = True
     process_names: tuple[str, ...] = ()
+    aliases: tuple[str, ...] = ()
 
     def public_dict(self) -> dict:
         return {
@@ -56,6 +57,7 @@ class ApplicationCandidate:
             "confidence": round(self.confidence, 3),
             "expected_window": self.expected_window,
             "process_names": list(self.process_names),
+            "aliases": list(self.aliases),
         }
 
 
@@ -445,7 +447,10 @@ class ApplicationDiscovery:
             existing = entries.get(key)
             if existing is None or candidate.confidence > existing.confidence:
                 entries[key] = candidate
-        self.cache.entries = list(entries.values())
+        # Discovery sources describe launch routes, not distinct apps.
+        from app.desktop.canonical_apps import canonicalize_candidates
+
+        self.cache.entries = canonicalize_candidates(entries.values())
         self.cache.indexed_at = time.monotonic()
         return self.cache.entries
 
@@ -454,7 +459,7 @@ class ApplicationDiscovery:
         normalized = normalize(app_id)
         return [
             candidate for candidate in self.index()
-            if candidate.id == normalized
+            if normalize(candidate.id) == normalized
         ]
 
     # ------------------------------------------------------------- search
@@ -476,14 +481,15 @@ class ApplicationDiscovery:
     def search(self, query: str, limit: int = 8) -> list[ApplicationCandidate]:
         if not self.enabled or len(query.strip()) < 2:
             return []
-        scored: list[ApplicationCandidate] = []
+        scored_by_identity: dict[str, ApplicationCandidate] = {}
         for candidate in self.index():
-            confidence = score_match(query, candidate.display_name)
-            if candidate.id == normalize(query):
+            names = (candidate.display_name, *candidate.aliases)
+            confidence = max(score_match(query, name) for name in names if name)
+            if normalize(candidate.id) == normalize(query):
                 confidence = max(confidence, 1.0)
             if confidence <= 0:
                 continue
-            scored.append(ApplicationCandidate(
+            scored = ApplicationCandidate(
                 id=candidate.id,
                 display_name=candidate.display_name,
                 source=candidate.source,
@@ -491,7 +497,13 @@ class ApplicationDiscovery:
                 target=candidate.target,
                 confidence=min(confidence, 1.0),
                 expected_window=candidate.expected_window,
-            ))
+                process_names=candidate.process_names,
+                aliases=candidate.aliases,
+            )
+            previous = scored_by_identity.get(scored.id)
+            if previous is None or scored.confidence > previous.confidence:
+                scored_by_identity[scored.id] = scored
+        scored = list(scored_by_identity.values())
         scored.sort(key=lambda item: (-item.confidence, item.display_name))
         return scored[:limit]
 
@@ -516,8 +528,7 @@ class ApplicationDiscovery:
             return {"status": "NOT_FOUND", "candidates": [], "query": query}
         exact = [item for item in candidates if item.confidence >= 1.0]
         high = [item for item in candidates if item.confidence >= 0.85]
-        exact_ids = {item.id for item in exact}
-        if len(exact_ids) == 1:
+        if len(exact) == 1:
             best = max(exact, key=lambda item: item.confidence)
             return {
                 "status": "EXACT_MATCH",

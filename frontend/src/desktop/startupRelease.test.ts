@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import launcher from '../../../scripts/start-nyra.ps1?raw'
+import runtimePaths from '../../../scripts/runtime-paths.ps1?raw'
 import hiddenEntry from '../../../scripts/launch-nyra.vbs?raw'
 import shortcutInstaller from '../../../scripts/install-shortcut.ps1?raw'
 import desktopNative from '../../../desktop/src-tauri/src/lib.rs?raw'
@@ -11,7 +12,9 @@ describe('release startup', () => {
     expect(launcher).toContain('ollama_preload_owner backend=true')
     expect(launcher).not.toContain("keep_alive = '30m'")
     expect(launcher).toContain('/health')
-    expect(launcher).toContain('.venv\\Scripts\\python.exe')
+    expect(launcher).toContain('Find-NyraPythonExecutable')
+    expect(runtimePaths).toContain("'.venv\\Scripts\\python.exe'")
+    expect(runtimePaths).toContain("'backend\\.venv\\Scripts\\python.exe'")
     expect(launcher).not.toContain('127.0.0.1:5173')
     expect(launcher).not.toContain('npm.cmd')
   })

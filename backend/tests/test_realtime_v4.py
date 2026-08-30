@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import re
 
 import numpy as np
 import pytest
@@ -25,6 +26,8 @@ from app.realtime.orchestrator import RealtimeOrchestrator
 from app.realtime.sentence_assembler import SentenceAssembler
 from app.realtime.settings import V4SettingsManager
 from app.realtime.telemetry import RealtimeTelemetry
+from app.computer.pipeline import HandleResult
+from app.desktop.models import operation_result
 from app.skills.models import SkillDefinition, SkillPermission
 from app.skills.registry import SkillRegistry
 from app.speech.queue import SpeechQueue
@@ -159,6 +162,65 @@ def test_streaming_starts_tts_before_llm_finishes_and_keeps_order(tmp_path: Path
         assert len(result.audio_urls) == 2
         assert result.timing["end_to_first_audio_ms"] < result.timing["response_complete_ms"]
         await speech.stop()
+    asyncio.run(run())
+
+
+def test_app_action_tts_receives_only_user_facing_response(tmp_path: Path):
+    class AppActionComputer:
+        async def handle_user_request(self, *_args, **_kwargs):
+            internal = operation_result(
+                success=True,
+                app="canva",
+                action="launch_dynamic",
+                message="Aberto: canva (PID 10184, HWND 263606, verification=true).",
+                execution_success=True,
+                effect_verified=True,
+                verification_status="VERIFIED",
+                detail={
+                    "pid": 10184,
+                    "windows": [{"pid": 10184, "hwnd": 263606}],
+                    "foreground": True,
+                },
+            )
+            return HandleResult(
+                handled=True,
+                reply=internal["user_facing_response"],
+                intent_action="OPEN_APP",
+                target="canva",
+                verified=True,
+            )
+
+    async def run():
+        bus = EventBus()
+        memory = MemoryRepository(tmp_path / "app-action-memory.db", bus)
+        await memory.initialize()
+        llm = StreamingMock()
+        tts = RecordingTTS(tmp_path)
+        speech = SpeechQueue()
+        speech.start()
+        settings = V4SettingsManager(tmp_path / "app-action-v4.json")
+        settings.value.voice_processor.enabled = False
+        perception = PCAwareness(bus, settings.value.realtime, settings.value.privacy)
+        orchestrator = RealtimeOrchestrator(
+            llm, memory, StateMachine(memory, bus), bus, tts, speech,
+            settings_manager=settings, telemetry=RealtimeTelemetry(),
+            perception=perception, avatar=AvatarController(bus),
+            voice_processor=VoiceProcessor(settings.value.voice_processor),
+        )
+        orchestrator.computer = AppActionComputer()
+
+        result = await orchestrator.converse("abre o Canva", synthesize=True)
+
+        assert result.response == "Canva aberto."
+        assert result.display_text == "Canva aberto."
+        assert result.speech_text == "Canva aberto."
+        assert tts.calls == ["Canva aberto."]
+        assert not re.search(
+            r"(?i)\b(pid|hwnd|verification|foreground|process|tool)\b",
+            " ".join(tts.calls),
+        )
+        await speech.stop()
+
     asyncio.run(run())
 
 

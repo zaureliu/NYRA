@@ -1,7 +1,7 @@
 import { usePolling } from '../hooks'
 import { Card, Empty, ErrorAlert, StatusBadge, formatRelative } from '../ui'
 import { OperatorActivityPanel } from '../../components/OperatorActivityPanel'
-import type { HealthReport } from '../types'
+import type { HealthReport, IntelligenceStatus } from '../types'
 
 interface SentinelStatusLite {
   enabled: boolean
@@ -21,6 +21,8 @@ export function OverviewPage({ activityFeed }: {
   const health = usePolling<HealthReport>('/api/health_report', 15000)
   const sentinel = usePolling<SentinelStatusLite>('/api/sentinel-watch/status', 6000)
   const ha = usePolling<HAStatusLite>('/api/home-assistant/status', 20000)
+  const intelligence = usePolling<IntelligenceStatus>('/api/intelligence/status', 10000, { clearOnError: true, noStore: true })
+  const selfdev = usePolling<{ state: string }>('/api/selfdev/status', 10000, { clearOnError: true, noStore: true })
 
   const subsystemState = (...names: string[]): string => {
     const entries = names
@@ -36,6 +38,15 @@ export function OverviewPage({ activityFeed }: {
 
   const overall = health.data?.overall ?? 'UNKNOWN'
   const alertsCount = countAlerts(activityFeed)
+  const intelligenceState = (...ids: string[]): string => {
+    if (!intelligence.data) return 'UNKNOWN'
+    const values = ids
+      .map((id) => intelligence.data?.capabilities.capabilities.find((item) => item.id === id)?.state)
+      .filter((value): value is string => Boolean(value))
+    if (values.length === 0) return 'UNKNOWN'
+    return mergeStates(...values)
+  }
+  const selectedModel = intelligence.data?.model_router.last_route?.selected_model || 'Aguardando primeira rota'
 
   return (
     <div>
@@ -49,6 +60,7 @@ export function OverviewPage({ activityFeed }: {
       </header>
 
       <ErrorAlert message={health.error} />
+      <ErrorAlert message={intelligence.error} />
 
       <div className="ops-card-grid">
         <Card title="NYRA Core" sub="API + memória + banco"><StatusBadge state={subsystemState('api', 'memory', 'database')} /></Card>
@@ -63,6 +75,22 @@ export function OverviewPage({ activityFeed }: {
         <Card title="Home Assistant" sub={ha.data?.configured ? 'Configurado' : 'Sem URL/token'}>
           <StatusBadge state={mapHA(ha.data)} />
         </Card>
+      </div>
+
+      <h2 className="ops-section-title">Intelligence Platform</h2>
+      <div className="ops-card-grid">
+        <Card title="Brain / Model Router" sub={selectedModel}><StatusBadge state={intelligenceState('model_router_v2')} /></Card>
+        <Card title="Memory V2" sub={intelligence.data ? `${intelligence.data.counts.memory} registros persistentes` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('memory_v2')} /></Card>
+        <Card title="RAG local" sub={intelligence.data ? `${intelligence.data.counts.documents} documentos · ${intelligence.data.counts.chunks} chunks` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('rag_local')} /></Card>
+        <Card title="Context Engine" sub={intelligence.data ? `Budget ${intelligence.data.context.budget_characters} caracteres` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('context_engine')} /></Card>
+        <Card title="Task Engine" sub={intelligence.data ? `${intelligence.data.tasks.active_or_queued} ativas ou em fila` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('autonomous_tasks_v2')} /></Card>
+        <Card title="Event Intelligence" sub={intelligence.data ? `${intelligence.data.counts.events} eventos correlacionáveis` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('event_intelligence')} /></Card>
+        <Card title="Trace / Replay" sub={intelligence.data ? `${intelligence.data.counts.traces} entradas · ${intelligence.data.trace.dropped_events} descartadas` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('trace_replay')} /></Card>
+        <Card title="Skills / Capabilities" sub={intelligence.data ? `${intelligence.data.capabilities.capabilities.length} capabilities observadas` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('skill_catalog')} /></Card>
+        <Card title="Browser" sub="CDP · DOM · conteúdo não confiável"><StatusBadge state={intelligenceState('browser_control')} /></Card>
+        <Card title="Desktop / Vision" sub={intelligence.data?.vision.details?.models?.join(', ') || 'Visão estrutural local'}><StatusBadge state={mergeStates(intelligenceState('desktop_control'), intelligenceState('vision'))} /></Card>
+        <Card title="Diagnostics" sub={intelligence.data ? `${intelligence.data.diagnostic_domains.length} domínios` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('diagnostics_engine')} /></Card>
+        <Card title="SelfDev" sub="Lifecycle isolado + rollback"><StatusBadge state={selfdev.data?.state ?? 'UNKNOWN'} /></Card>
       </div>
 
       <div className="ops-grid-2" style={{ marginTop: 16 }}>
@@ -105,11 +133,14 @@ export function OverviewPage({ activityFeed }: {
   )
 }
 
-function mergeStates(a: string, b: string): string {
-  for (const candidate of [a, b]) {
+function mergeStates(...states: string[]): string {
+  for (const candidate of states) {
     if (['FAILED', 'OFFLINE', 'DEGRADED', 'DISABLED'].includes(candidate)) return candidate
   }
-  return 'READY'
+  if (states.some((state) => ['UNCONFIGURED', 'BLOCKED', 'UNKNOWN'].includes(state))) {
+    return states.find((state) => ['UNCONFIGURED', 'BLOCKED', 'UNKNOWN'].includes(state)) || 'UNKNOWN'
+  }
+  return states.length > 0 ? 'READY' : 'UNKNOWN'
 }
 
 function mapSentinel(state: string | undefined): string {

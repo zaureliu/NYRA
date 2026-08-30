@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { AudioSettingsValue } from '../hooks/useAudioSettings'
 import type { MicrophoneAvailability, MicrophonePermission } from '../hooks/audioDevices'
-import { backendObjectUrl, releaseBackendObjectUrl } from '../runtime/backend'
 import { MicrophoneTest } from './MicrophoneTest'
 
 interface ConversationStatus {
   state: string
   stt?: { provider?: string; model?: string; loaded?: boolean }
-  tts?: { primary?: string; fallback?: string }
+  tts?: { primary?: string; fallback?: string; emotion_engine_supported?: boolean }
   ollama?: { state?: string; model?: string; keep_alive?: string; metrics?: Record<string, number> }
   performance?: { stt_latency_ms?: number; llm_first_token_ms?: number; end_to_first_audio_ms?: number; playback_start_ms?: number }
 }
@@ -44,13 +43,7 @@ export function AudioSettings({ value, devices, microphoneAvailability, micropho
       const response = await fetch('/api/audio/test-voice', { method: 'POST' })
       const result = await response.json()
       if (!response.ok) throw new Error(result.detail ?? 'Falha no teste de voz')
-      const sourceUrl = await backendObjectUrl(result.audio_url)
-      const audio = new Audio(sourceUrl); audio.volume = draft.volume
-      const release = () => releaseBackendObjectUrl(sourceUrl)
-      audio.addEventListener('ended', release, { once: true })
-      audio.addEventListener('error', release, { once: true })
-      if (draft.speaker !== 'default' && 'setSinkId' in audio) await (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(draft.speaker)
-      await audio.play(); setMessage(`${result.provider} · primeiro arquivo em ${result.synthesis_ms} ms`)
+      setMessage(`${result.provider} · playback confirmado em ${result.playback_start_ms} ms`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha no teste de voz') }
     finally { setBusy(false) }
   }
@@ -61,7 +54,9 @@ export function AudioSettings({ value, devices, microphoneAvailability, micropho
       <div className="settings-grid">
         <label>Microfone<select value={draft.microphone} onChange={(event) => change('microphone', event.target.value)}><option value="default">Padrão do sistema</option>{devices.filter((item) => item.kind === 'audioinput').map((item) => <option value={item.deviceId} key={item.deviceId}>{item.label || `Entrada ${item.deviceId.slice(0, 6)}`}</option>)}</select></label>
         <label>Saída de áudio<select value={draft.speaker} onChange={(event) => change('speaker', event.target.value)}><option value="default">Padrão do sistema</option>{devices.filter((item) => item.kind === 'audiooutput').map((item) => <option value={item.deviceId} key={item.deviceId}>{item.label || `Saída ${item.deviceId.slice(0, 6)}`}</option>)}</select></label>
-        <div className="setting-readonly"><span>Voz da NYRA</span><strong>{status?.tts?.primary === 'kokoro' ? 'Dora · Kokoro local pt-BR' : (status?.tts?.primary ?? 'Carregando…')}</strong></div>
+        <div className="setting-readonly"><span>Voz da NYRA</span><strong>{status?.tts?.primary === 'kokoro' ? 'NYRA · Feminina V2 local pt-BR' : (status?.tts?.primary ?? 'Carregando…')}</strong></div>
+        <label>Emotion Mode<select value={draft.emotion_mode} onChange={(event) => change('emotion_mode', event.target.value as AudioSettingsValue['emotion_mode'])}><option value="automatic">Automatic</option><option value="neutral_only">Neutral Only</option></select></label>
+        <label>Expressiveness<select value={draft.expressiveness} onChange={(event) => change('expressiveness', event.target.value as AudioSettingsValue['expressiveness'])}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label>
         <label>Velocidade <output>{draft.speech_speed.toFixed(2)}×</output><input type="range" min=".7" max="1.3" step=".01" value={draft.speech_speed} onChange={(event) => change('speech_speed', Number(event.target.value))}/></label>
         <label>Volume <output>{Math.round(draft.volume * 100)}%</output><input type="range" min="0" max="1" step=".05" value={draft.volume} onChange={(event) => change('volume', Number(event.target.value))}/></label>
       </div>
@@ -82,6 +77,7 @@ export function AudioSettings({ value, devices, microphoneAvailability, micropho
         <span>Microfone <b>{microphonePermission === 'denied' ? 'Permissão negada' : microphoneAvailability}</b></span>
         <span>STT <b>{status?.stt?.provider ?? '—'} · {status?.stt?.loaded ? 'Ready' : 'Loading'}</b></span>
         <span>TTS <b>{status?.tts?.primary ?? '—'} / fallback {status?.tts?.fallback ?? '—'}</b></span>
+        <span>Emotion Engine <b>{status?.tts?.emotion_engine_supported ? 'Native' : 'Planner / neutral acoustic fallback'}</b></span>
         <span>Ollama <b>{status?.ollama?.state ?? '—'} · {status?.ollama?.model ?? '—'}</b></span>
         <span>Keep alive <b>{status?.ollama?.keep_alive ?? '—'}</b></span>
         <span>Conversation <b>{status?.state ?? '—'}</b></span>

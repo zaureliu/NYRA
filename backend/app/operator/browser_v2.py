@@ -24,6 +24,8 @@ from typing import Any
 from app.desktop.browser import _http_json, _tabs, _ws_command
 from app.desktop.control import operation_result
 from app.tools.redaction import redact_secrets
+from app.intelligence.models import TrustBoundary
+from app.intelligence.trust import detect_prompt_injection
 
 _DOWNLOAD_DIR_NAME = "downloads"
 
@@ -189,6 +191,15 @@ class BrowserV2Controller:
                 return {}
         return value if isinstance(value, dict) else {}
 
+    @staticmethod
+    def _web_trust(value: Any) -> dict[str, Any]:
+        serialized = json.dumps(value, ensure_ascii=False, default=str)[:50_000]
+        return {
+            "trust_boundary": TrustBoundary.WEB_CONTENT.value,
+            "instruction_authority": False,
+            "prompt_injection_flags": detect_prompt_injection(serialized),
+        }
+
     async def resolve_tab(self, port: int, tab_id: str = "") -> tuple[str | None, dict | None]:
         tabs = await asyncio.to_thread(_tabs, port)
         if tab_id.strip():
@@ -337,6 +348,7 @@ class BrowserV2Controller:
             "nodes": document.get("nodes", [])[:max_nodes],
             "effect_verified": True,
             "verification_status": "VERIFIED",
+            **self._web_trust(document),
         }
 
     async def find_element(self, *, role: str = "", label: str = "", text: str = "",
@@ -363,7 +375,8 @@ class BrowserV2Controller:
                                     error_code="FIND_FAILED")
         return {"success": True, "tab_id": resolved, "count": found.get("count", 0),
                 "elements": found.get("elements", []),
-                "effect_verified": True, "verification_status": "VERIFIED"}
+                "effect_verified": True, "verification_status": "VERIFIED",
+                **self._web_trust(found)}
 
     def _require_interaction_approval(self, approvals, *, action: str, tab_id: str,
                                       url: str, parameters: dict,

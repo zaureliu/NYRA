@@ -24,7 +24,7 @@ stt_beam_size: 1
 stt_cpu_threads: 4
 stt_workers: 1
 silence_threshold: 0.018
-tts_provider: kokoro
+tts_provider: edge_tts
 edge_tts_enabled: true
 edge_tts_default_locale: pt-BR
 edge_tts_gender_filter: Female
@@ -40,7 +40,8 @@ adult_mode_enabled: false
 tts_language: pt-BR
 tts_model_path: data/models/kokoro-v1.0.int8.onnx
 tts_voices_path: data/models/voices-v1.0.bin
-tts_voice: pf_dora
+tts_voice: en-US-AvaMultilingualNeural
+tts_voice_identity_version: ava-v1
 tts_speaking_rate: 0.97
 tts_fallback_provider: pyttsx3
 chatterbox_python: .venv-chatterbox/Scripts/python.exe
@@ -70,6 +71,8 @@ listening_audio_debug: false
 conversation_engine: true
 voice_barge_in: true
 voice_stream_tts: true
+voice_emotion_mode: automatic
+voice_expressiveness: normal
 network_watch_enabled: false
 network_voice_alerts: true
 network_desktop_alerts: true
@@ -103,7 +106,6 @@ ssh_connect_timeout_seconds: 5
 ssh_command_timeout_seconds: 30
 ssh_max_timeout_seconds: 300
 ssh_max_output_chars: 50000
-trusted_hosts_path: config/network_aliases.json
 agent_enabled: true
 agent_max_steps: 12
 agent_max_tool_calls: 20
@@ -115,7 +117,7 @@ agent_max_identical_repeats: 2
 agent_max_consecutive_failures: 3
 selfdev_mode: AUTONOMOUS_SAFE
 selfdev_model: qwen3:8b
-selfdev_workspace: ../nyra-selfdev
+selfdev_workspace: ../Nyra-Auto-Code
 selfdev_canonical_root: .
 selfdev_public_snapshot: ../NYRA-GitHub-Public
 selfdev_run_when_idle: true

@@ -12,6 +12,25 @@ export const extractTurnId = (payload: Record<string, unknown>): string | null =
 }
 
 /**
+ * Every input accepted by the backend starts a globally visible turn. The
+ * packaged Desktop Presence is the single audio owner, so it must adopt turns
+ * started by the dashboard, microphone or a Voice Satellite as well as turns
+ * submitted by its own text box.
+ */
+export const isTurnStartEvent = (eventType: string): boolean =>
+  eventType === 'USER_TEXT_RECEIVED'
+
+export const adoptInputTurn = (
+  filter: TurnFilter,
+  eventType: string,
+  turnId: string | null,
+): boolean => {
+  if (!turnId || !isTurnStartEvent(eventType)) return false
+  filter.begin(turnId)
+  return true
+}
+
+/**
  * Drops events that belong to a finished or superseded turn so a late token,
  * response or audio chunk from turn A can never be attached to turn B (#26, #27).
  * Events without any turn marker (legacy) are accepted unchanged.

@@ -7,7 +7,7 @@ from app.core.config import Settings
 from app.character.response_style import apply_response_style
 from app.speech.prosody import PronunciationDictionary, ProsodyProcessor
 from app.speech.profile import VoiceSynthesisOptions, load_voice_profile
-from app.speech.tts import ChatterboxTTSProvider, FallbackTTSProvider, KokoroTTSProvider, TTSProvider, create_tts_provider
+from app.speech.tts import ChatterboxTTSProvider, EdgeTTSProvider, FallbackTTSProvider, KokoroTTSProvider, TTSProvider, create_tts_provider
 from app.speech.vad import VADConfig
 
 
@@ -52,9 +52,9 @@ def test_emotional_state_changes_voice_subtly():
 
 def test_official_voice_profile_contains_only_supported_parameters():
     raw, options = load_voice_profile()
-    assert raw["profile_id"] == "NYRA_VOICE"
-    assert options.provider == "kokoro"
-    assert options.voice == "pf_dora"
+    assert raw["profile_id"] == "NYRA_VOICE_AVA_V1"
+    assert options.provider == "edge_tts"
+    assert options.voice == "en-US-AvaMultilingualNeural"
     assert "expressiveness" not in raw
     assert "provider_parameters" not in raw
 
@@ -79,6 +79,34 @@ def test_vad_and_device_settings_validate():
         VADConfig(threshold=1.5)
 
 
+def test_legacy_voice_default_migrates_to_approved_ava(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config._yaml_defaults",
+        lambda: {"tts_provider": "kokoro", "tts_voice": "pf_dora"},
+    )
+    settings = Settings.from_sources()
+    assert settings.tts_provider == "edge_tts"
+    assert settings.tts_voice == "en-US-AvaMultilingualNeural"
+    assert settings.tts_voice_identity_version == "ava-v1"
+
+
+@pytest.mark.asyncio
+async def test_edge_primary_retained_when_startup_is_offline(tmp_path: Path):
+    selected = await create_tts_provider(
+        "edge_tts",
+        "pt-BR",
+        tmp_path / "model",
+        tmp_path / "voices",
+        voice="en-US-AvaMultilingualNeural",
+    )
+    assert isinstance(selected, FallbackTTSProvider)
+    assert isinstance(selected.primary, EdgeTTSProvider)
+    assert selected.engine_id == "edge_neural"
+    assert selected.active_voice == "en-US-AvaMultilingualNeural"
+    assert isinstance(selected.fallback, FallbackTTSProvider)
+    assert selected.fallback.primary.default_voice == "pf_dora"
+
+
 @pytest.mark.asyncio
 async def test_tts_provider_selection_keeps_kokoro(monkeypatch, tmp_path: Path):
     async def available(_self): return True
@@ -95,19 +123,38 @@ async def test_chatterbox_falls_back_to_kokoro(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(ChatterboxTTSProvider, "health", unavailable)
     monkeypatch.setattr(KokoroTTSProvider, "health", available)
     selected = await create_tts_provider("chatterbox", "pt-BR", tmp_path / "model", tmp_path / "voices", chatterbox_python=tmp_path / "python.exe")
-    assert isinstance(selected, KokoroTTSProvider)
+    assert isinstance(selected, FallbackTTSProvider)
+    assert isinstance(selected.primary, KokoroTTSProvider)
 
 
 @pytest.mark.asyncio
 async def test_runtime_tts_fallback(tmp_path: Path):
     class Broken(TTSProvider):
         name = "broken"
+        attempts = 0
+        @property
+        def default_voice(self): return "primary_voice"
         async def health(self): return True
-        async def synthesize(self, text, state="neutral", options=None): raise RuntimeError("boom")
+        async def synthesize(self, text, state="neutral", options=None):
+            self.attempts += 1
+            if self.attempts == 1: raise RuntimeError("boom")
+            output = tmp_path / "primary.wav"; output.write_bytes(b"RIFFprimary"); return output
     class Working(TTSProvider):
         name = "working"
+        @property
+        def default_voice(self): return "fallback_voice"
         async def health(self): return True
         async def synthesize(self, text, state="neutral", options=None):
             output = tmp_path / "fallback.wav"; output.write_bytes(b"RIFFfallback"); return output
-    output = await FallbackTTSProvider(Broken(), Working()).synthesize("teste")
+    provider = FallbackTTSProvider(Broken(), Working())
+    output = await provider.synthesize("teste")
     assert output.read_bytes().startswith(b"RIFF")
+    assert provider.fallback_active is True
+    assert provider.active_engine == "working"
+    assert provider.active_voice == "fallback_voice"
+    assert provider.fallback_reason == "RuntimeError"
+    recovered = await provider.synthesize("teste novamente")
+    assert recovered.name == "primary.wav"
+    assert provider.fallback_active is False
+    assert provider.active_engine == "broken"
+    assert provider.active_voice == "primary_voice"

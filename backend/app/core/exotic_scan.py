@@ -45,7 +45,8 @@ def main() -> int:
                     marked = EXOTIC.sub(lambda m: f"[[{m.group(0)} U+{ord(m.group(0)):04X}]]", line.strip())
                     out.append(f"  {i}: {marked[:170]}")
     out.append(f"TOTAL: {total}")
-    report = Path(__file__).with_name("exotic_scan_report.txt")
+    report = ROOT / ".tmp" / "exotic-scan-report.txt"
+    report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(out), encoding="utf-8")
     print(f"lines={total} report={report}")
     return 0

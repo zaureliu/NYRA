@@ -14,7 +14,9 @@ O setup inicial cria o ambiente Python, copia `.env.example` quando necessário 
 
 O sidecar PyInstaller em `packaging/dist/nyra-backend` é validado por fingerprint das fontes e reconstruído automaticamente quando ausente ou stale, sempre antes de Tauri dev/build. `node_modules/`, `frontend/dist/`, `packaging/dist/` e `desktop/src-tauri/target/` são artefatos locais regeneráveis e permanecem fora do Git.
 
-O código operacional fica na raiz clonada. O Self-Development Engine usa um workspace configurável fora dela para índice, estado e worktrees isolados; o snapshot público sanitizado também é configurável e separado do runtime. Banco, logs, filas, métricas e relatórios mutáveis são gravados em `%LOCALAPPDATA%\NYRA` (ou em `NYRA_DATA_HOME`, quando explicitamente configurado), nunca dentro da árvore Git.
+O código operacional fica na raiz clonada. O Self-Development Engine usa roots configuráveis fora dela para candidates/worktrees e para o snapshot público. Banco, logs, filas, métricas e relatórios mutáveis são gravados em `%LOCALAPPDATA%\NYRA` (ou em `NYRA_DATA_HOME`, quando explicitamente configurado), nunca dentro da árvore Git.
+
+Copie `config/network_aliases.example.json` e `config/homelab_hosts.example.yaml` para os nomes `.local.*` indicados no README antes de configurar hosts reais. Esses arquivos locais e quaisquer credenciais não entram no Git.
 
 Parada e status:
 

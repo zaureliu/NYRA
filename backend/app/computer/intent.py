@@ -109,7 +109,7 @@ class IntentUnderstandingService:
         )
 
         value = " ".join((text or "").strip().split())
-        if not value or len(value) > 120:
+        if not value or len(value) > 2200:
             self.last_failure_reason = "invalid_input"
             return None
 
@@ -146,6 +146,60 @@ class IntentUnderstandingService:
             )
 
         # 2) fast path determinístico existente (§26)
+        from app.desktop.compound import parse_compound_intent
+
+        compound = parse_compound_intent(value)
+        if compound is not None:
+            target = compound.target
+            resolved: ResolvedTarget | None = None
+            references: list[str] = []
+            if compound.contextual:
+                references.append("ele")
+                context_started = time.perf_counter()
+                resolved = self.state.resolve_reference(
+                    "ele", conversation_id=conversation_id, turn_id=turn_id,
+                ) if self.state is not None else None
+                self.metrics["context_resolve_ms"] = round(
+                    (time.perf_counter() - context_started) * 1000, 2,
+                )
+                if resolved is None:
+                    self.last_failure_reason = "context_unresolved"
+                    return None
+                target = resolved.display_name
+            plan = [
+                PlanStep(
+                    step=index,
+                    capability=step.capability,
+                    target=step.target or target,
+                    arguments=dict(step.arguments),
+                )
+                for index, step in enumerate(compound.steps, start=1)
+            ]
+            final_arguments = dict(plan[-1].arguments) if plan else {}
+            return NormalizedUserIntent(
+                turn_id=turn_id or "",
+                conversation_id=conversation_id,
+                action="PLAN",
+                target=target,
+                arguments={
+                    "plan_kind": "compound_app",
+                    "final_action": compound.final_action,
+                    **final_arguments,
+                },
+                references=references,
+                desired_result="sequência local concluída e verificada por etapa",
+                risk_hint="ELEVATED" if compound.final_action == "send_text" else "LOW_RISK",
+                confidence=compound.confidence,
+                requires_context=compound.contextual,
+                source_channel=channel,
+                plan=plan,
+                resolved=resolved,
+                raw_action="PLAN",
+                raw_target=target,
+                raw_contextual=compound.contextual,
+                raw_explicit_new=compound.explicit_new,
+            )
+
         parsed = parse_universal_intent(value)
         if parsed is None:
             resolved_bare = self._bare_imperative(
@@ -228,5 +282,6 @@ class IntentUnderstandingService:
             for token in (
                 "abre", "abrir", "fecha", "fechar", "minimiza", "maximiza",
                 "restaura", "traz", "foca", "salva", "digita", "escreve",
+                "envia", "mande", "pesquisa", "busca",
             )
         )

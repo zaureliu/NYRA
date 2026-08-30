@@ -19,6 +19,11 @@ from app.computer.verification import EffectVerificationService, VerifiedEffect
 from app.computer.usage import UsageLearningService, WorkflowCandidate
 from app.computer.skills_memory import SkillMemoryService
 from app.computer.pipeline import ComputerAutonomyService, HandleResult
+from app.computer.artifacts import (
+    ArtifactContextService,
+    RecentArtifact,
+    RecentArtifactMemory,
+)
 
 __all__ = [
     "ComputerPerceptionService",
@@ -32,4 +37,7 @@ __all__ = [
     "SkillMemoryService",
     "ComputerAutonomyService",
     "HandleResult",
+    "ArtifactContextService",
+    "RecentArtifact",
+    "RecentArtifactMemory",
 ]

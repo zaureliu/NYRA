@@ -2,7 +2,7 @@
 
 Profiles reais e persistentes para a integração Home Assistant:
 
-    * ``ha-vm``        — VM atual (http://192.168.1.200 por default).
+    * ``ha-vm``        — perfil de VM sem URL pública predefinida.
     * ``ha-physical``  — placeholder físico-ready (nunca contatado até existir
       hardware configurado; §191).
 

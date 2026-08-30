@@ -8,6 +8,7 @@ from enum import IntEnum
 from pathlib import Path
 
 from app.core.turn import get_current_turn_id
+from app.speech.profile import VoiceSynthesisOptions
 from app.speech.tts import TTSProvider
 
 
@@ -31,6 +32,7 @@ class _SpeechItem:
     turn_id: str | None = field(default=None, compare=False)
     conversation_id: str | None = field(default=None, compare=False)
     created_at: float = field(default=0.0, compare=False)
+    options: VoiceSynthesisOptions | None = field(default=None, compare=False)
 
 
 class SpeechQueue:
@@ -51,11 +53,13 @@ class SpeechQueue:
         # Apêndice PRO C — contadores de integridade do TTS.
         self.counters = {
             "tts_items_created": 0,
+            "tts_items_synthesized": 0,
             "tts_items_played": 0,
             "tts_items_cancelled": 0,
             "tts_items_stale_dropped": 0,
             "tts_order_violations": 0,
         }
+        self._playback_confirmed: set[str] = set()
 
     def start(self) -> None:
         if self._worker is None or self._worker.done():
@@ -80,6 +84,7 @@ class SpeechQueue:
         chunk_index: int | None = None,
         turn_id: str | None = None,
         conversation_id: str | None = None,
+        options: VoiceSynthesisOptions | None = None,
     ) -> Path:
         self.start()
         loop = asyncio.get_running_loop()
@@ -95,7 +100,7 @@ class SpeechQueue:
         await self._queue.put(
             _SpeechItem(
                 int(priority), next(self._sequence), provider, text, state, result,
-                response_id, chunk_index, turn_id, conversation_id, time.time(),
+                response_id, chunk_index, turn_id, conversation_id, time.time(), options,
             )
         )
         return await result
@@ -179,6 +184,16 @@ class SpeechQueue:
     def pending(self) -> int:
         return self._queue.qsize() + int(bool(self._active and not self._active.done()))
 
+    def playback_started(self, response_id: str) -> bool:
+        """Count only a real player acknowledgement, once per response."""
+        if not response_id or response_id in self._playback_confirmed:
+            return False
+        self._playback_confirmed.add(response_id)
+        if len(self._playback_confirmed) > 400:
+            self._playback_confirmed.pop()
+        self.counters["tts_items_played"] += 1
+        return True
+
     async def _run(self) -> None:
         last_user_chunk: tuple[str | None, int | None] | None = None
         while True:
@@ -186,6 +201,8 @@ class SpeechQueue:
             try:
                 if item.priority == SpeechPriority.USER and item.chunk_index is not None:
                     last_turn, last_index = last_user_chunk or (None, None)
+                    if item.turn_id != last_turn:
+                        last_index = None
                     if (
                         last_turn is not None
                         and item.turn_id == last_turn
@@ -196,14 +213,21 @@ class SpeechQueue:
                         self.counters["tts_order_violations"] += 1
                     last_user_chunk = (item.turn_id, max(item.chunk_index, last_index if last_index is not None else -1))
                 self._active_item = item
-                self._active = asyncio.create_task(
-                    item.provider.synthesize(item.text, item.state),
-                    name="nyra-tts-synthesis",
+                synthesis = (
+                    item.provider.synthesize(item.text, item.state, item.options)
+                    if item.options is not None
+                    else item.provider.synthesize(item.text, item.state)
                 )
-                output = await self._active
+                self._active = asyncio.create_task(synthesis, name="nyra-tts-synthesis")
+                output = Path(await self._active)
+                if not output.is_absolute():
+                    raise FileNotFoundError(f"TTS provider returned a relative output path: {output}")
+                output = output.resolve(strict=True)
+                if not output.is_file() or output.stat().st_size <= 0:
+                    raise FileNotFoundError(f"TTS output is not a readable file: {output}")
                 if not item.result.done():
-                    item.result.set_result(Path(output))
-                self.counters["tts_items_played"] += 1
+                    item.result.set_result(output)
+                self.counters["tts_items_synthesized"] += 1
             except asyncio.CancelledError:
                 if not item.result.done():
                     item.result.cancel()

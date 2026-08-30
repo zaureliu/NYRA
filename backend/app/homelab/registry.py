@@ -1,7 +1,7 @@
 """Unified Host Registry.
 
-Single source of truth for homelab hosts. Loaded from
-``config/homelab_hosts.yaml`` (path overridable via NYRA_HOMELAB_REGISTRY_PATH).
+Single source of truth for homelab hosts. Loaded from an ignored local registry
+(path overridable via NYRA_HOMELAB_REGISTRY_PATH).
 The registry stores no credentials: hosts point to a credentials_profile that
 is resolved against settings or the Trusted Host Registry at execution time.
 """
@@ -17,72 +17,16 @@ from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.homelab.models import (
-    HostCapabilities,
     HostDefinition,
-    HostType,
     HomelabRegistryFile,
-    IntegrationKind,
 )
 
 
 logger = logging.getLogger("nyra.homelab")
 
-DEFAULT_HOSTS = [
-    {
-        "id": "openwrt",
-        "display_name": "OpenWrt Gateway",
-        "type": "openwrt",
-        "address": "192.168.1.1",
-        "aliases": ["openwrt", "gateway", "roteador", "router"],
-        "integration": "trusted_ssh",
-        "credentials_profile": "trusted_ssh",
-        "capabilities": {
-            "network": True, "ssh": True, "logs": True, "services": True,
-            "wifi": True, "tcp_probes": [22, 80],
-        },
-        "health_policy": {"icmp_timeout": 1.5},
-    },
-    {
-        "id": "proxmox",
-        "display_name": "Proxmox",
-        "type": "proxmox",
-        "address": "192.168.1.2",
-        "aliases": ["proxmox", "servidor", "host", "hypervisor"],
-        "integration": "proxmox_api",
-        "credentials_profile": "settings.proxmox_token",
-        "capabilities": {
-            "network": True, "ssh": True, "api": True, "virtual_machines": True,
-            "storage": True, "logs": True, "tcp_probes": [8006], "http_path": "",
-        },
-        "health_policy": {"icmp_timeout": 1.5},
-    },
-    {
-        "id": "dc1",
-        "display_name": "DC1",
-        "type": "windows",
-        "address": "192.168.1.10",
-        "aliases": ["dc1", "domain controller", "controlador de dominio"],
-        "integration": "windows_remote",
-        "credentials_profile": "",
-        "capabilities": {"network": True, "icmp": True},
-        "health_policy": {"icmp_timeout": 1.5, "tcp_probes": [3389]},
-        "metadata": {"remote_method": "unconfigured"},
-    },
-    {
-        "id": "home_assistant",
-        "display_name": "Home Assistant",
-        "type": "home_assistant",
-        "address": "192.168.1.200",
-        "aliases": ["home assistant", "homeassistant", "ha"],
-        "integration": "home_assistant_api",
-        "credentials_profile": "settings.home_assistant_token",
-        "capabilities": {
-            "network": True, "api": True, "tcp_probes": [80],
-            "http_path": "/api/",
-        },
-        "health_policy": {"icmp_timeout": 1.5},
-    },
-]
+# A public clone must not guess or disclose an operator's topology. Real hosts
+# are loaded only from the ignored local registry or an explicit override.
+DEFAULT_HOSTS: list[dict] = []
 
 
 class HomelabHostRegistry:
@@ -174,6 +118,6 @@ class HomelabHostRegistry:
 
 
 def build_default_yaml_text() -> str:
-    """Serialize DEFAULT_HOSTS so operators can start from a working file."""
+    """Serialize a safe, empty registry template."""
     doc = {"version": 1, "hosts": DEFAULT_HOSTS}
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)

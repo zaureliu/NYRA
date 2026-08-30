@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import config from '../../../desktop/src-tauri/tauri.conf.json'
 import capabilities from '../../../desktop/src-tauri/capabilities/default.json'
+import desktopEntry from './main.tsx?raw'
 
 describe('desktop transparency', () => {
   it('uses a real transparent frameless shadowless window', () => {
@@ -21,5 +22,9 @@ describe('desktop transparency', () => {
     // o painel abriria a página do Presence em vez da Operations UI.
     expect(config.build.devUrl).toBe('http://127.0.0.1:5173')
     expect(capabilities.windows).toContain('dashboard')
+  })
+
+  it('routes Presence HTTP through the official Tauri backend bridge in release', () => {
+    expect(desktopEntry).toContain('installTauriBackendBridge()')
   })
 })

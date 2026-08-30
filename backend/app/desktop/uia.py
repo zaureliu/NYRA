@@ -396,8 +396,11 @@ def _mouse_click(x: int, y: int) -> None:
         return item
 
     left_down, left_up = 0x0002, 0x0004
-    arr = (event(left_down), event(left_up))
-    user32.SendInput(len(arr), arr, ctypes.sizeof(_INPUT))
+    events = (event(left_down), event(left_up))
+    array = (_INPUT * len(events))(*events)
+    sent = user32.SendInput(len(array), array, ctypes.sizeof(_INPUT))
+    if sent != len(array):
+        raise UiaError("UI_ACTION_FAILED", f"SendInput enviou {sent}/{len(array)} eventos de mouse.")
 
 
 def click_element(hwnd: int, *, name: str = "", automation_id: str = "", control_type: str = "", allow_coordinate_fallback: bool = True) -> dict:
@@ -504,7 +507,12 @@ def get_text(hwnd: int, *, name: str = "", automation_id: str = "", control_type
     return work()
 
 
-def send_keys_to_foreground(text: str, expected_hwnd: int | None = None) -> dict:
+def send_keys_to_foreground(
+    text: str,
+    expected_hwnd: int | None = None,
+    *,
+    interpret_sequences: bool = True,
+) -> dict:
     """Fallback input engine: type into the VERIFIED foreground window (§62, §65-66)."""
     _ensure_com()
     user32 = ctypes.windll.user32
@@ -584,7 +592,7 @@ def send_keys_to_foreground(text: str, expected_hwnd: int | None = None) -> dict
         flags=_re.IGNORECASE,
     )
     while index < len(text):
-        if text[index] == "{":
+        if interpret_sequences and text[index] == "{":
             closing = text.find("}", index)
             if closing != -1 and push_combo(text[index:closing + 1]):
                 index = closing + 1

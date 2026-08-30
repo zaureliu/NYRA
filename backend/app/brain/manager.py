@@ -41,6 +41,8 @@ class BrainManager(LLMProvider):
         self.fallback_enabled = bool(saved.get("fallback_enabled", True))
         self.last_fallback: dict | None = None
         self.last_runtime_metrics: dict[str, float] = {}
+        self.model_router = None
+        self.last_model_route: dict | None = None
 
     @property
     def name(self) -> str:
@@ -60,54 +62,80 @@ class BrainManager(LLMProvider):
         return await self._provider(self.active_model).ready()
 
     async def chat(self, messages: list[LLMMessage]) -> str:
-        provider = self._provider(self.active_model)
+        selected, fallback = await self._route_model(messages)
+        provider = self._provider(selected)
         try:
             result = await provider.chat(messages)
             self.last_runtime_metrics = provider.last_runtime_metrics
             return result
         except Exception as error:
-            if not self._can_fallback():
+            if not self._can_fallback(selected, fallback):
                 raise
-            self.last_fallback = {"from": self.active_model, "to": self.fallback_model, "error": type(error).__name__}
-            provider = self._provider(self.fallback_model)
+            self.last_fallback = {"from": selected, "to": fallback, "error": type(error).__name__}
+            provider = self._provider(fallback)
             result = await provider.chat(messages)
             self.last_runtime_metrics = provider.last_runtime_metrics
             return result
 
     async def complete(self, messages: list[LLMMessage], tools: list[dict] | None = None) -> LLMResponse:
-        provider = self._provider(self.active_model)
+        selected, fallback = await self._route_model(messages)
+        provider = self._provider(selected)
         try:
             result = await provider.complete(messages, tools)
             self.last_runtime_metrics = provider.last_runtime_metrics
             return result
         except Exception as error:
-            if not self._can_fallback():
+            if not self._can_fallback(selected, fallback):
                 raise
-            self.last_fallback = {"from": self.active_model, "to": self.fallback_model, "error": type(error).__name__}
-            provider = self._provider(self.fallback_model)
+            self.last_fallback = {"from": selected, "to": fallback, "error": type(error).__name__}
+            provider = self._provider(fallback)
             result = await provider.complete(messages, tools)
             self.last_runtime_metrics = provider.last_runtime_metrics
             return result
 
     async def stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
         emitted = False
-        provider = self._provider(self.active_model)
+        selected, fallback = await self._route_model(messages)
+        provider = self._provider(selected)
         try:
             async for chunk in provider.stream(messages):
                 emitted = True
                 yield chunk
             self.last_runtime_metrics = provider.last_runtime_metrics
         except Exception as error:
-            if emitted or not self._can_fallback():
+            if emitted or not self._can_fallback(selected, fallback):
                 raise
-            self.last_fallback = {"from": self.active_model, "to": self.fallback_model, "error": type(error).__name__}
-            provider = self._provider(self.fallback_model)
+            self.last_fallback = {"from": selected, "to": fallback, "error": type(error).__name__}
+            provider = self._provider(fallback)
             async for chunk in provider.stream(messages):
                 yield chunk
             self.last_runtime_metrics = provider.last_runtime_metrics
 
-    def _can_fallback(self) -> bool:
-        return self.fallback_enabled and self.active_model != self.fallback_model
+    async def _route_model(self, messages: list[LLMMessage]) -> tuple[str, str]:
+        selected = self.active_model
+        fallback = self.fallback_model
+        router = self.model_router
+        if router is not None:
+            try:
+                route = await router.route_for_messages(messages)
+                if route.selected_model:
+                    selected = route.selected_model
+                fallback = next(
+                    (name for name in route.fallback_models if name != selected),
+                    self.fallback_model,
+                )
+                self.last_model_route = route.model_dump(mode="json")
+            except Exception as error:  # noqa: BLE001 - official model remains safe fallback
+                self.last_model_route = {
+                    "selected_model": selected, "fallback_models": [fallback],
+                    "reason": "router degraded", "error_code": type(error).__name__,
+                }
+        return selected, fallback
+
+    def _can_fallback(self, selected: str | None = None, fallback: str | None = None) -> bool:
+        source = selected or self.active_model
+        target = fallback or self.fallback_model
+        return self.fallback_enabled and bool(target) and source != target
 
     async def inventory(self) -> dict:
         tags: list[dict] = []

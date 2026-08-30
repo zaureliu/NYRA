@@ -340,7 +340,13 @@ async def test_context_window_ops_call_right_win32(controller: DesktopController
     assert handled, text
     assert verb in {name for name, _ in calls}, (text, calls)
     assert any(hwnd == 333 for _, hwnd in calls), (text, calls)
-    assert "com verificação" in reply
+    expected = {
+        "minimiza ele": "Visual Studio Code minimizado.",
+        "maximiza ele": "Visual Studio Code maximizado.",
+        "restaura ele": "Discord restaurado.",
+        "fecha ele": "Discord fechado.",
+    }
+    assert reply == expected[text]
 
 
 async def test_switch_app_restores_minimized_and_focuses(controller: DesktopController, layer: FakeWindowLayer,
@@ -416,6 +422,41 @@ async def test_already_open_app_focuses_without_new_spawn(
     assert focused == [555]
 
 
+async def test_process_only_instance_is_presented_as_already_open(
+    controller: DesktopController,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Tray/background instance stays internal evidence but changes wording."""
+    _seed_code_app(controller)
+    monkeypatch.setattr(control_module, "_matching_process_pids", lambda _candidate: {444})
+
+    async def verified_launch(candidates, *, origin):
+        candidate = candidates[0]
+        return ({
+            "success": True,
+            "app": candidate.display_name,
+            "action": "launch_attempt",
+            "effect_verified": True,
+            "execution_success": True,
+            "verification_status": "VERIFIED",
+            "candidate": candidate.public_dict(),
+            "pid": 444,
+            "message": "processo confirmado (pid 444)",
+        }, candidate)
+
+    monkeypatch.setattr(controller, "_launch_candidates_with_fallback", verified_launch)
+
+    handled, reply = await controller.handle_universal(
+        parse_universal_intent("abre o code"), turn_id="t-process-only-open",
+    )
+
+    assert handled is True
+    assert reply == "Visual Studio Code já estava aberto."
+    assert controller.last_operation_result is not None
+    assert controller.last_operation_result["already_open"] is True
+    assert controller.last_operation_result["pre_existing_pids"] == [444]
+
+
 async def test_explicit_new_instance_bypasses_already_open(
     controller: DesktopController, layer: FakeWindowLayer, monkeypatch: pytest.MonkeyPatch
 ):
@@ -483,7 +524,8 @@ async def test_unknown_app_grounded_not_found(controller: DesktopController):
     assert handled
     lowered = reply.casefold()
     assert "não encontrei" in lowered
-    assert "nada foi executado" in lowered
+    assert "aplicativo" in lowered
+    assert "start menu" not in lowered and "aumid" not in lowered
     assert controller._test_shell_calls == []  # type: ignore[attr-defined]
 
 
@@ -498,4 +540,4 @@ async def test_no_window_for_target_reports_no_change(controller: DesktopControl
     monkeypatch.setattr(wm_module, "graceful_close", lambda hwnd, timeout_seconds=5.0: True)
     handled, reply = await controller.handle_universal(parse_universal_intent("fecha o discord"), turn_id="t-empty")
     assert handled
-    assert "Nenhuma janela visível" in reply
+    assert reply == "Não encontrei o aplicativo Discord."

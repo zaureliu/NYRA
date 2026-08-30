@@ -1,26 +1,28 @@
 {
-  "profile_id": "NYRA_VOICE",
+  "profile_id": "NYRA_VOICE_AVA_V1",
   "default_language": "pt-BR",
   "presentation": "adult_feminine",
-  "provider": "kokoro",
-  "model": "kokoro-v1.0",
+  "provider": "edge_tts",
+  "model": "Microsoft Edge Neural TTS",
   "reference_file": "data/voices/nyra_reference.wav",
   "edge_rate": "+0%",
-  "edge_pitch": "+5Hz",
+  "edge_pitch": "+0Hz",
   "edge_volume": "+0%",
-  "voice": "pf_dora",
+  "voice": "en-US-AvaMultilingualNeural",
   "speaking_rate": 0.97,
   "temperature": 0.8,
   "exaggeration": 0.5,
   "cfg_weight": 0.45,
   "seed": 42,
   "sentence_pause_ms": 240,
-  "paragraph_pause_ms": 1200,
+  "paragraph_pause_ms": 460,
   "selection": {
-    "reason": "TTS local primário validado para pt-BR, com latência muito menor que o provider experimental em CPU",
+    "reason": "Microsoft Edge Neural TTS en-US-AvaMultilingualNeural, aprovada pelo usuário após audição do candidate-c.wav.",
     "selected_after_real_samples": true,
     "pitch_shift": false,
-    "reference_audio_required": false
+    "speaker_embedding_changed": false,
+    "reference_audio_required": false,
+    "native_emotion_support": false
   },
   "emotion_modifiers": {
     "neutral": {
@@ -29,49 +31,102 @@
       "cfg_delta": 0.0,
       "pause_multiplier": 1.0
     },
+    "friendly": {
+      "rate_multiplier": 1.01,
+      "exaggeration_delta": 0.03,
+      "cfg_delta": -0.01,
+      "pause_multiplier": 0.98
+    },
+    "focused": {
+      "rate_multiplier": 0.98,
+      "exaggeration_delta": -0.02,
+      "cfg_delta": 0.02,
+      "pause_multiplier": 1.02
+    },
+    "confident": {
+      "rate_multiplier": 0.99,
+      "exaggeration_delta": 0.02,
+      "cfg_delta": 0.02,
+      "pause_multiplier": 1.0
+    },
+    "positive": {
+      "rate_multiplier": 1.01,
+      "exaggeration_delta": 0.03,
+      "cfg_delta": -0.01,
+      "pause_multiplier": 0.97
+    },
     "happy": {
       "rate_multiplier": 1.02,
-      "exaggeration_delta": 0.04,
+      "exaggeration_delta": 0.06,
       "cfg_delta": -0.02,
       "pause_multiplier": 0.94
+    },
+    "relieved": {
+      "rate_multiplier": 0.97,
+      "exaggeration_delta": 0.02,
+      "cfg_delta": 0.01,
+      "pause_multiplier": 1.08
+    },
+    "concerned": {
+      "rate_multiplier": 0.94,
+      "exaggeration_delta": -0.02,
+      "cfg_delta": 0.03,
+      "pause_multiplier": 1.12
+    },
+    "warning": {
+      "rate_multiplier": 0.93,
+      "exaggeration_delta": 0.01,
+      "cfg_delta": 0.04,
+      "pause_multiplier": 1.12
+    },
+    "serious": {
+      "rate_multiplier": 0.94,
+      "exaggeration_delta": -0.03,
+      "cfg_delta": 0.04,
+      "pause_multiplier": 1.1
+    },
+    "empathetic": {
+      "rate_multiplier": 0.95,
+      "exaggeration_delta": -0.01,
+      "cfg_delta": 0.02,
+      "pause_multiplier": 1.1
     },
     "curious": {
       "rate_multiplier": 0.99,
       "exaggeration_delta": 0.04,
       "cfg_delta": -0.01,
-      "pause_multiplier": 1.04
-    },
-    "focused": {
-      "rate_multiplier": 0.96,
-      "exaggeration_delta": -0.04,
-      "cfg_delta": 0.04,
-      "pause_multiplier": 1.06
-    },
-    "concerned": {
-      "rate_multiplier": 0.92,
-      "exaggeration_delta": -0.06,
-      "cfg_delta": 0.05,
-      "pause_multiplier": 1.18
-    },
-    "amused": {
-      "rate_multiplier": 1.0,
-      "exaggeration_delta": 0.06,
-      "cfg_delta": -0.01,
-      "pause_multiplier": 0.98
-    },
-    "tired": {
-      "rate_multiplier": 0.9,
-      "exaggeration_delta": -0.08,
-      "cfg_delta": 0.03,
-      "pause_multiplier": 1.15
+      "pause_multiplier": 1.03
     },
     "surprised": {
-      "rate_multiplier": 1.03,
-      "exaggeration_delta": 0.08,
-      "cfg_delta": -0.03,
-      "pause_multiplier": 0.92
+      "rate_multiplier": 1.02,
+      "exaggeration_delta": 0.06,
+      "cfg_delta": -0.02,
+      "pause_multiplier": 0.96
+    },
+    "amused": {
+      "rate_multiplier": 1.01,
+      "exaggeration_delta": 0.05,
+      "cfg_delta": -0.01,
+      "pause_multiplier": 0.96
+    },
+    "apologetic": {
+      "rate_multiplier": 0.94,
+      "exaggeration_delta": -0.03,
+      "cfg_delta": 0.03,
+      "pause_multiplier": 1.1
+    },
+    "uncertain": {
+      "rate_multiplier": 0.95,
+      "exaggeration_delta": -0.02,
+      "cfg_delta": 0.03,
+      "pause_multiplier": 1.1
+    },
+    "calm": {
+      "rate_multiplier": 0.95,
+      "exaggeration_delta": -0.03,
+      "cfg_delta": 0.03,
+      "pause_multiplier": 1.08
     }
   },
-  "selected_by_user_at": "2026-08-22T22:00:59+00:00",
-  "voice_hunter_candidate_id": "kokoro-pf-dora"
+  "selected_by_user_at": "2026-08-28T00:00:00-03:00"
 }

@@ -270,7 +270,7 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
             </label>
             <label style={labelStyle}>
               Base URL
-              <input type="text" value={editing.url} placeholder="http://192.168.1.200" style={inputStyle}
+              <input type="text" value={editing.url} placeholder="https://home-assistant.example.invalid" style={inputStyle}
                 onChange={(event) => setEditing({ ...editing, url: event.target.value })} />
             </label>
             <label style={labelStyle}>

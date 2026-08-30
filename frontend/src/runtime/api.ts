@@ -1,4 +1,4 @@
-import { backendUrl } from '../runtime/backend'
+import { nyraFetch } from './backend'
 
 export interface ApiErrorEnvelope {
   error_code: string
@@ -28,11 +28,11 @@ function extractDetail(detail: unknown): Partial<ApiErrorEnvelope> {
   return {}
 }
 
-export async function apiGet<T>(path: string, timeoutMs = 12000): Promise<T> {
+export async function apiGet<T>(path: string, timeoutMs = 12000, cache: RequestCache = 'default'): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(backendUrl(path), { signal: controller.signal })
+    const response = await nyraFetch(path, { signal: controller.signal, cache })
     if (!response.ok) {
       let detail: unknown = undefined
       try { detail = (await response.json()).detail } catch { /* corpo vazio */ }
@@ -53,7 +53,7 @@ export async function apiSend<T>(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(backendUrl(path), {
+    const response = await nyraFetch(path, {
       method,
       headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,

@@ -277,7 +277,11 @@ class BrowserController:
         await _sleep(0.6)
         after = {tab["id"] for tab in _tabs(port)}
         verified = tab_id.strip() not in after
-        return operation_result(app="browser", action="close_tab", success=bool(ok), execution_success=bool(ok),
+        # Chrome's /json/close may return an empty/non-JSON response even when
+        # it accepted the command. The authoritative effect is disappearance
+        # from the subsequent CDP tab listing.
+        return operation_result(app="browser", action="close_tab", success=verified,
+                                execution_success=bool(ok) or verified,
                                 effect_verified=verified,
                                 verification_status="VERIFIED" if verified else "VERIFICATION_FAILED",
                                 message="Aba fechada e confirmada." if verified else "Ainda presente após comando.")

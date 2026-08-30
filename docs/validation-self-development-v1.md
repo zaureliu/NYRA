@@ -1,6 +1,6 @@
 # Validação — Self-Development Engine V1
 
-Data: 2026-08-26. Candidato validado em worktree isolado: `SELFDEV-0001`.
+Data: 2026-08-26. Candidato: `<SELFDEV_WORKSPACE>/worktrees/SELFDEV-0001`.
 
 ## Gates concluídos
 

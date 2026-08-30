@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict, dataclass
+import hashlib
 import importlib.util
 import json
 import logging
 import os
+import shutil
 import sys
 import threading
 from abc import ABC, abstractmethod
@@ -15,9 +18,65 @@ import numpy as np
 
 from app.core.paths import BACKEND_ROOT, DATA_ROOT, IDENTITY_ROOT, PROJECT_ROOT
 from app.speech.profile import VoiceSynthesisOptions, load_voice_profile
+from app.speech.tts_identity import (
+    NYRA_KOKORO_FALLBACK_VOICE,
+    NYRA_PRIMARY_ENGINE,
+    NYRA_VOICE_ID,
+)
 
 
 logger = logging.getLogger("nyra.voice")
+
+NYRA_EDGE_VOICE_ID = NYRA_VOICE_ID
+NYRA_KOKORO_VOICE_ID = NYRA_KOKORO_FALLBACK_VOICE
+
+
+@dataclass(frozen=True, slots=True)
+class TtsCapabilities:
+    supports_emotion: bool = False
+    supports_styles: bool = False
+    supports_streaming: bool = False
+    supports_reference_style: bool = False
+    supports_native_speed: bool = False
+
+
+class SpeechCache:
+    """Small bounded runtime cache whose key always includes emotion metadata."""
+
+    def __init__(self, root: Path, max_entries: int = 256) -> None:
+        self.root = root
+        self.max_entries = max_entries
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def path_for(self, payload: dict[str, object]) -> Path:
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return self.root / f"voice-cache-{hashlib.sha256(encoded).hexdigest()}.wav"
+
+    def get(self, payload: dict[str, object]) -> Path | None:
+        if len(str(payload.get("text") or "")) > 180:
+            return None
+        path = self.path_for(payload)
+        if path.is_file() and path.stat().st_size > 100:
+            try:
+                path.touch()
+            except OSError:
+                pass
+            return path.resolve()
+        return None
+
+    def put(self, payload: dict[str, object], source: Path) -> Path:
+        if len(str(payload.get("text") or "")) > 180:
+            return source.resolve()
+        destination = self.path_for(payload)
+        temporary = destination.with_suffix(".tmp")
+        shutil.copy2(source, temporary)
+        os.replace(temporary, destination)
+        if source.resolve() != destination.resolve():
+            source.unlink(missing_ok=True)
+        files = sorted(self.root.glob("voice-cache-*.wav"), key=lambda item: item.stat().st_mtime, reverse=True)
+        for stale in files[self.max_entries:]:
+            stale.unlink(missing_ok=True)
+        return destination.resolve()
 
 
 class TTSProvider(ABC):
@@ -36,6 +95,54 @@ class TTSProvider(ABC):
     @property
     def provider_type(self) -> str:
         return "local"
+
+    @property
+    def default_voice(self) -> str:
+        return "default"
+
+    @property
+    def engine_id(self) -> str:
+        return self.name
+
+    @property
+    def active_engine(self) -> str:
+        return self.engine_id
+
+    @property
+    def active_voice(self) -> str:
+        return self.default_voice
+
+    @property
+    def fallback_active(self) -> bool:
+        return False
+
+    @property
+    def fallback_reason(self) -> str | None:
+        return None
+
+    def capabilities(self) -> TtsCapabilities:
+        return TtsCapabilities()
+
+    def describe(self) -> dict[str, object]:
+        return {
+            "engine": self.name,
+            "primary_engine": self.engine_id,
+            "active_engine": self.active_engine,
+            "voice": self.active_voice,
+            "fallback_active": self.fallback_active,
+            "fallback_reason": self.fallback_reason,
+            "provider_type": self.provider_type,
+            "model": getattr(self, "model_id", None),
+            "capabilities": asdict(self.capabilities()),
+        }
+
+    async def stream(
+        self,
+        text: str,
+        state: str = "neutral",
+        options: VoiceSynthesisOptions | None = None,
+    ):
+        yield await self.synthesize(text, state, options)
 
     @abstractmethod
     async def health(self) -> bool: ...
@@ -69,6 +176,8 @@ class FallbackTTSProvider(TTSProvider):
     def __init__(self, primary: TTSProvider, fallback: TTSProvider) -> None:
         self.primary = primary
         self.fallback = fallback
+        self.last_used_fallback = False
+        self.last_failure_type: str | None = None
 
     @property
     def name(self) -> str:
@@ -94,22 +203,72 @@ class FallbackTTSProvider(TTSProvider):
     def model_id(self) -> str | None:
         return getattr(self.primary, "model_id", None)
 
+    @property
+    def default_voice(self) -> str:
+        return getattr(self.primary, "default_voice", "default")
+
+    @property
+    def engine_id(self) -> str:
+        return self.primary.engine_id
+
+    @property
+    def active_engine(self) -> str:
+        return self.fallback.active_engine if self.last_used_fallback else self.primary.active_engine
+
+    @property
+    def active_voice(self) -> str:
+        return self.fallback.active_voice if self.last_used_fallback else self.primary.active_voice
+
+    @property
+    def fallback_active(self) -> bool:
+        return self.last_used_fallback
+
+    @property
+    def fallback_reason(self) -> str | None:
+        return self.last_failure_type if self.last_used_fallback else None
+
+    def capabilities(self) -> TtsCapabilities:
+        return self.primary.capabilities()
+
+    def describe(self) -> dict[str, object]:
+        value = self.primary.describe()
+        value["fallback"] = self.fallback.describe()
+        value["last_used_fallback"] = self.last_used_fallback
+        value["last_failure_type"] = self.last_failure_type
+        value["primary_engine"] = self.engine_id
+        value["active_engine"] = self.active_engine
+        value["voice"] = self.active_voice
+        value["fallback_active"] = self.fallback_active
+        value["fallback_reason"] = self.fallback_reason
+        return value
+
     async def health(self) -> bool:
         return await self.primary.health() or await self.fallback.health()
 
     async def synthesize(self, text: str, state: str = "neutral", options: VoiceSynthesisOptions | None = None) -> Path:
         try:
-            return await self.primary.synthesize(text, state, options)
+            output = await self.primary.synthesize(text, state, options)
+            self.last_used_fallback = False
+            self.last_failure_type = None
+            return output
         except Exception as exc:
+            self.last_used_fallback = True
+            self.last_failure_type = type(exc).__name__
             logger.warning("PRIMARY_TTS_FAILED", extra={"primary": self.primary.name, "fallback": self.fallback.name, "error_type": type(exc).__name__})
-            fallback_options = options.model_copy(update={"provider": self.fallback.name, "voice": "pf_dora"}) if options else None
-            output = await self.fallback.synthesize(text, state, fallback_options)
+            fallback_options = options.model_copy(update={
+                "provider": self.fallback.name,
+                "voice": self.fallback.default_voice,
+                "emotion": "neutral",
+                "emotion_intensity": 0.0,
+                "style_instruction": "",
+            }) if options else None
+            output = await self.fallback.synthesize(text, "neutral", fallback_options)
             logger.warning("FALLBACK_TTS_USED", extra={"primary": self.primary.name, "fallback": self.fallback.name})
             return output
 
 
 class KokoroTTSProvider(TTSProvider):
-    """Local CPU ONNX provider. `pf_dora` remains the native pt-BR fallback."""
+    """Local CPU ONNX fallback using the unmodified pf_dora speaker."""
 
     _model_cache: dict[tuple[str, str], object] = {}
     _model_cache_lock = threading.Lock()
@@ -118,15 +277,16 @@ class KokoroTTSProvider(TTSProvider):
         self,
         model_path: Path,
         voices_path: Path,
-        voice: str = "pf_dora",
+        voice: str = NYRA_KOKORO_VOICE_ID,
         speaking_rate: float = 0.97,
     ) -> None:
         self.model_path = model_path
         self.voices_path = voices_path
-        self.voice = voice
+        self.voice = NYRA_KOKORO_FALLBACK_VOICE
         self.speaking_rate = speaking_rate
         self.output_dir = DATA_ROOT / "audio"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.cache = SpeechCache(self.output_dir)
         self._model = None
         self._probe_ok: bool | None = None
         self._lock = asyncio.Lock()
@@ -136,11 +296,31 @@ class KokoroTTSProvider(TTSProvider):
         return "kokoro"
 
     @property
+    def model_id(self) -> str:
+        return "hexgrad/Kokoro-82M-v1.0-int8"
+
+    @property
+    def default_voice(self) -> str:
+        return self.voice
+
+    def describe(self) -> dict[str, object]:
+        value = super().describe()
+        value.update({
+            "voice": self.voice,
+            "voice_identity": "KOKORO_PF_DORA_FALLBACK",
+            "custom_style": False,
+        })
+        return value
+
+    def capabilities(self) -> TtsCapabilities:
+        return TtsCapabilities(supports_native_speed=True)
+
+    @property
     def voices(self) -> list[dict[str, str]]:
         return [
             {
                 "id": "pf_dora",
-                "name": "Dora — feminina, português brasileiro",
+                "name": "Dora — fallback local",
                 "language": "pt-BR",
                 "gender": "female",
             }
@@ -166,6 +346,11 @@ class KokoroTTSProvider(TTSProvider):
                 self._model_cache[key] = model
             return model
 
+    @staticmethod
+    def _resolve_voice(_model, _voice: str) -> str:
+        # The local contingency voice must never interpolate speaker embeddings.
+        return NYRA_KOKORO_FALLBACK_VOICE
+
     async def health(self) -> bool:
         if self._probe_ok is not None:
             return self._probe_ok
@@ -178,8 +363,9 @@ class KokoroTTSProvider(TTSProvider):
             return False
         try:
             model = await self._load()
+            resolved_voice = self._resolve_voice(model, self.voice)
             samples, rate = await asyncio.to_thread(
-                model.create, "Naira online.", voice=self.voice, speed=0.97, lang="pt-br"
+                model.create, "Naira online.", voice=resolved_voice, speed=0.97, lang="pt-br"
             )
             self._probe_ok = len(samples) > 100 and rate > 0
         except Exception as exc:
@@ -199,7 +385,12 @@ class KokoroTTSProvider(TTSProvider):
             "voice": self.voice,
             "speaking_rate": self.speaking_rate,
         })).for_state(state, profile)
+        cache_key = selected.cache_key_data(engine=self.name, model=self.model_id, text=text)
+        if cached := self.cache.get(cache_key):
+            return cached
         model = await self._load()
+        resolved_voice = self._resolve_voice(model, selected.voice)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         output = self.output_dir / f"nyra-{uuid4().hex}.wav"
         paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]
         if not paragraphs:
@@ -213,7 +404,7 @@ class KokoroTTSProvider(TTSProvider):
                 samples, sample_rate = await asyncio.to_thread(
                     model.create,
                     paragraph[:500],
-                    voice=selected.voice,
+                    voice=resolved_voice,
                     speed=selected.speaking_rate,
                     lang="pt-br",
                     sentence_pause=selected.sentence_pause_ms / 1000,
@@ -229,6 +420,7 @@ class KokoroTTSProvider(TTSProvider):
             await asyncio.to_thread(sf.write, str(output), joined, sample_rate, subtype="PCM_16")
         if not output.exists() or output.stat().st_size < 100:
             raise RuntimeError("Kokoro não produziu áudio")
+        output = await asyncio.to_thread(self.cache.put, cache_key, output)
         logger.info(
             "tts_synthesized",
             extra={
@@ -277,6 +469,7 @@ class ChatterboxTTSProvider(TTSProvider):
         self.output_dir = DATA_ROOT / "audio"
         self.request_dir = DATA_ROOT / "tts-requests"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.cache = SpeechCache(self.output_dir)
         self.request_dir.mkdir(parents=True, exist_ok=True)
         self._health: bool | None = None
         self._server: asyncio.subprocess.Process | None = None
@@ -289,6 +482,12 @@ class ChatterboxTTSProvider(TTSProvider):
     @property
     def provider_type(self) -> str:
         return "local"
+
+    def capabilities(self) -> TtsCapabilities:
+        return TtsCapabilities(
+            supports_emotion=True,
+            supports_reference_style=True,
+        )
 
     @property
     def voices(self) -> list[dict[str, str]]:
@@ -354,6 +553,11 @@ class ChatterboxTTSProvider(TTSProvider):
     ) -> Path:
         profile, defaults = load_voice_profile()
         selected = (options or defaults).for_state(state, profile)
+        cache_key = selected.cache_key_data(engine=self.name, model=self.model_id, text=text)
+        if cached := self.cache.get(cache_key):
+            return cached
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.request_dir.mkdir(parents=True, exist_ok=True)
         output = self.output_dir / f"nyra-{uuid4().hex}.wav"
         request = self.request_dir / f"request-{uuid4().hex}.json"
         reference = reference_override or (self.reference_path if self.reference_path and self.reference_path.is_file() else None)
@@ -377,6 +581,7 @@ class ChatterboxTTSProvider(TTSProvider):
             request.unlink(missing_ok=True)
         if not ok or not output.is_file() or output.stat().st_size < 100:
             raise RuntimeError("Chatterbox não produziu áudio; Kokoro permanece disponível")
+        output = await asyncio.to_thread(self.cache.put, cache_key, output)
         logger.info(
             "tts_synthesized",
             extra={
@@ -461,10 +666,17 @@ class EdgeTTSProvider(TTSProvider):
     _voice_cache_at: float = 0.0
     _voice_cache_lock = asyncio.Lock()
 
-    def __init__(self, locale: str = "pt-BR", gender: str = "Female", timeout_seconds: int = 30) -> None:
+    def __init__(
+        self,
+        locale: str = "pt-BR",
+        gender: str = "Female",
+        timeout_seconds: int = 30,
+        voice: str = NYRA_EDGE_VOICE_ID,
+    ) -> None:
         self.locale = locale
         self.gender = gender
         self.timeout_seconds = timeout_seconds
+        self.voice = voice
         self.output_dir = DATA_ROOT / "audio"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._health: bool | None = None
@@ -474,6 +686,18 @@ class EdgeTTSProvider(TTSProvider):
     @property
     def name(self) -> str:
         return "edge_tts"
+
+    @property
+    def engine_id(self) -> str:
+        return NYRA_PRIMARY_ENGINE
+
+    @property
+    def model_id(self) -> str:
+        return "Microsoft Edge Neural TTS"
+
+    @property
+    def default_voice(self) -> str:
+        return self.voice
 
     @property
     def provider_type(self) -> str:
@@ -511,35 +735,45 @@ class EdgeTTSProvider(TTSProvider):
         return voices
 
     async def health(self) -> bool:
-        if self._health is not None:
-            return self._health
         try:
-            await self.refresh_voices()
-            self._health = bool(self._voices)
+            voices = await self.refresh_voices(all_voices=True)
+            self._health = any(item["id"] == self.voice for item in voices)
         except Exception as exc:
             logger.info("edge_tts_unavailable", extra={"error_type": type(exc).__name__})
             try:
                 cached = json.loads(self.cache_path.read_text(encoding="utf-8"))
                 self._voice_cache = cached
-                self._voices = [item for item in cached if item.get("language", "").lower() == self.locale.lower() and item.get("gender", "").lower() == self.gender.lower()]
+                self._voices = list(cached)
             except Exception:
                 self._voices = []
-            self._health = bool(self._voices)
+            self._health = False
         return self._health
 
     async def synthesize(self, text: str, state: str = "neutral", options: VoiceSynthesisOptions | None = None) -> Path:
-        if not await self.health():
-            raise RuntimeError("Edge TTS indisponível; usando voz local")
         profile, defaults = load_voice_profile()
-        selected = (options or defaults).for_state(state, profile)
-        voice = selected.voice if any(item["id"] == selected.voice for item in self._voices) else self._voices[0]["id"]
+        selected = (options or defaults.model_copy(update={
+            "provider": self.name,
+            "voice": self.voice,
+        })).for_state(state, profile)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         mp3_path = self.output_dir / f"nyra-edge-{uuid4().hex}.mp3"
         output = self.output_dir / f"nyra-edge-{uuid4().hex}.wav"
         import edge_tts
-        communicate = edge_tts.Communicate(text[:6000], voice, rate=selected.edge_rate, pitch=selected.edge_pitch, volume=selected.edge_volume)
+        communicate = edge_tts.Communicate(
+            text[:6000],
+            self.voice,
+            rate=selected.edge_rate,
+            pitch=selected.edge_pitch,
+            volume=selected.edge_volume,
+        )
         try:
             await asyncio.wait_for(communicate.save(str(mp3_path)), self.timeout_seconds)
             await asyncio.to_thread(self._decode_mp3, mp3_path, output)
+            self._health = True
+        except Exception:
+            self._health = False
+            output.unlink(missing_ok=True)
+            raise
         finally:
             mp3_path.unlink(missing_ok=True)
         if not output.is_file() or output.stat().st_size < 100:
@@ -591,6 +825,7 @@ class Pyttsx3TTS(TTSProvider):
     ) -> Path:
         profile, defaults = load_voice_profile()
         selected = (options or defaults).for_state(state, profile)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         output = self.output_dir / f"nyra-{uuid4().hex}.wav"
         input_path = self.output_dir / f"tts-input-{uuid4().hex}.txt"
         input_path.write_text(text[:6000], encoding="utf-8")
@@ -605,12 +840,15 @@ class Pyttsx3TTS(TTSProvider):
         return output
 
     @staticmethod
-    async def _run(arguments: list[str], timeout: float) -> bool:
+    def _command(arguments: list[str]) -> list[str]:
+        if getattr(sys, "frozen", False):
+            return [sys.executable, "--sapi-worker", *arguments]
+        return [sys.executable, "-m", "app.speech.sapi_worker", *arguments]
+
+    @classmethod
+    async def _run(cls, arguments: list[str], timeout: float) -> bool:
         process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-m",
-            "app.speech.sapi_worker",
-            *arguments,
+            *cls._command(arguments),
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -648,7 +886,7 @@ async def create_tts_provider(
     language: str,
     model_path: Path | None = None,
     voices_path: Path | None = None,
-    voice: str = "pf_dora",
+    voice: str = NYRA_EDGE_VOICE_ID,
     chatterbox_python: Path | None = None,
     chatterbox_device: str = "cpu",
     chatterbox_reference: Path | None = None,
@@ -664,7 +902,7 @@ async def create_tts_provider(
     speaking_rate: float = 0.97,
 ) -> TTSProvider:
     kokoro = (
-        KokoroTTSProvider(model_path, voices_path, voice, speaking_rate)
+        KokoroTTSProvider(model_path, voices_path, NYRA_KOKORO_FALLBACK_VOICE, speaking_rate)
         if model_path is not None and voices_path is not None
         else None
     )
@@ -680,14 +918,15 @@ async def create_tts_provider(
         if chatterbox_python is not None
         else None
     )
-    edge = EdgeTTSProvider(edge_tts_locale, edge_tts_gender, edge_tts_timeout_seconds) if edge_tts_enabled else None
+    edge = EdgeTTSProvider(edge_tts_locale, edge_tts_gender, edge_tts_timeout_seconds, voice) if edge_tts_enabled else None
     if provider == "disabled":
         return DisabledTTS()
     if provider == "edge_tts" and edge:
-        if await edge.health():
-            return FallbackTTSProvider(edge, kokoro) if kokoro else edge
-        if kokoro and await kokoro.health():
-            return kokoro
+        # Always retain Edge as primary. A startup outage may use the local
+        # fallback, but the next turn retries Ava and recovers without restart.
+        if kokoro:
+            return FallbackTTSProvider(edge, FallbackTTSProvider(kokoro, Pyttsx3TTS(language)))
+        return FallbackTTSProvider(edge, Pyttsx3TTS(language))
     if provider == "chatterbox":
         provider = "chatterbox_multilingual_v3"
     requested = chatterbox
@@ -695,7 +934,8 @@ async def create_tts_provider(
         requested = ChatterboxTTSProvider(chatterbox_python, chatterbox_device, chatterbox_reference, chatterbox_ptbr_model_id, "chatterbox_ptbr", chatterbox_resident, chatterbox_timeout_seconds) if chatterbox_python is not None else None
     if provider in {"chatterbox_multilingual_v3", "chatterbox_ptbr"} and requested and await requested.health():
         if kokoro and await kokoro.health():
-            return FallbackTTSProvider(requested, kokoro)
+            sapi = Pyttsx3TTS(language)
+            return FallbackTTSProvider(requested, FallbackTTSProvider(kokoro, sapi))
         return requested
     if provider == "kokoro" and kokoro:
         if await kokoro.health():
@@ -729,6 +969,8 @@ async def create_tts_provider(
                     "tts_fallback_selected",
                     extra={"requested": provider, "selected": candidate.name},
                 )
+            if isinstance(candidate, KokoroTTSProvider) and fallback_provider == "pyttsx3":
+                return FallbackTTSProvider(candidate, Pyttsx3TTS(language))
             return candidate
     if provider != "disabled":
         logger.error(
@@ -757,8 +999,8 @@ def tts_provider_catalog(
     providers: list[TTSProvider] = [
         ChatterboxTTSProvider(chatterbox_python, chatterbox_device, chatterbox_reference, chatterbox_model_id, "chatterbox_multilingual_v3", chatterbox_resident, chatterbox_timeout_seconds),
         ChatterboxTTSProvider(chatterbox_python, chatterbox_device, chatterbox_reference, chatterbox_ptbr_model_id, "chatterbox_ptbr", chatterbox_resident, chatterbox_timeout_seconds),
-        KokoroTTSProvider(model_path, voices_path, voice),
+        KokoroTTSProvider(model_path, voices_path, NYRA_KOKORO_FALLBACK_VOICE),
     ]
     if edge_tts_enabled:
-        providers.append(EdgeTTSProvider(edge_tts_locale, edge_tts_gender, edge_tts_timeout_seconds))
+        providers.append(EdgeTTSProvider(edge_tts_locale, edge_tts_gender, edge_tts_timeout_seconds, voice))
     return providers
