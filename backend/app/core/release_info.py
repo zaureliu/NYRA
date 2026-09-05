@@ -29,7 +29,7 @@ RELEASE_GATE_REPORT = RUNTIME_ROOT / "reports" / "release-health.json"
 GATE_PROGRESS = RUNTIME_ROOT / "reports" / "release-gate-progress.json"
 
 # Versão oficial unificada do produto.
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.6.1"
 APP_NAME = "Kazumi"
 
 # Artefatos mais antigos que isso não representam o build atual (closure §20):

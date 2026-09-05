@@ -1,7 +1,7 @@
 {
   "name": "kazumi-frontend",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "allowScripts": {
     "esbuild@0.28.2": true

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.1 — 2026-09-05
+
+### Verified
+
+- TTS credential recognition after restart uses the protected vault, not a transient metadata index.
+- The canonical fix was already included in the consolidated public v0.6.0 commit; its implementation, regression tests and migration note are byte-identical. No runtime fix is reapplied.
+
+### Changed
+
+- Public package and runtime version metadata advance to 0.6.1.
+
+### Security
+
+- No credentials, private runtime data or pending local VTube Studio changes are included.
+- The v0.6.0 tag and historical release remain unchanged.
+
+### Known Limitations
+
+- Source-only distribution continues; prebuilt speech-binary redistribution notices remain under review.
+
 ## 0.6.0 — 2026-09-05
 
 ### Added

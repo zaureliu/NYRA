@@ -1,7 +1,7 @@
 {
   "name": "kazumi-local",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Entrypoint local da KAZUMI; dependencias permanecem isoladas em frontend e desktop.",
   "scripts": {
     "dev": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/bootstrap.ps1 -Mode Development",

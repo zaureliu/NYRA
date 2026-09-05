@@ -1,4 +1,4 @@
-# Kazumi 0.6.0
+# Kazumi 0.6.1
 
 Previously NYRA. See the [migration guide](docs/migration/nyra-to-kazumi.md) before upgrading existing data.
 
@@ -138,7 +138,7 @@ cd ..\desktop\src-tauri
 cargo fmt --check
 ```
 
-Os resultados reais e limitações desta versão estão em [docs/releases/0.6.0.md](docs/releases/0.6.0.md). Testes simulados ou mockados não são apresentados como E2E real.
+Os resultados reais e limitações desta versão estão em [docs/releases/0.6.1.md](docs/releases/0.6.1.md). Testes simulados ou mockados não são apresentados como E2E real.
 
 ## Estrutura
 
