@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { TurnFilter, adoptInputTurn, extractTurnId, isTurnStartEvent } from './turns'
+import { TurnFilter, adoptInputTurn, extractTurnId, isTurnStartEvent, isConversationToolEvent } from './turns'
 
 const event = (type: string, turnId: string) => ({ type, payload: { turn_id: turnId } })
+
+describe('conversation tool provenance', () => {
+  it('does not attach the gateway background poll or another turn to the current request', () => {
+    const filter = new TurnFilter()
+    filter.begin('turn_esp32')
+    expect(isConversationToolEvent({ type: 'REMOTE_SHELL_EXECUTION_STARTED', payload: { turn_id: null } }, filter)).toBe(false)
+    expect(isConversationToolEvent(event('REMOTE_SHELL_EXECUTION_FINISHED', 'turn_old'), filter)).toBe(false)
+    expect(isConversationToolEvent(event('SHELL_EXECUTION_STARTED', 'turn_esp32'), filter)).toBe(true)
+  })
+  it('preserves genuine approvals even without turn metadata', () => {
+    expect(isConversationToolEvent({ type: 'REMOTE_SHELL_APPROVAL_REQUIRED', payload: {} }, new TurnFilter())).toBe(true)
+  })
+})
 
 describe('TurnFilter', () => {
   it('aceita eventos do turno ativo e descarta eventos tardios de turnos encerrados', () => {

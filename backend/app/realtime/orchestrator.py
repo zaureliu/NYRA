@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from pathlib import Path
@@ -9,6 +10,7 @@ import time
 
 from app.avatar import AvatarController
 from app.character.context import is_simple_conversation, is_standalone_greeting
+from app.character.state import EmotionalState as CharacterEmotionalState
 from app.character.response_style import apply_response_style
 from app.core.turn import (
     PipelineFailure,
@@ -67,6 +69,9 @@ class RealtimeOrchestrator(ChatOrchestrator):
         self.remote_shell = None
         self.agent = None
         self.monitor_jobs = None
+        self.open_loops = None
+        self.world_state = None
+        self.emotional_presence = None
         self.usb_devices = None
         self.turns = turn_registry or TurnRegistry()
         # Universal Operator (nyra-full): injetado pelo main quando disponível.
@@ -178,9 +183,65 @@ class RealtimeOrchestrator(ChatOrchestrator):
         self.telemetry.measure(response_id, "memory_write_ms", (time.perf_counter()-memory_write_started)*1000)
         tools_started = time.perf_counter()
         runtime_parts: list[str] = []
-        direct_response = "Oi. O que precisa?" if is_standalone_greeting(clean_text) else None
+        voice_session = getattr(self, "voice_session", None)
+        is_voice_session = voice_session is not None and turn.conversation_id == voice_session.conversation_id
+        if is_voice_session:
+            runtime_parts.append(voice_session.context())
+        direct_response = "Oi. O que precisa?" if is_standalone_greeting(clean_text) and not is_voice_session else None
         resume_agent_run_id: str | None = None
         route_to_agent = bool(self.tools is not None and self.tools.should_route_to_agent(clean_text))
+        hardware_engine = getattr(self, 'hardware_engine', None)
+        if is_voice_session:
+            from app.natural_conversation.tool_bridge import cancellation_requested, cancel_session_task
+            if cancellation_requested(clean_text):
+                direct_response = await cancel_session_task(voice_session, hardware_engine)
+                route_to_agent = False
+        if hardware_engine is not None and self.tools is not None and direct_response is None:
+            from app.web_research.conversation import WebConversationBridge
+            if not hasattr(self, '_web_conversation'):
+                self._web_conversation = WebConversationBridge(hardware_engine.research, self.tools)
+            direct_response = await self._web_conversation.reply(clean_text, turn)
+            if direct_response is not None:
+                route_to_agent = False
+        if hardware_engine is not None and direct_response is None:
+            direct_response = await hardware_engine.handle(clean_text)
+            if direct_response is not None:
+                route_to_agent = False
+        # Hardware is an observation request even when phrased as a user claim.
+        # Resolve before conversational/goal shortcuts and before any token/TTS.
+        from app.usb.hardware import hardware_request, presence_reply, UNKNOWN_RESPONSE
+        hardware_intent = hardware_request(clean_text)
+        if hardware_intent is not None and direct_response is None:
+            direct_response = UNKNOWN_RESPONSE
+            route_to_agent = False
+            if self.tools is not None:
+                try:
+                    result = await self.tools.execute("hardware_discover", hardware_intent.model_dump())
+                    direct_response = presence_reply(result.data)
+                except Exception:
+                    logger.warning("hardware_discovery_unavailable", extra={"turn_id": turn_id})
+            elif self.usb_devices is not None:
+                direct_response = await self.usb_devices.handle_chat(clean_text) or UNKNOWN_RESPONSE
+        if self.open_loops is not None and direct_response is None:
+            try:
+                loop_project = None
+                if self.world_state is not None:
+                    project_record = self.world_state.get_snapshot().get("current_project")
+                    project_value = project_record.get("value") if isinstance(project_record, dict) else None
+                    loop_project = project_value if isinstance(project_value, str) else None
+                await self.open_loops.observe_user_intention(
+                    clean_text, source_turn=turn_id, project=loop_project,
+                )
+                loop_response = await self.open_loops.chat_response(
+                    clean_text, source_turn=turn_id, project=loop_project,
+                )
+                if loop_response is not None:
+                    direct_response = loop_response
+                    route_to_agent = False
+            except (PermissionError, ValueError):
+                # Invalid/secret-bearing candidates are not persisted and do
+                # not prevent the normal conversational pipeline.
+                pass
         if (
             self.monitor_jobs is not None
             and direct_response is None
@@ -341,14 +402,14 @@ class RealtimeOrchestrator(ChatOrchestrator):
         self.telemetry.measure(response_id, "context_build_ms", (time.perf_counter()-context_started)*1000)
         for key,value in context_timings.items(): self.telemetry.measure(response_id,key,value)
         await self._set_status(RealtimeStatus.THINKING, response_id, turn_id)
-        await self.avatar.mode("thinking", state.value)
+        await self.avatar.mode("thinking")
         await self.event_bus.publish(EventType.LLM_PROCESSING, state=state.value, response_id=response_id, turn_id=turn_id)
         await self.event_bus.publish(EventType.LLM_STREAM_STARTED, response_id=response_id, provider=self.llm.name, turn_id=turn_id)
         self.telemetry.mark(response_id, "t_llm_stream_started")
 
         config = self.settings_manager.value.realtime
         assembler = SentenceAssembler(config.minimum_chunk_characters, config.minimum_chunk_words, config.chunk_timeout_ms)
-        speech_input: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue()
+        speech_input: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue(maxsize=24)
         audio_urls: list[str] = []
         speech_degraded = asyncio.Event()
         speech_task = asyncio.create_task(
@@ -420,7 +481,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
                 sentence_index = await self._queue_sentence(response_id, turn_id, sentence_index, sentence, speech_input, speech_task)
             self.telemetry.mark(response_id, "t_ollama_complete")
             for key,value in getattr(self.llm,"last_runtime_metrics",{}).items(): self.telemetry.measure(response_id,key,value)
-            if speech_task:
+            if speech_task and not speech_task.done():
                 await speech_input.put(None)
                 try:
                     await speech_task
@@ -454,7 +515,8 @@ class RealtimeOrchestrator(ChatOrchestrator):
                 turn_id=turn_id,
                 grounded=bool(route_to_agent),
             )
-        await self.memory.add(MemoryCreate(category=MemoryCategory.SHORT_TERM, role="assistant", content=response, importance=5))
+        if not is_voice_session:
+            await self.memory.add(MemoryCreate(category=MemoryCategory.SHORT_TERM, role="assistant", content=response, importance=5))
         await self.memory.retain()
         prepared = self.prosody.prepare(response, provider=self.tts.name)
         if audio_urls:
@@ -469,12 +531,33 @@ class RealtimeOrchestrator(ChatOrchestrator):
             )
             self.telemetry.measure(response_id, "emotion_planning_ms", (time.perf_counter() - planning_started) * 1000)
             emotion_plan = self.emotion_planner.dominant(turn_id, emotion_plan)
-        state = await self.state_machine.transition(state.__class__(emotion_plan.emotion.value))
+        state = await self.state_machine.transition(
+            state.__class__(emotion_plan.emotion.value),
+            intensity=emotion_plan.intensity,
+            confidence=emotion_plan.confidence,
+            reason=emotion_plan.reason,
+        )
+        persona_runtime = getattr(self.state_machine, "persona_runtime", None)
+        canonical_emotion = await persona_runtime.current_emotion() if persona_runtime is not None else None
+        voice_build = self.emotional_presence.build_voice_style(
+            emotion=state.value,
+            intensity=canonical_emotion.intensity if canonical_emotion is not None else emotion_plan.intensity,
+            context={"source": "chat", "turn_id": turn_id},
+        ) if self.emotional_presence is not None else None
+        provider_capabilities = self.tts.capabilities() if callable(getattr(self.tts, "capabilities", None)) else None
+        voice_interface = voice_build.presentation if voice_build else (
+            persona_runtime.voice_interface(
+                provider_supports_emotion=bool(getattr(provider_capabilities, "supports_emotion", False)),
+            ) if persona_runtime is not None else None
+        )
         await self.event_bus.publish(
             EventType.NYRA_RESPONSE, response_id=response_id, turn_id=turn_id, text=response,
             display_text=prepared.display_text, speech_text=prepared.speech_text, state=state.value,
             emotion_intensity=emotion_plan.intensity,
-            emotion_engine_supported=self.tts.capabilities().supports_emotion,
+            emotion_engine_supported=bool(getattr(provider_capabilities, "supports_emotion", False)),
+            dialogue_policy=(persona_runtime.dialogue_policy.mode.value if persona_runtime else None),
+            voice_emotion=voice_interface.model_dump(mode="json") if voice_interface else None,
+            voice_style=voice_build.presentation.model_dump(mode="json") if voice_build else None,
         )
         self.telemetry.mark(response_id, "t_response_complete")
         metrics = self.telemetry.finish(response_id)
@@ -499,7 +582,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
         logger.info("TURN END", extra={"turn_id": turn_id, "status": final_status.value})
         self.turns.finish(turn_id, final_status, final_response=response)
         await self._set_status(RealtimeStatus.IDLE, response_id, turn_id)
-        await self.avatar.mode("idle", state.value)
+        await self.avatar.mode("idle")
         return ChatResult(
             response_id=response_id, turn_id=turn_id, pipeline_status=final_status.value, response=response,
             display_text=prepared.display_text, speech_text=prepared.speech_text, state=state.value,
@@ -516,8 +599,12 @@ class RealtimeOrchestrator(ChatOrchestrator):
         if index == 0:
             self.telemetry.mark(response_id, "t_first_sentence")
         await self.event_bus.publish(EventType.SENTENCE_READY, response_id=response_id, turn_id=turn_id, index=index, characters=len(styled))
-        if speech_task:
-            await queue.put((index, styled))
+        if speech_task and not speech_task.done() and response_id not in self._speech_cancelled_ids:
+            pending = asyncio.create_task(queue.put((index, styled)))
+            await asyncio.wait((pending, speech_task), return_when=asyncio.FIRST_COMPLETED)
+            if not pending.done():
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
         return index + 1
 
     async def _speech_worker(self, response_id: str, turn_id: str, user_text: str, state: str, queue: asyncio.Queue,
@@ -543,27 +630,113 @@ class RealtimeOrchestrator(ChatOrchestrator):
                 sentence_index=index,
             )
             self.telemetry.measure(response_id, "emotion_planning_ms", (time.perf_counter() - planning_started) * 1000)
-            last_state = plan.emotion.value
-            capabilities = self.tts.capabilities()
-            acoustic_state = last_state if capabilities.supports_emotion else "neutral"
-            _profile, defaults = load_voice_profile()
-            options = defaults.with_emotion(plan)
+            persona_runtime = getattr(self.state_machine, "persona_runtime", None)
+            if persona_runtime is not None:
+                await self.state_machine.transition(
+                    CharacterEmotionalState(plan.emotion.value),
+                    intensity=plan.intensity,
+                    confidence=plan.confidence,
+                    reason=plan.reason,
+                )
+                canonical_emotion = await persona_runtime.current_emotion()
+                last_state = canonical_emotion.primary.value
+                applied_intensity = canonical_emotion.intensity
+            else:
+                last_state = plan.emotion.value
+                applied_intensity = plan.intensity
+            capabilities = self.tts.capabilities() if callable(getattr(self.tts, "capabilities", None)) else None
+            emotion_supported = bool(getattr(capabilities, "supports_emotion", False))
+            acoustic_state = last_state if emotion_supported else "neutral"
+            voice_build = self.emotional_presence.build_voice_style(
+                emotion=last_state,
+                intensity=applied_intensity,
+                context={"source": "streaming_chat", "turn_id": turn_id, "sentence_index": index},
+            ) if self.emotional_presence is not None else None
+            voice_interface = voice_build.presentation if voice_build else (
+                persona_runtime.voice_interface(
+                    provider_supports_emotion=emotion_supported,
+                    emotion=last_state,
+                    intensity=applied_intensity,
+                )
+                if persona_runtime is not None else None
+            )
+            if voice_build is not None:
+                acoustic_state = voice_build.presentation.acoustic_emotion
+                options = voice_build.options
+            elif voice_interface is not None:
+                last_state = voice_interface.emotion.value
+                acoustic_state = voice_interface.acoustic_emotion
+                if last_state != plan.emotion.value:
+                    from app.speech.emotion import EmotionPlan
+
+                    plan = EmotionPlan.validated(
+                        last_state, voice_interface.intensity,
+                        confidence=plan.confidence, reason="persona_runtime_voice_fallback",
+                        turn_id=turn_id, sentence_index=index,
+                    )
+                _profile, defaults = load_voice_profile()
+                options = defaults.with_emotion(plan)
+            else:
+                _profile, defaults = load_voice_profile()
+                options = defaults.with_emotion(plan)
             prepared = self.prosody.prepare(sentence, provider=self.tts.name)
+            from app.natural_conversation.speech_planner import plan_speech
+            speech_plan = plan_speech(prepared.speech_text, emotion=last_state,
+                                      intensity=applied_intensity, capabilities=capabilities)
             if first:
                 await self.event_bus.publish(
                     EventType.TTS_STARTED,
                     state=last_state,
-                    emotion_intensity=plan.intensity,
-                    emotion_engine_supported=capabilities.supports_emotion,
+                    emotion_intensity=applied_intensity,
+                    emotion_engine_supported=emotion_supported,
                     response_id=response_id,
                     turn_id=turn_id,
                     streaming=True,
+                    voice_emotion=voice_interface.model_dump(mode="json") if voice_interface else None,
+                    voice_style=voice_build.presentation.model_dump(mode="json") if voice_build else None,
                 )
                 self.telemetry.mark(response_id, "t_tts_start")
-            await self.event_bus.publish(EventType.TTS_CHUNK_STARTED, response_id=response_id, turn_id=turn_id, index=index, state=last_state, emotion_intensity=plan.intensity)
+            await self.event_bus.publish(EventType.TTS_CHUNK_STARTED, response_id=response_id, turn_id=turn_id, index=index, state=last_state, emotion_intensity=applied_intensity, speech_text=speech_plan.spoken_text)
+            packet_index = 0
+            packet_rate = 24000
+            async def emit_audio(packet):
+                nonlocal packet_index, packet_rate, first
+                if response_id in self._speech_cancelled_ids:
+                    raise asyncio.CancelledError
+                if packet.timestamps and not packet.pcm and not packet.path:
+                    # Provider alignment is optional, never an empty audio chunk.
+                    return
+                packet_rate = packet.sample_rate
+                if packet.path is not None:
+                    url = f"/api/audio/{packet.path.name}"
+                    audio_urls.append(url)
+                    await self.event_bus.publish(EventType.TTS_CHUNK_FINISHED, response_id=response_id,
+                        turn_id=turn_id, index=index, audio_url=url, state=last_state,
+                        display_text=sentence, speech_text=speech_plan.spoken_text)
+                else:
+                    await self.event_bus.publish(EventType.TTS_PCM_CHUNK, response_id=response_id,
+                        turn_id=turn_id, index=index, packet_index=packet_index, sample_rate=packet.sample_rate,
+                        pcm=base64.b64encode(packet.pcm).decode("ascii"), final=False)
+                    packet_index += 1
+                if first:
+                    self.telemetry.mark(response_id, "t_first_audio")
+                    await self._set_status(RealtimeStatus.SPEAKING, response_id, turn_id)
+                    await self.avatar.mode("speaking")
+                    first = False
             try:
+                if capabilities and capabilities.supports_streaming:
+                    await self.speech_queue.synthesize(
+                        self.tts, speech_plan.spoken_text, acoustic_state, SpeechPriority.USER,
+                        response_id=response_id, chunk_index=index, turn_id=turn_id,
+                        options=options, on_audio=emit_audio,
+                    )
+                    if packet_index:
+                        await self.event_bus.publish(EventType.TTS_PCM_CHUNK, response_id=response_id,
+                            turn_id=turn_id, index=index, packet_index=packet_index, sample_rate=packet_rate,
+                            pcm="", final=True)
+                    continue
                 output = await self.speech_queue.synthesize(
-                    self.tts, prepared.speech_text, acoustic_state, SpeechPriority.USER,
+                    self.tts, speech_plan.spoken_text, acoustic_state, SpeechPriority.USER,
                     response_id=response_id, chunk_index=index, turn_id=turn_id,
                     options=options,
                 )
@@ -586,11 +759,12 @@ class RealtimeOrchestrator(ChatOrchestrator):
             if first:
                 self.telemetry.mark(response_id, "t_first_audio")
                 await self._set_status(RealtimeStatus.SPEAKING, response_id, turn_id)
-                await self.avatar.mode("speaking", last_state)
+                await self.avatar.mode("speaking")
                 first = False
             await self.event_bus.publish(
                 EventType.TTS_CHUNK_FINISHED, response_id=response_id, turn_id=turn_id, index=index,
-                audio_url=audio_url, state=last_state, emotion_intensity=plan.intensity, display_text=sentence,
+                audio_url=audio_url, state=last_state, emotion_intensity=applied_intensity, display_text=sentence,
+                speech_text=speech_plan.spoken_text, speech_plan=speech_plan.metadata(),
             )
         if not first:
             await self.event_bus.publish(EventType.TTS_FINISHED, state=last_state, response_id=response_id, turn_id=turn_id, streaming=True)
@@ -611,16 +785,23 @@ class RealtimeOrchestrator(ChatOrchestrator):
 
     async def cancel_speech(self, reason: str = "user_barge_in") -> bool:
         """Stop TTS generation/playback events without cancelling LLM/tools/Agent work."""
-        response_id = self._active_response_id
+        session = getattr(self, "voice_session", None)
+        response_id = (session.playing_response if session else None) or self._active_response_id
         if not response_id:
             return False
         self._speech_cancelled_ids.add(response_id)
-        self.emotion_planner.cancel_turn(f"turn_{response_id}")
+        if len(self._speech_cancelled_ids) > 256:
+            stale = next((key for key in self._speech_cancelled_ids if key not in {response_id, self._active_response_id}), None)
+            if stale:
+                self._speech_cancelled_ids.discard(stale)
+        if session:
+            session.interrupt(response_id)
+        self.emotion_planner.cancel_turn(response_id if response_id.startswith("turn_") else f"turn_{response_id}")
         cancelled = await self.speech_queue.cancel(response_id)
         await self.event_bus.publish(EventType.USER_INTERRUPTED, response_id=response_id, reason=reason, speech_only=True)
         await self.event_bus.publish(EventType.SPEECH_CANCELLED, response_id=response_id, reason=reason)
         await self._set_status(RealtimeStatus.INTERRUPTED, response_id)
-        await self.avatar.mode("listening", "neutral")
+        await self.avatar.mode("listening")
         await self._set_status(RealtimeStatus.LISTENING, response_id)
         return cancelled > 0 or self.status == RealtimeStatus.LISTENING
 
@@ -631,7 +812,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
         await self.event_bus.publish(EventType.USER_INTERRUPTED, response_id=response_id, reason=reason)
         await self.event_bus.publish(EventType.SPEECH_CANCELLED, response_id=response_id, reason=reason)
         await self.event_bus.publish(EventType.REALTIME_CANCELLED, response_id=response_id, reason=reason)
-        await self.avatar.mode("listening", "neutral")
+        await self.avatar.mode("listening")
         await self._set_status(RealtimeStatus.LISTENING, response_id)
 
     async def _set_status(self, status: RealtimeStatus, response_id: str, turn_id: str | None = None) -> None:

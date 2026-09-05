@@ -156,6 +156,9 @@ def classify_relevance(name: str, instance_id: str) -> DeviceRelevance:
 class WindowsUsbDiscovery:
     """Enumerate USB/PnP metadata through SetupAPI; never reads device content."""
 
+    source = "windows_setupapi"
+    simulated = False
+
     def __init__(self) -> None:
         self.last_error: str | None = None
 

@@ -1,5 +1,25 @@
 # Network Watch
 
+## Observability V2
+
+O snapshot V2 mantém o contrato plano anterior e adiciona blocos estruturados
+`interface`, `quality`, `local_interface`, `gateway_state`, `dns_state` e
+`internet_state`. Bytes, pacotes, erros e descartes vêm dos contadores da
+interface da rota padrão. RX/TX e pacotes/s são deltas por tempo monotônico;
+troca de interface, reset do contador e amostra duplicada reiniciam o baseline
+e retornam `null` até a próxima diferença válida. A interface nunca é somada a
+adaptadores virtuais não selecionados.
+
+O histórico em memória continua limitado a 900 amostras. A API aceita
+`since` em `/api/network-watch/metrics`, permitindo atualização incremental
+da UI. O dashboard separa velocidade do link (capacidade nominal) de
+throughput (tráfego observado) e exibe `UNAVAILABLE` quando o coletor não
+fornece um valor real. Nenhum speedtest é executado.
+
+Eventos são emitidos no EventBus e persistidos com deduplicação por transição
+ou cooldown. Testes manuais de latência/recovery permanecem locais e são
+marcados como `simulated`; eles não alteram as séries de métricas reais.
+
 Network Watch é um monitor assíncrono, read-only e opt-in. Ele nunca altera adaptadores, rotas, DNS ou firewall.
 
 ## Probes

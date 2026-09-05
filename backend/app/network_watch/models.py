@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class NetworkSeverity(StrEnum):
     INFO = "info"
+    NOTICE = "notice"
     WARNING = "warning"
     CRITICAL = "critical"
     RECOVERY = "recovery"
@@ -23,10 +24,66 @@ class NetworkEvent(BaseModel):
     metrics: dict[str, Any] = Field(default_factory=dict)
     diagnosis: str | None = None
     recovered_at: datetime | None = None
+    simulated: bool = False
+
+
+class NetworkHealth(StrEnum):
+    DISABLED = "disabled"
+    COLLECTING = "collecting"
+    HEALTHY = "healthy"
+    WARNING = "warning"
+    DEGRADED = "degraded"
+    CRITICAL = "critical"
+
+
+class NetworkInterfaceSnapshot(BaseModel):
+    name: str | None = None
+    type: str | None = None
+    ipv4: str | None = None
+    ipv6: str | None = None
+    link_up: bool | None = None
+    link_speed_mbps: float | None = None
+    mtu: int | None = None
+    bytes_rx: int | None = None
+    bytes_tx: int | None = None
+    packets_rx: int | None = None
+    packets_tx: int | None = None
+    errors_rx: int | None = None
+    errors_tx: int | None = None
+    drops_rx: int | None = None
+    drops_tx: int | None = None
+    rx_bytes_per_sec: float | None = None
+    tx_bytes_per_sec: float | None = None
+    rx_packets_per_sec: float | None = None
+    tx_packets_per_sec: float | None = None
+
+
+class NetworkQualitySnapshot(BaseModel):
+    latency_ms: float | None = None
+    latency_average_ms: float | None = None
+    latency_min_ms: float | None = None
+    latency_max_ms: float | None = None
+    jitter_ms: float | None = None
+    packet_loss_percent: float | None = None
+
+
+class ConnectivityTargetSnapshot(BaseModel):
+    kind: str
+    address: str | None = None
+    state: str = "unavailable"
+    reachable: bool | None = None
+    latency_ms: float | None = None
+    last_probe_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    last_transition_at: datetime | None = None
+    recent_success_ratio: float | None = None
 
 
 class NetworkSnapshot(BaseModel):
+    schema_version: int = 2
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    health: NetworkHealth = NetworkHealth.COLLECTING
     gateway: str | None = None
     gateway_alive: bool | None = None
     gateway_latency_ms: float | None = None
@@ -41,13 +98,29 @@ class NetworkSnapshot(BaseModel):
     ip_address: str | None = None
     bytes_sent: int | None = None
     bytes_received: int | None = None
-    upload_bps: float = 0
-    download_bps: float = 0
-    packet_loss_percent: float = 0
-    jitter_ms: float = 0
+    upload_bps: float | None = None
+    download_bps: float | None = None
+    rx_bytes_per_sec: float | None = None
+    tx_bytes_per_sec: float | None = None
+    packets_received: int | None = None
+    packets_sent: int | None = None
+    rx_packets_per_sec: float | None = None
+    tx_packets_per_sec: float | None = None
+    errors_received: int | None = None
+    errors_sent: int | None = None
+    drops_received: int | None = None
+    drops_sent: int | None = None
+    packet_loss_percent: float | None = None
+    jitter_ms: float | None = None
     latency_min_ms: float | None = None
     latency_max_ms: float | None = None
     latency_average_ms: float | None = None
+    interface: NetworkInterfaceSnapshot | None = None
+    quality: NetworkQualitySnapshot | None = None
+    local_interface: ConnectivityTargetSnapshot | None = None
+    gateway_state: ConnectivityTargetSnapshot | None = None
+    dns_state: ConnectivityTargetSnapshot | None = None
+    internet_state: ConnectivityTargetSnapshot | None = None
 
 
 class NetworkWatchSettingsUpdate(BaseModel):

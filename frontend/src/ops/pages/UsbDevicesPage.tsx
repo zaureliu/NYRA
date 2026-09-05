@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { apiSend } from '../../runtime/api'
 import { usePolling } from '../hooks'
 import { ActionButton, Card, Empty, ErrorAlert, StatusBadge, Toggle } from '../ui'
+import { HardwareEngineeringCard } from './HardwareEngineeringCard'
 
 interface UsbStatus {
   monitor_state: string
@@ -214,6 +215,7 @@ export function UsbDevicesPage() {
       </div>
 
       <h2 className="ops-section-title">Conectados Agora</h2>
+      <HardwareEngineeringCard />
       <Card>
         {(connected.data?.devices ?? []).length === 0 ? <Empty text="Nenhum dispositivo USB relevante conectado." /> : (
           <div className="table-scroll"><table className="ops-table">

@@ -144,6 +144,7 @@ class OperatorTaskManager:
         self._approval_granted: dict[str, bool] = {}
         self._lock = asyncio.Lock()
         self._db_lock = asyncio.Lock()
+        self._last_emitted_states: dict[str, str] = {}
 
     # ------------------------------------------------------------------ lifecycle
     async def initialize(self) -> None:
@@ -558,6 +559,15 @@ class OperatorTaskManager:
                     ),
                 )
         await asyncio.to_thread(work)
+        if self._last_emitted_states.get(task.task_id) != task.state:
+            self._last_emitted_states[task.task_id] = task.state
+            await self._emit(
+                "TASK_STATE_CHANGED",
+                task_id=task.task_id,
+                goal=task.goal,
+                state=task.state,
+                source="operator_task",
+            )
 
     async def _load_all(self) -> list[OperatorTask]:
         def work() -> list[OperatorTask]:
@@ -598,6 +608,7 @@ class OperatorTaskManager:
         except ValueError:
             event = EventType.ERROR
         try:
+            payload.setdefault("source", "operator_task")
             await self.event_bus.publish(event, **payload)
         except Exception:  # noqa: BLE001
             pass

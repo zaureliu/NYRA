@@ -5,13 +5,15 @@ import { useAudioSettings } from './hooks/useAudioSettings'
 import { useAudioLipSync } from './hooks/useAudioLipSync'
 import { useNyraSocket } from './hooks/useNyraSocket'
 import { usePushToTalk } from './hooks/usePushToTalk'
+import type { STTResult } from './runtime/stt'
 import { useStreamingAudioQueue } from './hooks/useStreamingAudioQueue'
-import type { ActivityStatus, AvatarControl, ChatMessage, ChatResponse, EmotionalState, Health, ToolActivity } from './types'
+import type { ActivityStatus, ChatMessage, ChatResponse, EmotionalState, Health, ToolActivity } from './types'
 import { dashboardOwnsRealtimeAudio } from './runtime/audioOwnership'
-import { TurnFilter, adoptInputTurn, extractTurnId } from './runtime/turns'
+import { TurnFilter, adoptInputTurn, extractTurnId, isConversationToolEvent } from './runtime/turns'
 import { backendUrl, isTauriRuntime } from './runtime/backend'
 import { sendChat } from './runtime/conversation'
 import { readHeaderStatus } from './runtime/headerStatus'
+import { readProactivePresenceNotice } from './runtime/proactivePresence'
 
 import { OPS_VIEWS, Sidebar, type OpsView } from './ops/Sidebar'
 import { TopStatusBar } from './ops/TopStatusBar'
@@ -47,29 +49,14 @@ const FEED_EVENT_LABELS: Record<string, string> = {
   USER_SPEECH_FINAL: 'Fala do operador transcrita',
   STT_STARTED: 'Transcrição iniciada',
   LLM_STREAM_STARTED: 'LLM gerando resposta',
-  SENTINEL_STATUS_CHANGED: 'Sentinel mudou de estado',
-  SENTINEL_EVENT: 'Evento recebido do Sentinel',
-  SENTINEL_ALERT: 'Alerta do Sentinel',
-  NETWORK_ALERT: 'Alerta de rede',
   JOB_STARTED: 'Job iniciado',
-  JOB_FINISHED: 'Job finalizado',
   TASK_CREATED: 'Task criada',
   WORKFLOW_RUN_STARTED: 'Workflow em execução',
-  WORKFLOW_RUN_FINISHED: 'Workflow finalizado',
   RECOVERY_EXECUTED: 'Recovery executado',
   RUNTIME_SERVICE_RESTARTED: 'Serviço reiniciado pelo supervisor',
   PROACTIVE_ALERT_FIRED: 'Alerta proativo',
   MONITOR_JOB_CREATED: 'MonitorJob criado',
-  MONITOR_JOB_CHANGED: 'MonitorJob detectou mudança',
-  MONITOR_JOB_COMPLETED: 'MonitorJob concluído',
-  MONITOR_JOB_FAILED: 'MonitorJob falhou',
   MONITOR_JOB_CANCELLED: 'MonitorJob cancelado',
-  MONITOR_NOTIFICATION: 'Atualização de monitoramento',
-  'usb.device.connected': 'USB conectado',
-  'usb.device.disconnected': 'USB removido',
-  'usb.device.unknown': 'Novo USB desconhecido',
-  'usb.device.com_changed': 'Porta COM alterada',
-  usb_monitor_failure: 'Monitor USB degradado',
   ERROR: 'Erro de pipeline',
 }
 
@@ -81,7 +68,6 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([])
   const [busy, setBusy] = useState(false)
-  const [avatarControl, setAvatarControl] = useState<Partial<AvatarControl>>({})
   const audio = useAudioSettings()
   const microphone = audio.settings.microphone
   const speaker = audio.settings.speaker
@@ -103,10 +89,10 @@ export default function App() {
     lipSyncSent.current = now
     void fetch('/api/live2d/lip-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) }).catch(() => undefined)
   }, [])
-  const { play } = useAudioLipSync(speaker, sendLive2DMouth, audio.settings.volume)
+  const { play, stop: stopPlayback } = useAudioLipSync(speaker, sendLive2DMouth, audio.settings.volume)
 
-  const setPlaybackGuard = useCallback(async (playing: boolean, responseId?: string) => {
-    await fetch('/api/listening/playback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playing, response_id: responseId }) }).catch(() => undefined)
+  const setPlaybackGuard = useCallback(async (playing: boolean, responseId?: string, ack?: import('./hooks/useStreamingAudioQueue').PlaybackAck) => {
+    await fetch('/api/listening/playback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playing, response_id: responseId, ...ack }) }).catch(() => undefined)
   }, [])
 
   const playResponse = useCallback(async (url: string, responseId?: string) => {
@@ -121,7 +107,7 @@ export default function App() {
     catch { setStatus('IDLE'); await setPlaybackGuard(false) }
   }, [play, setPlaybackGuard])
 
-  const streaming = useStreamingAudioQueue(play, setPlaybackGuard, useCallback((speaking) => setStatus(speaking ? 'SPEAKING' : 'IDLE'), []))
+  const streaming = useStreamingAudioQueue(play, setPlaybackGuard, useCallback((speaking) => setStatus(speaking ? 'SPEAKING' : 'IDLE'), []), stopPlayback)
   const turnFilter = useRef(new TurnFilter())
   const pendingTurnRequests = useRef(0)
 
@@ -135,26 +121,34 @@ export default function App() {
     }
     const responseId = String(event.payload.response_id ?? '')
     const eventTurnId = extractTurnId(event.payload)
+    if (event.type === 'USER_SPEECH_FINAL' && responseId && event.payload.text) {
+      const id = `voice-${responseId}`
+      setMessages((current) => current.some((message) => message.id === id) ? current : [...current, {
+        id, role: 'user', content: String(event.payload.text), timestamp: new Date(), turnId: eventTurnId ?? undefined,
+      }])
+    }
     if (adoptInputTurn(turnFilter.current, event.type, eventTurnId)) {
       pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1)
+      setToolActivities((current) => current.filter((item) => item.status === 'approval_required'))
     }
-    if (event.type === 'MONITOR_NOTIFICATION') {
-      const content = String(event.payload.message ?? 'Atualização de monitoramento.')
-      setMessages((current) => [...current, {
-        id: `monitor-${String(event.payload.monitor_id ?? crypto.randomUUID())}-${Date.now()}`,
-        role: 'assistant', content, timestamp: new Date(), status: 'complete',
-      }])
+    const proactiveNotice = readProactivePresenceNotice(event)
+    if (proactiveNotice) {
+      const severity = ['HIGH', 'CRITICAL'].includes(proactiveNotice.priority) ? 'alert' : 'info'
+      pushFeed(proactiveNotice.message, severity)
+      if (proactiveNotice.channels.includes('chat')) {
+        const id = `proactive-${proactiveNotice.id}`
+        setMessages((current) => current.some((message) => message.id === id) ? current : [...current, {
+          id, role: 'assistant', content: proactiveNotice.message, timestamp: new Date(), status: 'complete',
+        }])
+      }
     }
     if (
       event.type === 'TTS_FINISHED'
-      && (event.payload.source === 'monitor_job' || event.payload.source === 'voice_test')
+      && (event.payload.source === 'proactive_presence' || event.payload.source === 'voice_test')
       && event.payload.audio_url
       && dashboardOwnsRealtimeAudio(isTauriRuntime())
     ) {
-      void playResponse(
-        backendUrl(String(event.payload.audio_url)),
-        String(event.payload.response_id ?? '') || undefined,
-      )
+      streaming.enqueue({url: backendUrl(String(event.payload.audio_url)), responseId: String(event.payload.response_id ?? 'notification'), index: 0})
     }
     const assistantId = responseId ? `assistant-${responseId}` : eventTurnId ? `assistant-${eventTurnId}` : ''
     if (event.type === 'LLM_TOKEN_RECEIVED' && !turnFilter.current.accept(eventTurnId)) return
@@ -177,9 +171,15 @@ export default function App() {
       if (!turnFilter.current.accept(eventTurnId)) return
       streaming.enqueue({ url: backendUrl(String(event.payload.audio_url)), responseId: String(event.payload.response_id ?? 'stream'), index: Number(event.payload.index ?? 0) })
     }
-    if (event.type === 'TTS_FINISHED') turnFilter.current.end(eventTurnId)
-    if (event.type === 'SPEECH_CANCELLED') streaming.clear()
-    if (event.type === 'AVATAR_STATE_CHANGED') setAvatarControl(event.payload as Partial<AvatarControl>)
+    if (event.type === 'TTS_PCM_CHUNK' && dashboardOwnsRealtimeAudio(isTauriRuntime())) {
+      if (!turnFilter.current.accept(eventTurnId)) return
+      streaming.enqueue({url: `pcm16:${Number(event.payload.sample_rate)}:${String(event.payload.pcm ?? '')}`,
+        responseId: String(event.payload.response_id), index: Number(event.payload.index) * 1000 + Number(event.payload.packet_index),
+        sentenceIndex: Number(event.payload.index), final: Boolean(event.payload.final)})
+    }
+    if (event.type === 'SPEECH_CANCELLED') streaming.clear(String(event.payload.response_id ?? '') || undefined)
+    if (/^(?:SHELL_|REMOTE_SHELL_|AGENT_RUN_)/.test(event.type)
+      && !isConversationToolEvent(event, turnFilter.current)) return
     if (event.type === 'SHELL_EXECUTION_STARTED') {
       const id = String(event.payload.execution_id ?? crypto.randomUUID())
       const activity: ToolActivity = { id, command: String(event.payload.command ?? ''), riskLevel: String(event.payload.risk_level ?? ''), status: 'running', tool: 'system_shell', agentRunId: String(event.payload.agent_run_id ?? '') }
@@ -301,18 +301,14 @@ export default function App() {
     } finally { setBusy(false); pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1) }
   }, [connected, health?.llm_ready, playResponse, streaming])
 
-  const handleAudio = useCallback(async (blob: Blob) => {
+  const handleAudio = useCallback(async (value: STTResult) => {
     setStatus('LISTENING')
     setBusy(true)
     try {
-      const body = new FormData()
-      body.append('audio', blob, 'nyra-input.webm')
-      const response = await fetch('/api/conversation/turn', { method: 'POST', body })
-      const value = await response.json()
-      if (!response.ok || !value.accepted) throw new Error(value.detail ?? 'Nenhuma fala detectada')
+      if (!value.accepted) throw new Error(value.reason ?? 'Nenhuma fala detectada')
       const text = String(value.transcription?.text ?? '')
       const chat = value.chat as ChatResponse
-      if (text) setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: text, timestamp: new Date() }])
+      if (text) setMessages((current) => current.some((message) => message.id === `voice-${chat?.response_id}`) ? current : [...current, { id: `voice-${chat?.response_id}`, role: 'user', content: text, timestamp: new Date() }])
       if (chat?.response) setMessages((current) => current.some((item) => item.id === `assistant-${chat.response_id}`) ? current : [...current, { id: `assistant-${chat.response_id}`, role: 'assistant', content: chat.response, timestamp: new Date() }])
       if (!connected) chat?.audio_urls?.forEach((url, index) => streaming.enqueue({ url: backendUrl(url), responseId: chat.response_id ?? 'ptt', index }))
     } catch (error) {
@@ -335,7 +331,8 @@ export default function App() {
     if (!value.accepted || !value.chat || !value.decision) return
     setMessages((current) => {
       const assistantId = `assistant-${value.chat!.response_id}`
-      const next = [...current, { id: crypto.randomUUID(), role: 'user' as const, content: value.decision!.text, timestamp: new Date() }]
+      const userId = `voice-${value.chat!.response_id}`
+      const next = current.some((message) => message.id === userId) ? current : [...current, { id: userId, role: 'user' as const, content: value.decision!.text, timestamp: new Date() }]
       return next.some((item) => item.id === assistantId)
         ? next
         : [...next, { id: assistantId, role: 'assistant' as const, content: value.chat!.response, timestamp: new Date() }]

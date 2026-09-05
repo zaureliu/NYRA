@@ -62,10 +62,19 @@ evitam reindexação de arquivo inalterado. Cada hit é `DOCUMENT_CONTENT`.
 
 ## Context Engine
 
+O World State Engine fornece ao Context Engine um bloco `TOOL_TRUSTED` compacto
+e selecionado pela consulta. O bloco inclui apenas estado grounded ainda válido
+pelo TTL; IDs internos de tasks/monitores não entram automaticamente no prompt.
+
 O budget deriva do contexto configurado do Ollama, limitado entre 4.000 e
 24.000 caracteres. Blocos são ranqueados por prioridade e relevância. As
 decisões SELECT/DROP_BUDGET ficam disponíveis nos diagnósticos e na Operations
 UI. Conversa, memória, documentos e runtime mantêm trust boundary explícito.
+
+Quando a consulta pede retomada, o Open Loops Engine pode acrescentar outro
+bloco `TOOL_TRUSTED`, limitado a objetivo, último estado confirmado, última
+ação, bloqueio, referências de artefatos e próximo passo possível. O envelope
+declara `authorization=false`: recuperar contexto não autoriza tools.
 
 ## Model Router V2
 
@@ -173,13 +182,14 @@ relatórios JSON e Markdown ficam em `reports/evaluations` do runtime local.
 
 ## Persistence e migrations
 
-Schema Intelligence atual: versão 2. Tabelas lógicas:
+Schema Intelligence atual: versão 3. Tabelas lógicas:
 
 - `memory_v2` e `memory_v2_fts`;
 - `knowledge_documents`, `knowledge_chunks`, `knowledge_fts`;
 - `autonomous_tasks_v2`;
 - `intelligence_events`;
 - `execution_traces`;
+- `goals_v1`, `open_loops_v1` e `open_loop_history`;
 - `intelligence_schema`.
 
 Migrations usam transação `BEGIN IMMEDIATE`, WAL e foreign keys. `quick_check`
@@ -194,6 +204,8 @@ Todas as rotas ficam sob `/api/intelligence` e herdam o middleware local:
 - `POST /memory`, `/memory/search`; `DELETE /memory/{id}`;
 - `POST /rag/ingest`, `/rag/search`, `/context/assemble`, `/model/route`;
 - `GET|POST /tasks...` para create/run/pause/resume/cancel;
+- `GET|POST /goals` e `/open-loops...` para consulta, criação, transição e
+  retomada sem execução;
 - `GET /events`, `/incidents`, `/traces`;
 - `POST /diagnostics/{domain}`, `/traces/{id}/replay`;
 - `POST /evaluations/run`, `/vision/analyze`.

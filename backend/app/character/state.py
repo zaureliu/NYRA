@@ -5,6 +5,8 @@ from enum import StrEnum
 
 from app.events import EventBus, EventType
 from app.memory import MemoryRepository
+from app.persona_runtime.models import NyraEmotion
+from app.persona_runtime.policy import EmotionSignal
 
 
 class EmotionalState(StrEnum):
@@ -38,17 +40,25 @@ TRANSITIONS: dict[EmotionalState, set[EmotionalState]] = {
 class StateMachine:
     """A small, persistent state machine; states affect presentation, never safety."""
 
-    def __init__(self, memory: MemoryRepository, event_bus: EventBus) -> None:
+    def __init__(self, memory: MemoryRepository, event_bus: EventBus,
+                 persona_runtime=None) -> None:
         self.memory = memory
         self.event_bus = event_bus
+        self.persona_runtime = persona_runtime
 
     async def current(self) -> EmotionalState:
+        if self.persona_runtime is not None:
+            current = await self.persona_runtime.current_emotion()
+            return EmotionalState(current.primary.value)
         try:
             return EmotionalState(await self.memory.get_state())
         except ValueError:
             return EmotionalState.NEUTRAL
 
     async def infer_and_transition(self, text: str) -> EmotionalState:
+        if self.persona_runtime is not None:
+            current = await self.persona_runtime.observe_user_text(text)
+            return EmotionalState(current.primary.value)
         normalized = text.casefold()
         target = EmotionalState.NEUTRAL
         if re.search(r"\b(erro|falhou|offline|indisponível|risco|ataque|alerta)\b", normalized):
@@ -65,7 +75,26 @@ class StateMachine:
             target = EmotionalState.CURIOUS
         return await self.transition(target)
 
-    async def transition(self, target: EmotionalState) -> EmotionalState:
+    async def transition(
+        self,
+        target: EmotionalState,
+        *,
+        intensity: float = .25,
+        confidence: float = .7,
+        reason: str = "presentation_transition",
+        priority: int = 50,
+    ) -> EmotionalState:
+        if self.persona_runtime is not None:
+            # Legacy presentation-only states are mapped to the supported
+            # runtime vocabulary rather than creating a competing ontology.
+            if target == EmotionalState.TIRED:
+                mapped = NyraEmotion.NEUTRAL
+            else:
+                mapped = NyraEmotion(target.value)
+            current = await self.persona_runtime.apply_signal(EmotionSignal(
+                mapped, intensity, confidence, priority, reason,
+            ))
+            return EmotionalState(current.primary.value)
         previous = await self.current()
         if target not in TRANSITIONS[previous]:
             target = EmotionalState.NEUTRAL

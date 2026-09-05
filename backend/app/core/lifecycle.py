@@ -117,6 +117,18 @@ def trigger_server_exit() -> None:
     threading.Thread(target=_raise, name="nyra-power-exit", daemon=True).start()
 
 
+def parent_disappeared_shutdown() -> None:
+    """Fail-safe used only by an owned packaged backend."""
+    global _shutting_down
+    if _shutting_down:
+        return
+    _shutting_down = True
+    write_intentional_flag("shutdown", "desktop_parent_disappeared")
+    disarm_watchdog("desktop_parent_disappeared")
+    logger.warning("shutdown_requested reason=desktop_parent_disappeared")
+    trigger_server_exit()
+
+
 async def coordinate_full_shutdown(reason: str = "operator_request") -> dict[str, Any]:
     """Fluxo §11: flag → disarm watchdog → rejeitar novo trabalho → exit.
 
@@ -130,7 +142,7 @@ async def coordinate_full_shutdown(reason: str = "operator_request") -> dict[str
     _shutting_down = True
     flag = write_intentional_flag("shutdown", reason)
     disarmed = disarm_watchdog(reason)
-    logger.info("full_shutdown_requested", extra={"reason": reason[:80], "watchdog_disarmed": disarmed})
+    logger.info("shutdown_requested reason=%s watchdog_disarmed=%s", reason[:80], disarmed)
     trigger_server_exit()
     return {"state": "SHUTDOWN_REQUESTED", "flag": flag["session"], "watchdog_disarmed": disarmed}
 

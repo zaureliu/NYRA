@@ -27,6 +27,7 @@ class EventType(StrEnum):
     TTS_FINISHED = "TTS_FINISHED"
     TTS_CHUNK_STARTED = "TTS_CHUNK_STARTED"
     TTS_CHUNK_FINISHED = "TTS_CHUNK_FINISHED"
+    TTS_PCM_CHUNK = "TTS_PCM_CHUNK"
     TTS_CHUNK_FAILED = "TTS_CHUNK_FAILED"
     TTS_FAILED = "TTS_FAILED"
     PLAYBACK_STARTED = "PLAYBACK_STARTED"
@@ -38,12 +39,26 @@ class EventType(StrEnum):
     HANDS_FREE_STARTED = "HANDS_FREE_STARTED"
     HANDS_FREE_ENDED = "HANDS_FREE_ENDED"
     NETWORK_GATEWAY_DOWN = "NETWORK_GATEWAY_DOWN"
+    NETWORK_GATEWAY_RECOVERED = "NETWORK_GATEWAY_RECOVERED"
     NETWORK_INTERNET_DOWN = "NETWORK_INTERNET_DOWN"
+    NETWORK_INTERNET_RECOVERED = "NETWORK_INTERNET_RECOVERED"
     NETWORK_DNS_FAILURE = "NETWORK_DNS_FAILURE"
+    NETWORK_DNS_RECOVERED = "NETWORK_DNS_RECOVERED"
     NETWORK_HIGH_LATENCY = "NETWORK_HIGH_LATENCY"
+    NETWORK_LATENCY_RECOVERED = "NETWORK_LATENCY_RECOVERED"
     NETWORK_PACKET_LOSS = "NETWORK_PACKET_LOSS"
+    NETWORK_PACKET_LOSS_RECOVERED = "NETWORK_PACKET_LOSS_RECOVERED"
     NETWORK_HIGH_JITTER = "NETWORK_HIGH_JITTER"
+    NETWORK_JITTER_RECOVERED = "NETWORK_JITTER_RECOVERED"
     NETWORK_INTERFACE_CHANGED = "NETWORK_INTERFACE_CHANGED"
+    NETWORK_LINK_DOWN = "NETWORK_LINK_DOWN"
+    NETWORK_LINK_UP = "NETWORK_LINK_UP"
+    NETWORK_MONITOR_STARTED = "NETWORK_MONITOR_STARTED"
+    NETWORK_MONITOR_STOPPED = "NETWORK_MONITOR_STOPPED"
+    NETWORK_RX_ERRORS_DETECTED = "NETWORK_RX_ERRORS_DETECTED"
+    NETWORK_TX_ERRORS_DETECTED = "NETWORK_TX_ERRORS_DETECTED"
+    NETWORK_DROPS_DETECTED = "NETWORK_DROPS_DETECTED"
+    NETWORK_QUIET_MODE_CHANGED = "NETWORK_QUIET_MODE_CHANGED"
     NETWORK_RECOVERED = "NETWORK_RECOVERED"
     NETWORK_STATUS_UPDATED = "NETWORK_STATUS_UPDATED"
     NETWORK_ALERT = "NETWORK_ALERT"
@@ -101,6 +116,11 @@ class EventType(StrEnum):
     HOME_ASSISTANT_ACTION_VERIFIED = "HOME_ASSISTANT_ACTION_VERIFIED"
     MEMORY_CREATED = "MEMORY_CREATED"
     STATE_CHANGED = "STATE_CHANGED"
+    # Persona & Emotional Runtime V1: provider-neutral presentation state.
+    NYRA_EMOTION_CHANGED = "NYRA_EMOTION_CHANGED"
+    # Emotional Presence Sync V1: presentation result only. Persona Runtime
+    # remains the sole producer of emotional truth.
+    NYRA_EMOTIONAL_PRESENCE_SYNCED = "NYRA_EMOTIONAL_PRESENCE_SYNCED"
     ERROR = "ERROR"
     # Operator V2 (prompt9)
     DESKTOP_EVENT = "DESKTOP_EVENT"
@@ -120,6 +140,9 @@ class EventType(StrEnum):
     CREDENTIAL_CHANGED = "CREDENTIAL_CHANGED"
     RECOVERY_EXECUTED = "RECOVERY_EXECUTED"
     PROACTIVE_ALERT_FIRED = "PROACTIVE_ALERT_FIRED"
+    # Proactive Presence V1 owns user-facing presentation. Decision/audit data
+    # stays internal; this event contains only the redacted final notification.
+    PROACTIVE_PRESENCE_NOTIFICATION = "PROACTIVE_PRESENCE_NOTIFICATION"
     MONITOR_JOB_CREATED = "MONITOR_JOB_CREATED"
     MONITOR_JOB_READING = "MONITOR_JOB_READING"
     MONITOR_JOB_CHANGED = "MONITOR_JOB_CHANGED"
@@ -127,6 +150,11 @@ class EventType(StrEnum):
     MONITOR_JOB_FAILED = "MONITOR_JOB_FAILED"
     MONITOR_JOB_CANCELLED = "MONITOR_JOB_CANCELLED"
     MONITOR_NOTIFICATION = "MONITOR_NOTIFICATION"
+    # Open Loops & Goal Memory V1: state only; never an execution authority.
+    OPEN_LOOP_CREATED = "OPEN_LOOP_CREATED"
+    OPEN_LOOP_STATE_CHANGED = "OPEN_LOOP_STATE_CHANGED"
+    OPEN_LOOP_RESOLVED = "OPEN_LOOP_RESOLVED"
+    OPEN_LOOP_SUMMARY_UPDATED = "OPEN_LOOP_SUMMARY_UPDATED"
     # Windows USB Monitor V1: eventos lógicos já deduplicados.
     USB_MONITOR_STARTED = "usb.monitor.started"
     USB_MONITOR_STOPPED = "usb.monitor.stopped"
@@ -160,6 +188,7 @@ class EventType(StrEnum):
     COMPUTER_INTENT_RESOLVED = "computer.intent.resolved"
     COMPUTER_ACTION_EXECUTED = "computer.action.executed"
     COMPUTER_EFFECT_VERIFIED = "computer.effect.verified"
+    ARTIFACT_CONTEXT_UPDATED = "artifact.context.updated"
     USAGE_PATTERN_DETECTED = "usage.pattern.detected"
     SKILL_CANDIDATE_CREATED = "skill.candidate.created"
     SKILL_LEARNED = "skill.learned"
@@ -225,7 +254,8 @@ class EventBus:
         # §158: sequence id monotônico — a UI ignora eventos com seq <= visto.
         self._sequence += 1
         event = Event(type=event_type, payload=payload, seq=self._sequence)
-        self._history.append(event)
+        if event_type != EventType.TTS_PCM_CHUNK:
+            self._history.append(event)
         self.counters["events_published"] += 1
         subscribers = tuple(self._subscribers)
         if subscribers:

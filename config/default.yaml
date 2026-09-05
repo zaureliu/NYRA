@@ -25,6 +25,17 @@ stt_cpu_threads: 4
 stt_workers: 1
 silence_threshold: 0.018
 tts_provider: edge_tts
+# Provider layer V1 is independent from the legacy Voice Lab engine above.
+# Online voice is strictly opt-in and never contacted while disabled.
+tts_provider_id: local
+tts_provider_fallback: local
+tts_online_enabled: false
+tts_local_engine: kokoro
+tts_openai_model: gpt-4o-mini-tts
+tts_openai_voice: coral
+tts_elevenlabs_model: eleven_multilingual_v2
+tts_elevenlabs_voice_id: ""
+tts_online_timeout_seconds: 30
 edge_tts_enabled: true
 edge_tts_default_locale: pt-BR
 edge_tts_gender_filter: Female
@@ -163,6 +174,12 @@ desktop_watcher_enabled: true
 watch_default_ttl_seconds: 300
 watchdog_enabled: true
 proactive_operator_enabled: false
+proactive_presence_enabled: true
+proactive_presence_mode: NORMAL
+proactive_voice_enabled: false
+proactive_presence_cooldown_seconds: 300
+proactive_presence_max_per_hour: 6
+proactive_presence_defer_ttl_seconds: 1800
 elevated_session_default_ttl_seconds: 300
 homelab_poll_interval: 60
 homelab_mutations_enabled: false

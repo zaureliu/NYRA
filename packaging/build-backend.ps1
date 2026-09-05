@@ -20,8 +20,17 @@ $stageDist = Join-Path $stageRoot 'dist'
 $stageWork = Join-Path $stageRoot 'work'
 New-Item -ItemType Directory -Path $stageDist,$stageWork,$outputRoot -Force | Out-Null
 
-& $python -m PyInstaller --noconfirm --distpath $stageDist --workpath $stageWork (Join-Path $PSScriptRoot 'nyra-backend.spec')
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Cache and work directories belong exclusively to this generated build stage.
+# --clean must not remove a shared developer/PyInstaller cache elsewhere.
+$previousPyInstallerConfig = $env:PYINSTALLER_CONFIG_DIR
+try {
+    $env:PYINSTALLER_CONFIG_DIR = Join-Path $stageRoot 'cache'
+    & $python -m PyInstaller --clean --noconfirm --distpath $stageDist --workpath $stageWork (Join-Path $PSScriptRoot 'nyra-backend.spec')
+    $buildExitCode = $LASTEXITCODE
+} finally {
+    $env:PYINSTALLER_CONFIG_DIR = $previousPyInstallerConfig
+}
+if ($buildExitCode -ne 0) { exit $buildExitCode }
 
 $stagedOutput = Join-Path $stageDist 'nyra-backend'
 $stagedExecutable = Join-Path $stagedOutput 'nyra-backend.exe'

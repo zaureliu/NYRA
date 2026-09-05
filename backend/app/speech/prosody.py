@@ -12,6 +12,8 @@ CODE_BLOCK = re.compile(r"```(?:\w+)?\s*.*?```", re.DOTALL)
 INLINE_CODE = re.compile(r"`([^`]+)`")
 MARKDOWN_LINK = re.compile(r"\[([^]]+)]\([^)]+\)")
 RAW_URL = re.compile(r"https?://\S+")
+WINDOWS_PATH = re.compile(r"(?<!\w)(?:[A-Za-z]:\\|\\\\)[^\s,;]+")
+POSIX_PATH = re.compile(r"(?<!\w)/(?:[\w.-]+/)+[\w.-]+")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+", re.MULTILINE)
 LIST_MARKER = re.compile(r"^\s*(?:[-*+] |\d+[.)]\s+)", re.MULTILINE)
 EMPHASIS = re.compile(r"(?<!\w)[*_~]{1,3}|[*_~]{1,3}(?!\w)")
@@ -24,8 +26,12 @@ EMOTION_MARKER = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 INTERNAL_TRACE = re.compile(
-    r"^\s*(?:TOOL|TRACE|METADATA|SYSTEM|RUNTIME|AGENT)_[A-Z0-9_]+\s*=.*$",
-    re.MULTILINE,
+    r"^\s*(?:TOOL|TRACE|METADATA|SYSTEM|RUNTIME|AGENT)(?:_[A-Z0-9_]+|\s+(?:RESULT|TRACE|METADATA))?\s*[:=].*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+INTERNAL_IDENTIFIER = re.compile(
+    r"\b(?:PID|HWND|MONITOR(?:_ID)?|DISPLAY_ID|WINDOW_HANDLE)\s*[:=#]?\s*(?:0x[0-9a-f]+|[a-z0-9_-]{2,})\b",
+    re.IGNORECASE,
 )
 
 
@@ -63,6 +69,7 @@ class SpeechTextNormalizer:
         text = display_text.replace("\r\n", "\n")
         text = EMOTION_MARKER.sub("", text)
         text = INTERNAL_TRACE.sub("", text)
+        text = INTERNAL_IDENTIFIER.sub("identificador interno omitido", text)
         try:
             structured = json.loads(text)
             if isinstance(structured, (dict, list)):
@@ -72,6 +79,8 @@ class SpeechTextNormalizer:
         text = CODE_BLOCK.sub(" Código disponível na tela. ", text)
         text = MARKDOWN_LINK.sub(r"\1", text)
         text = RAW_URL.sub("endereço disponível na tela", text)
+        text = WINDOWS_PATH.sub("caminho disponível na tela", text)
+        text = POSIX_PATH.sub("caminho disponível na tela", text)
         text = INLINE_CODE.sub(r"\1", text)
         text = HEADING.sub("", text)
         text = LIST_MARKER.sub("", text)

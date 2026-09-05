@@ -20,6 +20,47 @@ class DefaultRoute:
     interface_name: str | None
 
 
+@dataclass(frozen=True)
+class NetworkCounterRates:
+    rx_bytes_per_sec: float | None = None
+    tx_bytes_per_sec: float | None = None
+    rx_packets_per_sec: float | None = None
+    tx_packets_per_sec: float | None = None
+    errors_rx_delta: int | None = None
+    errors_tx_delta: int | None = None
+    drops_rx_delta: int | None = None
+    drops_tx_delta: int | None = None
+
+
+def calculate_counter_rates(
+    previous: dict[str, Any] | None,
+    current: dict[str, Any],
+    elapsed_seconds: float,
+) -> NetworkCounterRates:
+    """Calculate real interface deltas, resetting cleanly on switches/resets."""
+    if not previous or previous.get("name") != current.get("name") or elapsed_seconds <= 0:
+        return NetworkCounterRates()
+    fields = (
+        "bytes_received", "bytes_sent", "packets_received", "packets_sent",
+        "errors_received", "errors_sent", "drops_received", "drops_sent",
+    )
+    if any(previous.get(field) is None or current.get(field) is None for field in fields):
+        return NetworkCounterRates()
+    deltas = {field: int(current[field]) - int(previous[field]) for field in fields}
+    if any(value < 0 for value in deltas.values()):
+        return NetworkCounterRates()
+    return NetworkCounterRates(
+        rx_bytes_per_sec=round(deltas["bytes_received"] / elapsed_seconds, 2),
+        tx_bytes_per_sec=round(deltas["bytes_sent"] / elapsed_seconds, 2),
+        rx_packets_per_sec=round(deltas["packets_received"] / elapsed_seconds, 2),
+        tx_packets_per_sec=round(deltas["packets_sent"] / elapsed_seconds, 2),
+        errors_rx_delta=deltas["errors_received"],
+        errors_tx_delta=deltas["errors_sent"],
+        drops_rx_delta=deltas["drops_received"],
+        drops_tx_delta=deltas["drops_sent"],
+    )
+
+
 async def detect_default_route() -> DefaultRoute:
     if platform.system() != "Windows":
         return await asyncio.to_thread(_fallback_route)
@@ -120,15 +161,36 @@ async def http_probe(timeout_seconds: float = 4) -> tuple[bool, float | None]:
 
 def interface_counters(name: str | None) -> dict[str, Any]:
     if not name:
-        return {"name": None, "up": False}
+        return {"name": None, "up": None}
     stats = psutil.net_if_stats().get(name)
     counters = psutil.net_io_counters(pernic=True).get(name)
     addresses = psutil.net_if_addrs().get(name, [])
     ipv4 = next((item.address for item in addresses if item.family == socket.AF_INET), None)
+    ipv6 = next(
+        (item.address.split("%", 1)[0] for item in addresses
+         if item.family == socket.AF_INET6 and not item.address.lower().startswith("fe80:")),
+        None,
+    )
+    normalized = name.casefold()
+    interface_type = (
+        "wi-fi" if any(token in normalized for token in ("wi-fi", "wifi", "wireless", "wlan"))
+        else "ethernet" if any(token in normalized for token in ("ethernet", "lan"))
+        else None
+    )
     return {
         "name": name,
-        "up": bool(stats and stats.isup),
+        "type": interface_type,
+        "up": bool(stats.isup) if stats else None,
         "ip_address": ipv4,
+        "ipv6_address": ipv6,
+        "link_speed_mbps": float(stats.speed) if stats and stats.speed > 0 else None,
+        "mtu": int(stats.mtu) if stats and stats.mtu > 0 else None,
         "bytes_sent": counters.bytes_sent if counters else None,
         "bytes_received": counters.bytes_recv if counters else None,
+        "packets_sent": counters.packets_sent if counters else None,
+        "packets_received": counters.packets_recv if counters else None,
+        "errors_sent": counters.errout if counters else None,
+        "errors_received": counters.errin if counters else None,
+        "drops_sent": counters.dropout if counters else None,
+        "drops_received": counters.dropin if counters else None,
     }

@@ -10,10 +10,13 @@ use tauri_plugin_window_state::StateFlags;
 mod backend_manager;
 mod backend_transport;
 mod conversation_transport;
+mod stt_transport;
 mod presence;
+mod shutdown;
 mod spout_presence;
 
 static CLICK_THROUGH: AtomicBool = AtomicBool::new(false);
+static CURSOR_TRACKER_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,10 +35,8 @@ struct GlobalCursorSample {
     cursor_y: i32,
     normalized_x: f64,
     normalized_y: f64,
-    window_bounds: ScreenBounds,
-    window_monitor_bounds: ScreenBounds,
-    cursor_monitor_bounds: ScreenBounds,
-    monitor_changed: bool,
+    virtual_desktop_bounds: ScreenBounds,
+    monitor_count: u32,
 }
 
 fn main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
@@ -74,6 +75,11 @@ fn open_dashboard(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn quit_nyra(app: tauri::AppHandle) -> bool {
+    shutdown::request_app_shutdown(app, shutdown::ShutdownReason::UiExit)
+}
+
+#[tauri::command]
 async fn backend_request(
     request: backend_transport::BackendRequest,
 ) -> Result<backend_transport::BackendResponse, String> {
@@ -88,6 +94,29 @@ fn start_conversation_bridge(
     bridge: tauri::State<'_, conversation_transport::ConversationBridge>,
 ) -> bool {
     bridge.start(app)
+}
+
+#[tauri::command]
+async fn stt_stream_open(window: tauri::WebviewWindow, bridge: tauri::State<'_, stt_transport::SttBridge>,
+    stream_id: String, ticket: String, channel: tauri::ipc::Channel<serde_json::Value>) -> Result<(), String> {
+    let bridge = bridge.inner().clone();
+    let owner = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || bridge.open(owner, stream_id, ticket, channel))
+        .await.map_err(|_| "STT_TASK_FAILED".to_string())?
+}
+
+#[tauri::command]
+fn stt_stream_audio(window: tauri::WebviewWindow, bridge: tauri::State<'_, stt_transport::SttBridge>,
+    stream_id: String, audio: Vec<u8>, end: bool) -> Result<(), String> {
+    bridge.send(window.label(), &stream_id, audio, end)
+}
+
+#[tauri::command]
+async fn stt_stream_close(window: tauri::WebviewWindow, bridge: tauri::State<'_, stt_transport::SttBridge>, stream_id: String) -> Result<(), String> {
+    let bridge = bridge.inner().clone();
+    let owner = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || bridge.close(&owner, &stream_id))
+        .await.map_err(|_| "STT_TASK_FAILED".to_string())
 }
 
 #[tauri::command]
@@ -161,13 +190,6 @@ fn vts_presence_status(
 }
 
 #[tauri::command]
-fn vts_presence_set_internal_visible(
-    state: tauri::State<'_, spout_presence::SpoutPresence>,
-    visible: bool,
-) {
-    state.set_internal_visible(visible);
-}
-
 fn emit_presence_state(window: &tauri::WebviewWindow, state: &str) {
     let _ = window.emit("nyra-presence", state);
 }
@@ -181,52 +203,57 @@ fn set_click_through(window: tauri::WebviewWindow, enabled: bool) -> Result<(), 
 }
 
 #[cfg(windows)]
-fn native_cursor_position() -> Option<(i32, i32, ScreenBounds)> {
-    use std::mem::{size_of, zeroed};
+fn native_cursor_position() -> Option<(i32, i32, ScreenBounds, u32)> {
     use windows_sys::Win32::Foundation::POINT;
-    use windows_sys::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetCursorPos, GetSystemMetrics, SM_CMONITORS, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+        SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
     let mut point = POINT { x: 0, y: 0 };
     if unsafe { GetCursorPos(&mut point) } == 0 {
         return None;
     }
-    let monitor = unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) };
-    let mut info: MONITORINFO = unsafe { zeroed() };
-    info.cbSize = size_of::<MONITORINFO>() as u32;
-    if monitor.is_null() || unsafe { GetMonitorInfoW(monitor, &mut info) } == 0 {
+    let bounds = ScreenBounds {
+        x: unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) },
+        y: unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) },
+        width: unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) }.max(0) as u32,
+        height: unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) }.max(0) as u32,
+    };
+    if bounds.width == 0 || bounds.height == 0 {
         return None;
     }
-    let bounds = ScreenBounds {
-        x: info.rcMonitor.left,
-        y: info.rcMonitor.top,
-        width: (info.rcMonitor.right - info.rcMonitor.left).max(0) as u32,
-        height: (info.rcMonitor.bottom - info.rcMonitor.top).max(0) as u32,
-    };
-    Some((point.x, point.y, bounds))
+    let monitor_count = unsafe { GetSystemMetrics(SM_CMONITORS) }.max(1) as u32;
+    Some((point.x, point.y, bounds, monitor_count))
 }
 
 #[cfg(not(windows))]
-fn native_cursor_position() -> Option<(i32, i32, ScreenBounds)> {
+fn native_cursor_position() -> Option<(i32, i32, ScreenBounds, u32)> {
     None
 }
 
+fn normalize_virtual_cursor(cursor_x: i32, cursor_y: i32, bounds: ScreenBounds) -> (f64, f64) {
+    let x = ((cursor_x - bounds.x) as f64 / (bounds.width.saturating_sub(1).max(1)) as f64)
+        .mul_add(2.0, -1.0)
+        .clamp(-1.0, 1.0);
+    let y = (1.0
+        - (cursor_y - bounds.y) as f64 / (bounds.height.saturating_sub(1).max(1)) as f64 * 2.0)
+        .clamp(-1.0, 1.0);
+    (x, y)
+}
+
 fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
-    let _ = std::thread::Builder::new()
+    if CURSOR_TRACKER_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let spawned = std::thread::Builder::new()
         .name("nyra-global-cursor".into())
         .spawn(move || {
-            let mut previous: Option<(i32, i32)> = None;
             let mut unavailable_reported_at: Option<Instant> = None;
-            let mut window_error_reported = false;
+            let mut emit_error_reported = false;
             let mut first_sample_reported = false;
-            loop {
-                if !window.is_visible().unwrap_or(false) {
-                    std::thread::sleep(Duration::from_millis(250));
-                    continue;
-                }
-                let Some((cursor_x, cursor_y, cursor_monitor_bounds)) = native_cursor_position()
+            while CURSOR_TRACKER_RUNNING.load(Ordering::SeqCst) {
+                let Some((cursor_x, cursor_y, virtual_desktop_bounds, monitor_count)) = native_cursor_position()
                 else {
                     if unavailable_reported_at
                         .map(|reported| reported.elapsed() >= Duration::from_secs(1))
@@ -247,10 +274,8 @@ fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
                                 cursor_y: 0,
                                 normalized_x: 0.0,
                                 normalized_y: 0.0,
-                                window_bounds: empty,
-                                window_monitor_bounds: empty,
-                                cursor_monitor_bounds: empty,
-                                monitor_changed: false,
+                                virtual_desktop_bounds: empty,
+                                monitor_count: 0,
                             },
                         );
                     }
@@ -258,66 +283,8 @@ fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
                     continue;
                 };
                 unavailable_reported_at = None;
-                if previous == Some((cursor_x, cursor_y)) {
-                    std::thread::sleep(Duration::from_millis(33));
-                    continue;
-                }
-                previous = Some((cursor_x, cursor_y));
-
-                let position = match window.outer_position() {
-                    Ok(value) => value,
-                    Err(error) => {
-                        if !window_error_reported {
-                            log::warn!("Global cursor sem posição da janela: {error}");
-                            window_error_reported = true;
-                        }
-                        std::thread::sleep(Duration::from_millis(33));
-                        continue;
-                    }
-                };
-                let size = match window.outer_size() {
-                    Ok(value) => value,
-                    Err(error) => {
-                        if !window_error_reported {
-                            log::warn!("Global cursor sem tamanho da janela: {error}");
-                            window_error_reported = true;
-                        }
-                        std::thread::sleep(Duration::from_millis(33));
-                        continue;
-                    }
-                };
-                window_error_reported = false;
-                let window_bounds = ScreenBounds {
-                    x: position.x,
-                    y: position.y,
-                    width: size.width,
-                    height: size.height,
-                };
-                let window_monitor_bounds = window
-                    .current_monitor()
-                    .ok()
-                    .flatten()
-                    .map(|monitor| {
-                        let position = monitor.position();
-                        let size = monitor.size();
-                        ScreenBounds {
-                            x: position.x,
-                            y: position.y,
-                            width: size.width,
-                            height: size.height,
-                        }
-                    })
-                    .unwrap_or(cursor_monitor_bounds);
-                let avatar_x = window_bounds.x as f64 + window_bounds.width as f64 * 0.5;
-                let avatar_y = window_bounds.y as f64 + window_bounds.height as f64 * 0.43;
-                let half_width = (window_monitor_bounds.width as f64 * 0.5).max(1.0);
-                let half_height = (window_monitor_bounds.height as f64 * 0.5).max(1.0);
-                let normalized_x = ((cursor_x as f64 - avatar_x) / half_width).clamp(-1.0, 1.0);
-                let normalized_y = ((cursor_y as f64 - avatar_y) / half_height).clamp(-1.0, 1.0);
-                let monitor_changed = cursor_monitor_bounds.x != window_monitor_bounds.x
-                    || cursor_monitor_bounds.y != window_monitor_bounds.y
-                    || cursor_monitor_bounds.width != window_monitor_bounds.width
-                    || cursor_monitor_bounds.height != window_monitor_bounds.height;
+                let (normalized_x, normalized_y) =
+                    normalize_virtual_cursor(cursor_x, cursor_y, virtual_desktop_bounds);
                 let emitted = window.emit(
                     "nyra-global-cursor",
                     GlobalCursorSample {
@@ -326,48 +293,63 @@ fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
                         cursor_y,
                         normalized_x,
                         normalized_y,
-                        window_bounds,
-                        window_monitor_bounds,
-                        cursor_monitor_bounds,
-                        monitor_changed,
+                        virtual_desktop_bounds,
+                        monitor_count,
                     },
                 );
                 if let Err(error) = emitted {
-                    log::warn!("Falha ao emitir cursor global: {error}");
+                    if !emit_error_reported {
+                        emit_error_reported = true;
+                        log::warn!("Falha ao emitir cursor global: {error}");
+                    }
                 } else if !first_sample_reported {
+                    emit_error_reported = false;
                     first_sample_reported = true;
                     log::info!(
-                        "Cursor global ativo (cursor=({}, {}), monitor=({}, {}, {}x{}))",
+                        "Cursor global ativo (cursor=({}, {}), virtual=({}, {}, {}x{}), monitors={})",
                         cursor_x,
                         cursor_y,
-                        cursor_monitor_bounds.x,
-                        cursor_monitor_bounds.y,
-                        cursor_monitor_bounds.width,
-                        cursor_monitor_bounds.height,
+                        virtual_desktop_bounds.x,
+                        virtual_desktop_bounds.y,
+                        virtual_desktop_bounds.width,
+                        virtual_desktop_bounds.height,
+                        monitor_count,
                     );
                 }
                 std::thread::sleep(Duration::from_millis(33));
             }
         });
+    if let Err(error) = spawned {
+        CURSOR_TRACKER_RUNNING.store(false, Ordering::SeqCst);
+        log::error!("Falha ao iniciar cursor global: {error}");
+    }
+}
+
+pub(crate) fn stop_global_cursor_tracker() {
+    CURSOR_TRACKER_RUNNING.store(false, Ordering::SeqCst);
 }
 
 pub fn run() {
     tauri::Builder::default()
         .manage(backend_manager::BackendManager::new())
         .manage(conversation_transport::ConversationBridge::new())
+        .manage(stt_transport::SttBridge::default())
         .manage(spout_presence::SpoutPresence::new())
         .invoke_handler(tauri::generate_handler![
             set_click_through,
             open_dashboard,
+            quit_nyra,
             backend_request,
             start_conversation_bridge,
+            stt_stream_open,
+            stt_stream_audio,
+            stt_stream_close,
             presence_show,
             presence_hide,
             presence_toggle,
             presence_status_command,
             vts_presence_configure,
-            vts_presence_status,
-            vts_presence_set_internal_visible
+            vts_presence_status
         ])
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Err(error) = show_dashboard(app) {
@@ -461,6 +443,21 @@ pub fn run() {
                 })
                 .build(),
         )
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let manager = window
+                    .app_handle()
+                    .state::<backend_manager::BackendManager>();
+                if !manager.is_shutting_down() && !manager.exit_ready() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    log::info!(
+                        "window_close_behavior=HIDE_TO_TRAY label={}",
+                        window.label()
+                    );
+                }
+            }
+        })
         .setup(|app| {
             let show = MenuItemBuilder::with_id("show", "Mostrar NYRA").build(app)?;
             let hide = MenuItemBuilder::with_id("hide", "Ocultar NYRA").build(app)?;
@@ -505,10 +502,17 @@ pub fn run() {
                     &quit,
                 ])
                 .build()?;
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id(shutdown::TRAY_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .on_menu_event(|app, event| {
+                    if event.id.as_ref() == "quit" {
+                        shutdown::request_app_shutdown(
+                            app.clone(),
+                            shutdown::ShutdownReason::TrayExit,
+                        );
+                        return;
+                    }
                     if let Some(window) = main_window(app) {
                         match event.id.as_ref() {
                             "show" => {
@@ -568,13 +572,6 @@ pub fn run() {
                             }
                             "reconnect" => {
                                 let _ = window.emit("nyra-desktop", "reconnect");
-                            }
-                            "quit" => {
-                                // §6: marca shutdown ANTES de sair para o
-                                // supervisor não relançar o backend owned.
-                                app.state::<backend_manager::BackendManager>()
-                                    .mark_shutting_down();
-                                app.exit(0);
                             }
                             _ => {}
                         }
@@ -690,10 +687,24 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("falha ao iniciar NYRA Desktop")
         .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                if !app_handle
+                    .state::<backend_manager::BackendManager>()
+                    .exit_ready()
+                {
+                    api.prevent_exit();
+                    shutdown::request_app_shutdown(
+                        app_handle.clone(),
+                        shutdown::ShutdownReason::OsShutdown,
+                    );
+                    return;
+                }
+            }
             if let tauri::RunEvent::Exit = event {
+                // Idempotent final guard. The authoritative coordinator has
+                // already stopped Presence and the owned backend.
+                stop_global_cursor_tracker();
                 app_handle.state::<spout_presence::SpoutPresence>().stop();
-                // §6: backend owned é encerrado e a porta 8000 liberada.
-                backend_manager::shutdown_owned(app_handle);
             }
         });
 }
@@ -756,4 +767,34 @@ fn restore_presence(window: &tauri::WebviewWindow) {
         window.is_visible(),
         window.is_minimized()
     );
+}
+
+#[cfg(test)]
+mod cursor_tests {
+    use super::{normalize_virtual_cursor, ScreenBounds};
+
+    #[test]
+    fn virtual_desktop_center_is_neutral_and_axes_are_correct() {
+        let bounds = ScreenBounds {
+            x: -1920,
+            y: 0,
+            width: 3841,
+            height: 1081,
+        };
+        assert_eq!(normalize_virtual_cursor(0, 540, bounds), (0.0, 0.0));
+        assert_eq!(normalize_virtual_cursor(-1920, 0, bounds), (-1.0, 1.0));
+        assert_eq!(normalize_virtual_cursor(1920, 1080, bounds), (1.0, -1.0));
+    }
+
+    #[test]
+    fn virtual_desktop_normalization_clamps_outside_coordinates() {
+        let bounds = ScreenBounds {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        assert_eq!(normalize_virtual_cursor(-500, -500, bounds), (-1.0, 1.0));
+        assert_eq!(normalize_virtual_cursor(5000, 5000, bounds), (1.0, -1.0));
+    }
 }

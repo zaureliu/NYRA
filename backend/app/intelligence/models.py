@@ -167,6 +167,8 @@ class AutonomousTaskSpec(BaseModel):
     task_id: str = Field(default_factory=lambda: f"task_{uuid4().hex}")
     title: str = Field(min_length=3, max_length=180)
     objective: str = Field(min_length=3, max_length=4000)
+    goal_id: str | None = Field(default=None, max_length=160)
+    source_turn: str | None = Field(default=None, max_length=160)
     trigger: str = Field(default="one_shot", pattern=r"^(one_shot|schedule|recurring|event|conditional)$")
     schedule: str | None = Field(default=None, max_length=200)
     conditions: dict[str, Any] = Field(default_factory=dict)

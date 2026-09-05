@@ -71,6 +71,8 @@ ENTRIES: tuple[SettingSpec, ...] = (
     SettingSpec("conversation_single_active_turn", "ai", "bool", True,
                 "Um único turno ativo por vez.", requires_restart=True),
     # ------------------------------------------------------------------ voice
+    SettingSpec("natural_conversation_enabled", "voice", "bool", True,
+                "Sessão de voz contínua com contexto e playback confirmado."),
     SettingSpec("audio_volume", "voice", "float", 0.9, "Volume da fala sintetizada.",
                 minimum=0.0, maximum=1.0),
     SettingSpec("mic_gain", "voice", "float", 1.0, "Ganho do microfone.", minimum=0.25, maximum=4.0),
@@ -109,6 +111,13 @@ ENTRIES: tuple[SettingSpec, ...] = (
                 "Validade de um approval de uso único (segundos).", minimum=30, maximum=3600),
     SettingSpec("ssh_command_timeout_seconds", "automation", "int", 30,
                 "Timeout de comando remoto SSH (segundos).", minimum=1, maximum=300),
+    SettingSpec("proactive_presence_enabled", "automation", "bool", True,
+                "Permitir notificações proativas somente para eventos relevantes."),
+    SettingSpec("proactive_presence_mode", "automation", "enum", "NORMAL",
+                "Modo de interrupção do Proactive Presence.",
+                options=("NORMAL", "QUIET", "DO_NOT_DISTURB")),
+    SettingSpec("proactive_voice_enabled", "automation", "bool", False,
+                "Permitir voz proativa quando TTS estiver pronto e a policy autorizar."),
     SettingSpec("elevated_session_default_ttl_seconds", "automation", "int", 300,
                 "TTL padrão de sessão elevada (segundos).", minimum=60, maximum=900),
     # ---------------------------------------------------------------- homelab

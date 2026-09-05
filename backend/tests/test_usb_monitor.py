@@ -177,7 +177,14 @@ async def test_native_background_connect_disconnect_com_change_dedup_restart_and
     discovery.rows = [initial.model_copy(update={"com_port": "COM7"})]
     source.emit(8)
     await wait_for_event(bus, EventType.USB_DEVICE_COM_CHANGED)
-    await asyncio.sleep(0.1)  # COM event is published before its proactive chat notice.
+    deadline = asyncio.get_running_loop().time() + 1
+    while not any(
+        event.type == EventType.MONITOR_NOTIFICATION
+        and event.payload.get("kind") == "com_changed"
+        for event in bus.history()
+    ):
+        assert asyncio.get_running_loop().time() < deadline
+        await asyncio.sleep(0.01)
     com_events = [event for event in bus.history()
                   if event.type == EventType.USB_DEVICE_COM_CHANGED]
     assert len(com_events) == 1
@@ -231,6 +238,7 @@ async def test_unknown_storage_notification_api_and_natural_cancel_registration(
     discovery.rows = [baseline, storage]
     source.emit()
     await wait_for_event(bus, EventType.USB_DEVICE_UNKNOWN)
+    await wait_for_event(bus, EventType.MONITOR_NOTIFICATION)
     warning = [event for event in bus.history()
                if event.type == EventType.MONITOR_NOTIFICATION][-1]
     assert warning.payload["severity"] == "warning"

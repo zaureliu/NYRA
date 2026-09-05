@@ -1,0 +1,108 @@
+/* Voice-only readability: no shared typography or provider behavior changes. */
+.ops-shell:has(.voice-page) :is(.ops-topbar, .ops-main) {
+  min-width: 0;
+}
+
+.ops-shell:has(.voice-page) .ops-topbar-chips {
+  min-width: 0;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.voice-page .stt-provider-settings h3 {
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.voice-page .mic-test h3 {
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) label {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) :is(input:not([type="checkbox"]), select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 38px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) label:has(> input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding-block: 4px;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) :is(p, .ops-hint, .lab-notice, .mic-readout, .transcript strong, small, .ops-code) {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.voice-page .stt-provider-settings .diagnostic-grid span {
+  min-width: 0;
+  padding-block: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.voice-page .stt-provider-settings .diagnostic-grid b {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) button {
+  max-width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) summary {
+  padding-block: 8px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) .settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.voice-page :is(.stt-provider-settings, .mic-test) .settings-actions {
+  flex-wrap: wrap;
+}
+
+.voice-page .mic-test .ops-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .voice-page :is(.stt-provider-settings, .mic-test) .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}

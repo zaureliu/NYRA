@@ -4,6 +4,7 @@ import ast
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any, Iterable
@@ -20,6 +21,11 @@ EXCLUDED_PARTS = {
 EXCLUDED_NAMES = {".env", ".nyra-runtime.json", "credentials-vault.bin"}
 ROUTE_RE = re.compile(r"(?:@router\.(?:get|post|put|patch|delete)\(\s*|fetch\(\s*|api(?:Send)?\(\s*)[\"']([^\"']+)")
 IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]{2,}\b")
+
+
+def _is_excluded_directory(name: str) -> bool:
+    lowered = name.casefold()
+    return lowered in EXCLUDED_PARTS or lowered.startswith(".venv")
 
 
 @dataclass(frozen=True)
@@ -80,17 +86,30 @@ class RepositoryMapper:
         return self._index
 
     def _source_files(self) -> Iterable[Path]:
-        for path in self.repository_root.rglob("*"):
-            if not path.is_file() or path.suffix.casefold() not in SUPPORTED_SUFFIXES:
-                continue
-            relative = path.relative_to(self.repository_root)
-            if any(part.casefold() in EXCLUDED_PARTS for part in relative.parts):
-                continue
-            if path.name.casefold() in EXCLUDED_NAMES or path.name.casefold().startswith(".env"):
-                continue
-            if path.stat().st_size > 1_000_000:
-                continue
-            yield path
+        # Prune generated/private trees before walking them. Path.rglob still
+        # enumerates every descendant before a per-file exclusion check, which
+        # made startup scale with multi-gigabyte target/node_modules trees.
+        for directory, dirnames, filenames in os.walk(
+            self.repository_root, topdown=True, followlinks=False,
+        ):
+            dirnames[:] = sorted(
+                name for name in dirnames
+                if not _is_excluded_directory(name)
+            )
+            base = Path(directory)
+            for filename in sorted(filenames):
+                path = base / filename
+                if path.is_symlink() or path.suffix.casefold() not in SUPPORTED_SUFFIXES:
+                    continue
+                lowered = path.name.casefold()
+                if lowered in EXCLUDED_NAMES or lowered.startswith(".env"):
+                    continue
+                try:
+                    if path.stat().st_size > 1_000_000:
+                        continue
+                except OSError:
+                    continue
+                yield path
 
     @staticmethod
     def _sha256(path: Path) -> str:

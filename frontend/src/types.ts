@@ -5,11 +5,6 @@ export type EmotionalState =
   | 'apologetic' | 'uncertain' | 'calm' | 'tired'
 
 export type ActivityStatus = 'IDLE' | 'LISTENING' | 'USER_SPEAKING' | 'TRANSCRIBING' | 'THINKING' | 'TOOL_EXECUTION' | 'SPEAKING' | 'INTERRUPTED' | 'ERROR' | 'OFFLINE'
-export type MouthState =
-  | 'mouth_closed' | 'mouth_small' | 'mouth_medium' | 'mouth_open'
-  | 'mouth_wide' | 'mouth_smile' | 'mouth_speaking_smile'
-export type EyeState = 'open' | 'half' | 'closed' | 'blink' | 'look_left' | 'look_right' | 'look_up' | 'look_down'
-
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -46,12 +41,6 @@ export interface ChatResponse {
   pipeline_status?: string
   tts_provider: string | null
   timing?: { llm_ms: number; tts_ms: number; total_ms: number }
-}
-
-export interface AvatarControl {
-  eye_x: number; eye_y: number; head_x: number; head_y: number; head_tilt: number
-  body_x: number; breathing: number; mouth_open: number; expression_weight: number
-  neural_link: string; animation: string
 }
 
 export interface VoiceProfile {

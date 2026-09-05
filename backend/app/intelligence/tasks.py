@@ -13,6 +13,8 @@ from app.intelligence.capabilities import CapabilityRegistryV2
 from app.intelligence.models import AutonomousTaskSpec, AutonomousTaskState, TraceStage
 from app.intelligence.storage import IntelligenceStore
 from app.intelligence.tracing import TraceService
+from app.events import EventType
+from app.core.turn import get_current_turn_id
 
 
 TaskHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -28,6 +30,7 @@ class AutonomousTaskEngine:
         self._active: dict[str, asyncio.Task] = {}
         self._semaphore = asyncio.Semaphore(max(1, max_concurrent))
         self.last_error: str | None = None
+        self._last_emitted_states: dict[str, str] = {}
 
     def register(self, action: str, handler: TaskHandler, *, risk: str = "READ_ONLY") -> None:
         self.handlers[action] = (handler, risk)
@@ -73,6 +76,7 @@ class AutonomousTaskEngine:
             "retries": 0,
             "last_run": None,
             "result": {},
+            "source_turn": get_current_turn_id() or spec.source_turn,
             "created_at": now,
             "updated_at": now,
         })
@@ -303,3 +307,17 @@ class AutonomousTaskEngine:
                  task.next_run.isoformat() if task.next_run else None, task.updated_at.isoformat()),
             )
             await db.commit()
+        state = task.state.value
+        if self.event_bus is not None and self._last_emitted_states.get(task.task_id) != state:
+            self._last_emitted_states[task.task_id] = state
+            await self.event_bus.publish(
+                EventType.TASK_STATE_CHANGED,
+                task_id=task.task_id,
+                type=task.action,
+                objective=task.objective,
+                state=state,
+                goal_id=task.goal_id,
+                source_turn=task.source_turn,
+                result=task.result,
+                source="intelligence_tasks",
+            )

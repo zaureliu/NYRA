@@ -56,8 +56,10 @@ class ReactionEngine:
         await self.avatar.update(eye_x=round(x * scale, 3), eye_y=round(y * scale, 3))
 
     async def _react(self, reaction: str, *, visual: str, expression: str, speak: bool, **context) -> None:
-        await self.avatar.mode(visual, expression)
-        self.last_reaction = {"reaction": reaction, "speech": speak, **context}
+        # Operational animation may coexist with emotion. Expression is owned
+        # exclusively by Persona Runtime -> EmotionPresentationCoordinator.
+        await self.avatar.mode(visual)
+        self.last_reaction = {"reaction": reaction, "speech": speak, "suggested_expression": expression, **context}
         await self.event_bus.publish(EventType.REACTION_TRIGGERED, **self.last_reaction)
 
     def status(self) -> dict:

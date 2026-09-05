@@ -1,7 +1,7 @@
 # Integração VTube Studio
 
-Configuração em `Settings > Visual > Live2D`: Enabled, Auto/Live2D/Current, host/porta loopback, auto-connect, lip sync, cursor attention, physics, FPS e debug.
+Configuração em **Settings > Desktop Presence**: enabled, host/porta loopback, auto-connect, lip sync, sender Spout2 e mouse tracking `OFF`, `EYES` ou `HEAD_EYES`.
 
-O provider suporta estados `DISABLED`, `NOT_INSTALLED`, `API_DISABLED`, `CONNECTING`, `AUTH_REQUIRED`, `CONNECTED`, `MODEL_MISSING`, `MODEL_LOADED`, `RECONNECTING` e `ERROR`. Atualizações são limitadas a 30/60 FPS e IDs só são enviados após `InputParameterListRequest`.
+O provider descobre o modelo atual, parâmetros, hotkeys e expressions pela API oficial. A janela nativa recebe o sender `VTubeStudioSpout` por Spout2, preservando alpha, always-on-top, click-through, drag e reconnect. Screenshot/captura de janela não são usados.
 
-Default `ws://127.0.0.1:8001`, configurável. A API oficial pode escolher portas seguintes quando 8001 estiver ocupada; discovery UDP futuro/auxiliar usa 47779.
+O arquivo local de settings migra qualquer renderer antigo para `VTUBE_STUDIO`. Não há seletor ou fallback de renderer interno.

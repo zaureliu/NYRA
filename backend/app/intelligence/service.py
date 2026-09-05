@@ -21,6 +21,7 @@ from app.intelligence.storage import IntelligenceStore
 from app.intelligence.tasks import AutonomousTaskEngine
 from app.intelligence.tracing import RuntimeTraceObserver, TraceService
 from app.intelligence.vision_adapter import LocalVisionAdapter
+from app.open_loops import OpenLoopEngine
 
 
 class IntelligencePlatform:
@@ -30,6 +31,7 @@ class IntelligencePlatform:
         self.services = services
         self.store = IntelligenceStore(services.settings.database_path)
         self.memory = MemoryV2Service(self.store)
+        self.open_loops = OpenLoopEngine(self.store, self.memory, services.event_bus)
         self.knowledge = KnowledgeEngine(
             self.store,
             allowed_roots=(PROJECT_ROOT, DATA_ROOT),
@@ -41,6 +43,12 @@ class IntelligencePlatform:
             budget_characters=min(24_000, max(4_000, int(services.settings.ollama_context_size * 2.5))),
             capability_provider=self.capabilities.snapshot,
             runtime_provider=self.runtime_snapshot,
+            world_state_provider=(
+                services.world_state.context_summary
+                if getattr(services, "world_state", None) is not None
+                else None
+            ),
+            open_loop_provider=self.open_loops.context_summary,
         )
         self.skills = SkillCatalog(CONFIG_ROOT / "skills", services.skills, services.tools, self.capabilities)
         self.events = EventIntelligenceEngine(self.store, services.event_bus)
@@ -61,6 +69,7 @@ class IntelligencePlatform:
 
     async def initialize(self) -> None:
         await self.store.initialize()
+        await self.open_loops.initialize()
         self._register_capabilities()
         self._register_diagnostics()
         self._register_tasks()
@@ -77,6 +86,7 @@ class IntelligencePlatform:
 
     async def stop(self) -> None:
         await self.tasks.stop()
+        await self.open_loops.stop()
         await self.runtime_traces.stop()
         await self.events.stop()
         self._started = False
@@ -85,6 +95,8 @@ class IntelligencePlatform:
         self.capabilities.register("memory_v2", "Memória seletiva com decay, conflitos e provenance.", self._store_probe)
         self.capabilities.register("rag_local", "Indexação e recuperação local incremental.", self._rag_probe, dependencies=("memory_v2",))
         self.capabilities.register("context_engine", "Montagem de contexto priorizada e limitada.", self._ready_probe, dependencies=("memory_v2", "rag_local"))
+        self.capabilities.register("world_state_engine", "Estado operacional grounded, recente e compartilhado.", self._world_state_probe)
+        self.capabilities.register("open_loops_engine", "Objetivos e pendências persistentes com retomada grounded.", self._ready_probe, dependencies=("memory_v2", "world_state_engine"))
         self.capabilities.register("model_router_v2", "Roteamento pelo inventário real do Ollama.", self._router_probe)
         self.capabilities.register("skill_catalog", "Catálogo dinâmico de Skills validado.", self._skills_probe)
         self.capabilities.register("autonomous_tasks_v2", "Tasks persistentes, limitadas e verificadas.", self._ready_probe)
@@ -161,19 +173,48 @@ class IntelligencePlatform:
 
     async def runtime_snapshot(self) -> dict[str, Any]:
         operator = self.services.operator_v2.status() if self.services.operator_v2 else {"operator_v2": False}
+        presence = (
+            await self.services.proactive_presence.status()
+            if getattr(self.services, "proactive_presence", None) is not None else None
+        )
+        persona = (
+            await self.services.persona_runtime.status()
+            if getattr(self.services, "persona_runtime", None) is not None else None
+        )
+        emotional_presence = (
+            await self.services.emotional_presence.status()
+            if getattr(self.services, "emotional_presence", None) is not None else None
+        )
         return {
             "state": "AVAILABLE" if self._started else "OFFLINE",
             "agent": self.services.agent.status(),
             "operator": operator,
             "selfdev": self.services.selfdev.status(),
+            "world_state": self.services.world_state.health() if self.services.world_state else None,
+            "proactive_presence": presence,
+            "persona_runtime": persona,
+            "emotional_presence": emotional_presence,
         }
 
     async def status(self) -> dict[str, Any]:
-        store, counts, capabilities, vision = await asyncio.gather(
-            self.store.health(), self.store.counts(), self.capabilities.snapshot(), self.vision.status()
+        store, counts, capabilities, vision, open_loops = await asyncio.gather(
+            self.store.health(), self.store.counts(), self.capabilities.snapshot(), self.vision.status(),
+            self.open_loops.operations_status(),
         )
         route = self.router.last_route.model_dump(mode="json") if self.router.last_route else None
         tasks = await self.tasks.list(include_terminal=False)
+        proactive_presence = (
+            await self.services.proactive_presence.status()
+            if getattr(self.services, "proactive_presence", None) is not None else None
+        )
+        persona_runtime = (
+            await self.services.persona_runtime.status()
+            if getattr(self.services, "persona_runtime", None) is not None else None
+        )
+        emotional_presence = (
+            await self.services.emotional_presence.status()
+            if getattr(self.services, "emotional_presence", None) is not None else None
+        )
         return {
             "state": "ONLINE" if self._started and store.get("ok") else "DEGRADED",
             "started_at": self.started_at.isoformat(), "storage": store, "counts": counts,
@@ -190,6 +231,19 @@ class IntelligencePlatform:
                        "persist_failures": self.events.persist_failures,
                        "last_error": self.events.last_error},
             "evaluation": self.evaluations.last_report.get("summary") if self.evaluations.last_report else None,
+            "world_state": self.services.world_state.operations_view() if self.services.world_state else None,
+            "open_loops": open_loops,
+            "proactive_presence": proactive_presence,
+            "persona_runtime": persona_runtime,
+            "emotional_presence": emotional_presence,
+        }
+
+    def _world_state_probe(self) -> dict[str, Any]:
+        value = self.services.world_state.health() if self.services.world_state else {"state": "OFFLINE"}
+        return {
+            "state": "AVAILABLE" if value.get("state") == "READY" else "DEGRADED",
+            "health": value.get("state", "OFFLINE"),
+            "details": value,
         }
 
     async def _store_probe(self) -> dict[str, Any]:

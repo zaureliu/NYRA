@@ -14,12 +14,23 @@ from app.speech.queue import SpeechPriority, SpeechQueue
 logger = logging.getLogger("nyra.network_watch")
 NETWORK_EVENT_TYPES = {
     EventType.NETWORK_GATEWAY_DOWN,
+    EventType.NETWORK_GATEWAY_RECOVERED,
     EventType.NETWORK_INTERNET_DOWN,
+    EventType.NETWORK_INTERNET_RECOVERED,
     EventType.NETWORK_DNS_FAILURE,
+    EventType.NETWORK_DNS_RECOVERED,
     EventType.NETWORK_HIGH_LATENCY,
+    EventType.NETWORK_LATENCY_RECOVERED,
     EventType.NETWORK_PACKET_LOSS,
+    EventType.NETWORK_PACKET_LOSS_RECOVERED,
     EventType.NETWORK_HIGH_JITTER,
+    EventType.NETWORK_JITTER_RECOVERED,
     EventType.NETWORK_INTERFACE_CHANGED,
+    EventType.NETWORK_LINK_DOWN,
+    EventType.NETWORK_LINK_UP,
+    EventType.NETWORK_RX_ERRORS_DETECTED,
+    EventType.NETWORK_TX_ERRORS_DETECTED,
+    EventType.NETWORK_DROPS_DETECTED,
     EventType.NETWORK_RECOVERED,
 }
 

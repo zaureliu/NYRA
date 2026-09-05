@@ -38,3 +38,14 @@
 .diagnostic-grid b { color: #bcd7dc; text-align: right; }
 @media (max-width:720px) { .diagnostic-grid { grid-template-columns: 1fr; } }
 .transcript strong { display: block; font: 8px IBM Plex Mono; color: var(--cyan); }
+.tts-provider-settings {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+}
+
+.tts-provider-settings h4 { margin: 0 0 10px; }
+.tts-online-config { margin-top: 10px; }
+.tts-provider-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tts-online-toggle { display: flex; align-items: center; gap: 8px; }
+.tts-provider-settings .diagnostic-grid { margin-top: 10px; }

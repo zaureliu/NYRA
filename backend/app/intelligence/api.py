@@ -7,6 +7,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.intelligence.models import AutonomousTaskSpec, MemoryWrite
+from app.open_loops import (
+    GoalCreate, OpenLoopCreate, OpenLoopState, OpenLoopTransition,
+)
 
 
 router = APIRouter(prefix="/intelligence", tags=["intelligence-v2"])
@@ -101,6 +104,99 @@ async def rag_search(payload: QueryRequest, request: Request):
 async def context_assemble(payload: QueryRequest, request: Request):
     value = await platform(request).context.assemble(payload.query, project=payload.project)
     return value.model_dump(mode="json")
+
+
+@router.get("/goals")
+async def goals(request: Request, include_terminal: bool = True):
+    values = await platform(request).open_loops.list_goals(include_terminal=include_terminal)
+    return {"goals": [item.model_dump(mode="json") for item in values]}
+
+
+@router.post("/goals")
+async def goal_create(payload: GoalCreate, request: Request):
+    try:
+        value = await platform(request).open_loops.create_goal(payload)
+    except PermissionError as error:
+        raise HTTPException(400, str(error)) from error
+    return value.model_dump(mode="json")
+
+
+@router.get("/open-loops")
+async def open_loops(request: Request, states: str | None = None,
+                     project: str | None = None, limit: int = 100):
+    try:
+        selected = [OpenLoopState(item.strip().upper()) for item in states.split(",") if item.strip()] if states else None
+    except ValueError as error:
+        raise HTTPException(400, "Invalid open-loop state") from error
+    values = await platform(request).open_loops.list(
+        states=selected, project=project, limit=max(1, min(limit, 500)),
+    )
+    return {"open_loops": [item.model_dump(mode="json") for item in values]}
+
+
+@router.post("/open-loops")
+async def open_loop_create(payload: OpenLoopCreate, request: Request):
+    try:
+        value, deduplicated = await platform(request).open_loops.create(payload, actor="operator")
+    except (PermissionError, ValueError) as error:
+        raise HTTPException(400, str(error)) from error
+    return {"open_loop": value.model_dump(mode="json"), "deduplicated": deduplicated}
+
+
+@router.get("/open-loops/actionable")
+async def actionable_open_loops(request: Request, limit: int = 50):
+    values = await platform(request).open_loops.get_actionable_loops(limit=limit)
+    return {"open_loops": [item.model_dump(mode="json") for item in values]}
+
+
+@router.get("/open-loops/waiting")
+async def waiting_open_loops(request: Request, limit: int = 50):
+    values = await platform(request).open_loops.get_waiting_loops(limit=limit)
+    return {"open_loops": [item.model_dump(mode="json") for item in values]}
+
+
+@router.get("/open-loops/recent-resolved")
+async def recent_resolved_open_loops(request: Request, limit: int = 20):
+    values = await platform(request).open_loops.get_recent_resolved(limit=limit)
+    return {"open_loops": [item.model_dump(mode="json") for item in values]}
+
+
+@router.get("/open-loops/priority")
+async def priority_open_loops(request: Request, limit: int = 20):
+    values = await platform(request).open_loops.get_priority(limit=limit)
+    return {"open_loops": [item.model_dump(mode="json") for item in values]}
+
+
+@router.get("/open-loops/{loop_id}")
+async def open_loop_detail(loop_id: str, request: Request):
+    value = await platform(request).open_loops.get(loop_id)
+    if value is None:
+        raise HTTPException(404, "Open loop not found")
+    return value.model_dump(mode="json")
+
+
+@router.post("/open-loops/{loop_id}/transition")
+async def open_loop_transition(loop_id: str, payload: OpenLoopTransition,
+                               request: Request):
+    try:
+        value = await platform(request).open_loops.transition(
+            loop_id, payload.state, reason=payload.reason,
+            evidence=payload.evidence, actor="operator",
+        )
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return value.model_dump(mode="json")
+
+
+@router.post("/open-loops/{loop_id}/resume")
+async def open_loop_resume(loop_id: str, request: Request):
+    context = await platform(request).open_loops.resume(loop_id, activate=True)
+    if context is None:
+        raise HTTPException(404, "Open loop not found")
+    return {"resume_context": context.model_dump(mode="json"),
+            "execution_authorized": False}
 
 
 @router.post("/model/route")

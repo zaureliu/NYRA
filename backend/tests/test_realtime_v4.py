@@ -125,7 +125,8 @@ def test_attention_decay_and_critical_reaction_are_deterministic():
         await bus.publish(EventType.SENTINEL_ALERT, severity="critical")
         assert attention.current.source == "neutral" or attention.current.priority <= 90
         assert reactions.last_reaction["reaction"] == "SENTINEL_CRITICAL"
-        assert avatar.state.expression == "concerned"
+        assert avatar.state.expression == "neutral"
+        assert reactions.last_reaction["suggested_expression"] == "concerned"
         await reactions.stop(); await attention.stop()
     asyncio.run(run())
 

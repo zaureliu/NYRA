@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { audioInputs, microphoneErrorState, selectMicrophoneDevice, type MicrophoneAvailability, type MicrophonePermission } from './audioDevices'
+import { STTStream } from '../runtime/stt'
+import { bargeInLocally, isResidualEcho, outputIsPlaying } from '../runtime/speechOutput'
+import { acquireMicrophone, manualCaptureActive, onCaptureOwnership } from '../runtime/microphoneOwnership'
 
 export interface ListeningConfig {
   enabled: boolean
+  natural_conversation?: boolean
   mode: 'push_to_talk' | 'wake_word' | 'hands_free'
   wake_word: string
   hands_free_timeout_seconds: number
@@ -98,12 +102,15 @@ export function useAlwaysListening({ baseUrl = '', deviceId = 'default', suspend
   const contextRef = useRef<AudioContext | null>(null)
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const ringRef = useRef<AudioChunk[]>([])
-  const utteranceRef = useRef<Float32Array[]>([])
+  const recognitionRef = useRef<STTStream | null>(null)
+  const releaseCaptureRef = useRef<(() => void) | null>(null)
+  const acquiringRef = useRef(false)
   const speakingRef = useRef(false)
   const aboveSinceRef = useRef(0)
   const quietSinceRef = useRef(0)
   const speechStartedAtRef = useRef(0)
   const postingRef = useRef(false)
+  const latestPartial = useRef('')
   const captureBlockedRef = useRef(false)
   const lastCaptureErrorRef = useRef('')
 
@@ -137,16 +144,16 @@ export function useAlwaysListening({ baseUrl = '', deviceId = 'default', suspend
     } catch { /* backend may still be starting */ }
   }, [baseUrl])
 
-  const submit = useCallback(async (chunks: Float32Array[], sampleRate: number) => {
-    if (!chunks.length || postingRef.current) return
+  const submit = useCallback(async (stream: STTStream | null, speechEndAt?: number) => {
+    if (!stream || (postingRef.current && !configRef.current?.natural_conversation)) { stream?.cancel(); return }
     postingRef.current = true; setProcessing(true)
     try {
-      const audio = encodeWav(chunks, sampleRate)
-      const body = new FormData(); body.append('client_id', clientId.current); body.append('audio', audio, 'always-listening.wav')
-      const response = await fetch(`${baseUrl}/api/listening/utterance`, { method: 'POST', body })
-      const value: AlwaysListeningResult = await response.json()
-      if (!response.ok) throw new Error((value as unknown as { detail?: string }).detail ?? 'Falha na escuta local')
-      await resultRef.current?.(value)
+      if (speechEndAt !== undefined) await fetch(`${baseUrl}/api/listening/speech-end`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({client_id: clientId.current, ended_at: speechEndAt}),
+      }).catch(() => undefined)
+      const value = await stream.finish()
+      await resultRef.current?.({ ...value, reason: value.reason ?? 'recognition' })
     } catch (error) {
       errorRef.current?.(error instanceof Error ? error.message : 'Microfone indisponível')
     } finally {
@@ -158,17 +165,24 @@ export function useAlwaysListening({ baseUrl = '', deviceId = 'default', suspend
     processorRef.current?.disconnect(); processorRef.current = null
     streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null
     if (contextRef.current) void contextRef.current.close(); contextRef.current = null
-    ringRef.current = []; utteranceRef.current = []; speakingRef.current = false; speechStartedAtRef.current = 0
+    recognitionRef.current?.cancel(); recognitionRef.current = null
+    releaseCaptureRef.current?.(); releaseCaptureRef.current = null
+    ringRef.current = []; speakingRef.current = false; speechStartedAtRef.current = 0
     setListening(false); setMicActive(false)
   }, [])
 
   const startCapture = useCallback(async () => {
-    if (streamRef.current || !configRef.current || captureBlockedRef.current) return
+    if (streamRef.current || acquiringRef.current || !configRef.current || captureBlockedRef.current || manualCaptureActive()) return
     if (!navigator.mediaDevices?.getUserMedia) {
       setMicrophoneAvailability('unsupported'); return
     }
     try {
       const selected = deviceId || configRef.current.microphone || 'default'
+      acquiringRef.current = true
+      const release = await acquireMicrophone()
+      if (!release) return
+      releaseCaptureRef.current = release
+      if (manualCaptureActive()) { stopCapture(); return }
       const baseConstraints: MediaTrackConstraints = {
         echoCancellation: true, noiseSuppression: true, autoGainControl: true,
         channelCount: 1, sampleRate: 48000,
@@ -184,9 +198,13 @@ export function useAlwaysListening({ baseUrl = '', deviceId = 'default', suspend
         stream = await request('default')
         deviceSelectedRef.current?.('default')
       }
+      if (manualCaptureActive()) { stream.getTracks().forEach((track) => track.stop()); stopCapture(); return }
       const context = new AudioContext({ sampleRate: 48000 })
       const source = context.createMediaStreamSource(stream)
-      const processor = context.createScriptProcessor(4096, 1, 1)
+      const processor = context.createScriptProcessor(2048, 1, 1)
+      const analyser = context.createAnalyser(); analyser.fftSize = 1024
+      const inputBins = new Uint8Array(analyser.frequencyBinCount)
+      source.connect(analyser)
       const silent = context.createGain(); silent.gain.value = 0
       source.connect(processor); processor.connect(silent); silent.connect(context.destination)
       streamRef.current = stream; contextRef.current = context; processorRef.current = processor
@@ -201,14 +219,16 @@ export function useAlwaysListening({ baseUrl = '', deviceId = 'default', suspend
         if (!currentConfig) return
         const samples = new Float32Array(event.inputBuffer.getChannelData(0))
         const now = performance.now()
-        const playbackActive = outputPlayingRef.current || suspendedRef.current || Boolean(statusRef.current?.speaking_guard)
+        const playbackActive = outputIsPlaying() || (!currentConfig.natural_conversation && (outputPlayingRef.current || suspendedRef.current || Boolean(statusRef.current?.speaking_guard)))
         const selfVoiceBlocked = playbackActive && !currentConfig.barge_in
-        if (selfVoiceBlocked) {
-          ringRef.current = []; utteranceRef.current = []; speakingRef.current = false; setListening(false); return
+        if (selfVoiceBlocked || (postingRef.current && !currentConfig.natural_conversation) || manualCaptureActive()) {
+          recognitionRef.current?.cancel(); recognitionRef.current = null
+          ringRef.current = []; speakingRef.current = false; setListening(false); return
         }
         let power = 0
         for (const sample of samples) power += sample * sample
-        const rms = Math.sqrt(power / samples.length)
+        analyser.getByteFrequencyData(inputBins)
+        const rms = isResidualEcho(inputBins) ? 0 : Math.sqrt(power / samples.length)
         const duringPlayback = playbackActive
         const speechThreshold = duringPlayback && currentConfig.barge_in
           ? Math.max(.04, currentConfig.energy_threshold * 2.5)
@@ -219,28 +239,43 @@ export function useAlwaysListening({ baseUrl = '', deviceId = 'default', suspend
         const chunk = { samples, capturedAt: now }
         ringRef.current.push(chunk)
         ringRef.current = ringRef.current.filter((item) => now - item.capturedAt <= currentConfig.preroll_ms)
-        if (speakingRef.current) utteranceRef.current.push(samples)
+        if (speakingRef.current) recognitionRef.current?.sendSamples(samples)
         if (rms >= speechThreshold) {
           quietSinceRef.current = 0
           if (!aboveSinceRef.current) aboveSinceRef.current = now
           if (!speakingRef.current && now - aboveSinceRef.current >= speechStartMs) {
-            speakingRef.current = true; utteranceRef.current = ringRef.current.map((item) => item.samples); setListening(true)
+            if (duringPlayback && currentConfig.barge_in) bargeInLocally()
+            latestPartial.current = ''
+            speakingRef.current = true; setListening(true)
+            recognitionRef.current = new STTStream({ mode: 'listening', clientId: clientId.current, sampleRate: context.sampleRate,
+              onEvent: (event) => { if (event.transcript) latestPartial.current = event.transcript.text },
+              micStartedAt: (Date.now() - (now - (ringRef.current[0]?.capturedAt ?? now))) / 1000 })
+            ringRef.current.forEach((item) => recognitionRef.current?.sendSamples(item.samples))
             speechStartedAtRef.current = now
             void fetch(`${baseUrl}/api/listening/speech-start`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({client_id:clientId.current}) })
           }
         } else {
           aboveSinceRef.current = 0
           if (speakingRef.current && !quietSinceRef.current) quietSinceRef.current = now
-          if (speakingRef.current && quietSinceRef.current && now - quietSinceRef.current >= currentConfig.postroll_ms) {
-            const completed = utteranceRef.current
-            utteranceRef.current = []; ringRef.current = []; speakingRef.current = false; quietSinceRef.current = 0; speechStartedAtRef.current = 0
-            void submit(completed, context.sampleRate)
+          // Keep sending the same live silence frames long enough for the
+          // provider's word-gap event. No synthetic audio or second VAD.
+          const recognition = recognitionRef.current
+          const providerPostroll = recognition?.utteranceEndMs && !recognition.utteranceEnded
+            ? Math.max(currentConfig.postroll_ms, recognition.utteranceEndMs + 1100) : currentConfig.postroll_ms
+          const unfinished = /(?:\b(?:e|mas|porque|que|um|uma|de|do|da|pera|cara)|\.\.\.)\s*$/i.test(latestPartial.current)
+          const postroll = currentConfig.natural_conversation
+            ? Math.max(providerPostroll, unfinished ? 1500 : 850) : providerPostroll
+          if (speakingRef.current && quietSinceRef.current && now - quietSinceRef.current >= postroll) {
+            const endedAt = (Date.now() - (now - quietSinceRef.current)) / 1000
+            const completed = recognitionRef.current
+            recognitionRef.current = null; ringRef.current = []; speakingRef.current = false; quietSinceRef.current = 0; speechStartedAtRef.current = 0
+            void submit(completed, endedAt)
           }
         }
-        if (speakingRef.current && speechStartedAtRef.current && now - speechStartedAtRef.current >= currentConfig.max_utterance_seconds * 1000) {
-          const completed = utteranceRef.current
-          utteranceRef.current = []; ringRef.current = []; speakingRef.current = false; quietSinceRef.current = 0; speechStartedAtRef.current = 0
-          void submit(completed, context.sampleRate)
+        if (speakingRef.current && speechStartedAtRef.current && now - speechStartedAtRef.current >= Math.min(59000, currentConfig.max_utterance_seconds * 1000)) {
+          const completed = recognitionRef.current
+          recognitionRef.current = null; ringRef.current = []; speakingRef.current = false; quietSinceRef.current = 0; speechStartedAtRef.current = 0
+          void submit(completed)
         }
       }
     } catch (error) {
@@ -250,8 +285,15 @@ export function useAlwaysListening({ baseUrl = '', deviceId = 'default', suspend
       captureBlockedRef.current = true
       const message = error instanceof Error ? error.message : 'Microfone indisponível'
       if (lastCaptureErrorRef.current !== message) { lastCaptureErrorRef.current = message; errorRef.current?.(message) }
+    } finally {
+      acquiringRef.current = false
     }
   }, [deviceId, refreshDevices, stopCapture, submit])
+
+  useEffect(() => onCaptureOwnership(() => {
+    if (manualCaptureActive()) stopCapture()
+    else setDeviceRevision((value) => value + 1)
+  }), [stopCapture])
 
   useEffect(() => {
     let disposed = false

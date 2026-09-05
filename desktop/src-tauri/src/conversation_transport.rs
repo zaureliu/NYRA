@@ -85,13 +85,20 @@ fn set_connected(app: &AppHandle, state: &BridgeState, connected: bool) {
 }
 
 fn connect_events() -> Result<TcpStream, String> {
+    connect_local_websocket(EVENTS_PATH)
+}
+
+pub(crate) fn connect_local_websocket(path: &str) -> Result<TcpStream, String> {
+    if !matches!(path, "/api/ws" | "/api/stt/stream") {
+        return Err("EVENTS_PATH_NOT_ALLOWED".into());
+    }
     let mut stream = connect(Duration::from_secs(2))?;
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(5))))
         .map_err(|_| "EVENTS_TIMEOUT_SETUP_FAILED".to_string())?;
     let request = format!(
-        "GET {EVENTS_PATH} HTTP/1.1\r\nHost: {BACKEND_ADDRESS}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        "GET {path} HTTP/1.1\r\nHost: {BACKEND_ADDRESS}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
     );
     stream
         .write_all(request.as_bytes())
@@ -158,13 +165,13 @@ fn emit_event(app: &AppHandle, payload: &[u8]) -> Result<(), String> {
         .map_err(|_| "EVENT_EMIT_FAILED".to_string())
 }
 
-struct WebSocketFrame {
-    finished: bool,
-    opcode: u8,
-    payload: Vec<u8>,
+pub(crate) struct WebSocketFrame {
+    pub(crate) finished: bool,
+    pub(crate) opcode: u8,
+    pub(crate) payload: Vec<u8>,
 }
 
-fn read_frame(stream: &mut TcpStream) -> Result<WebSocketFrame, String> {
+pub(crate) fn read_frame(stream: &mut TcpStream) -> Result<WebSocketFrame, String> {
     let mut prefix = [0u8; 2];
     stream
         .read_exact(&mut prefix)

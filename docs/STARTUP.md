@@ -33,13 +33,17 @@ npm run build:release
 ```
 
 O executável regenerável fica em
-`desktop/src-tauri/target/release/nyra-desktop.exe`. O launcher de raiz reconstrói
-automaticamente o sidecar ou o release apenas se estiverem ausentes/stale.
+`desktop/src-tauri/target/release/nyra-desktop.exe`. O launcher de raiz requer
+o desktop já gerado e inicia primeiro o backend Python da raiz canônica; o
+desktop reutiliza esse serviço loopback saudável. O sidecar PyInstaller continua
+incluído e validado para uso portátil, mas o atalho não depende de uma exceção
+de antivírus caso proteção de endpoint o classifique heuristicamente.
 
 O instalador `scripts/install-shortcut.ps1` cria `NYRA.lnk` na Área de Trabalho
 e no Menu Iniciar. Ambos chamam `scripts/launch-nyra.vbs`, que abre o launcher
 de raiz sem console visível; o mutex do bootstrap e o plugin single-instance do
-Tauri impedem inicializações duplicadas.
+Tauri impedem inicializações duplicadas. O launcher nunca altera nem desativa a
+proteção de endpoint.
 
 ## Separação de dados
 

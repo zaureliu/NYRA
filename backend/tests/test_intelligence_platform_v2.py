@@ -55,7 +55,7 @@ async def stack(tmp_path):
 async def test_storage_memory_selective_dedup_conflict_and_secret_rejection(stack):
     store, memory, _knowledge, _root = stack
     assert (await store.health()) == {
-        "ok": True, "state": "AVAILABLE", "schema_version": 2, "quick_check": "ok"
+        "ok": True, "state": "AVAILABLE", "schema_version": 5, "quick_check": "ok"
     }
     low = await memory.write(MemoryWrite(
         kind=MemoryKind.CONVERSATION, content="conversa descartável",

@@ -30,7 +30,8 @@ class OperatorV2Service:
     def __init__(self, settings, event_bus, approvals, registry,
                  browser_controller=None, proactive_gate=None,
                  speech_queue=None, tts_provider_getter=None,
-                 voice_processor=None) -> None:
+                 voice_processor=None, credential_broker=None,
+                 legacy_monitor_notifications: bool = True) -> None:
         from app.operator.browser_v2 import BrowserV2Controller
         from app.operator.adapters import create_adapter_registry
         from app.operator.clipboard import ClipboardController
@@ -61,7 +62,9 @@ class OperatorV2Service:
             self.browser_control_enabled = False
 
         self.credentials_enabled = bool(getattr(settings, "credential_broker_enabled", True))
-        self.credentials = CredentialBroker(approvals) if self.credentials_enabled else None
+        self.credentials = (
+            credential_broker or CredentialBroker(approvals)
+        ) if self.credentials_enabled else None
 
         self.elevated = ElevatedSessionManager(
             approvals,
@@ -78,7 +81,7 @@ class OperatorV2Service:
                 settings, event_bus, speech_queue, tts_provider_getter,
                 voice_processor=voice_processor,
             )
-            if speech_queue is not None and tts_provider_getter is not None
+            if legacy_monitor_notifications and speech_queue is not None and tts_provider_getter is not None
             else None
         )
 
@@ -205,11 +208,15 @@ async def create_operator_v2_service(settings, event_bus, approvals, registry,
                                      proactive_gate=None,
                                      speech_queue=None,
                                      tts_provider_getter=None,
-                                     voice_processor=None) -> OperatorV2Service:
+                                     voice_processor=None,
+                                     credential_broker=None,
+                                     legacy_monitor_notifications: bool = True) -> OperatorV2Service:
     service = OperatorV2Service(settings, event_bus, approvals, registry,
                                 browser_controller=browser_controller,
                                 proactive_gate=proactive_gate,
                                 speech_queue=speech_queue,
                                 tts_provider_getter=tts_provider_getter,
-                                voice_processor=voice_processor)
+                                voice_processor=voice_processor,
+                                credential_broker=credential_broker,
+                                legacy_monitor_notifications=legacy_monitor_notifications)
     return service

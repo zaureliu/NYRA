@@ -5,6 +5,7 @@ import json
 import re
 import time
 import wave
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -54,6 +55,8 @@ from app.api.models import (
     ShellApprovalDecision,
     AudioSettingsUpdate,
     InterruptionRequest,
+    TtsProviderSettingsUpdate,
+    TtsCredentialUpdate,
 )
 from app.core.paths import DATA_ROOT, IDENTITY_ROOT
 from app.core.runtime_settings import save_runtime_settings
@@ -93,6 +96,8 @@ from app.memory.models import MemoryCategory, MemoryCreate
 from app.operator.monitoring import MonitorCreateRequest
 from app.speech.profile import load_voice_profile
 from app.speech.prosody import ProsodyProcessor
+from app.speech.online_providers import OnlineTtsProvider
+from app.speech.provider_models import TtsProviderError
 from app.speech.pronunciation.engine import PronunciationEngine, reload_engine
 from app.speech.pronunciation.lexicon import load_dictionary, save_override, reset_override, OVERRIDE_PATH
 from app.speech.reference import REFERENCE_PATH, inspect_reference, normalize_reference, RECOMMENDATIONS
@@ -100,7 +105,7 @@ from app.speech.reference import REFERENCE_PATH, inspect_reference, normalize_re
 
 router = APIRouter(prefix="/api")
 SAFE_AUDIO = re.compile(
-    r"^(?:nyra(?:-edge|-processed)?-[a-f0-9]+|voice-cache-[a-f0-9]{64})\.(?:wav|mp3)$"
+    r"^(?:nyra(?:-(?:edge|processed|openai|elevenlabs|gradium|custom))?-[a-f0-9]+|voice-cache-[a-f0-9]{64})\.(?:wav|mp3)$"
 )
 from app.speech.tts_identity import NYRA_IDENTITY_ID, NYRA_VOICE_ID
 PLAYBACK_CONFIRMATION_SECONDS = 12.0
@@ -342,15 +347,20 @@ async def conversation_status(request: Request):
 @router.get("/audio/settings")
 async def audio_settings(request: Request):
     services = request.app.state.services
+    provider_state = await services.tts_registry.provider_metadata()
+    active_id = str(provider_state["active_provider"])
+    active = next(
+        (item for item in provider_state["providers"] if item["id"] == active_id),
+        None,
+    )
+    voices = [
+        {**voice, "provider": active_id}
+        for voice in ((active or {}).get("voices") or [])
+    ]
     return {
         "settings": services.conversation.audio_settings(),
         "status": services.conversation.status(),
-        "voices": [{
-            "id": NYRA_VOICE_ID,
-            "name": "Ava Multilingual Neural",
-            "language": "pt-BR",
-            "provider": "edge_tts",
-        }],
+        "voices": voices,
     }
 
 
@@ -359,15 +369,147 @@ async def update_audio_settings(payload: AudioSettingsUpdate, request: Request):
     return await request.app.state.services.conversation.update_audio_settings(payload)
 
 
-@router.post("/audio/test-voice")
-async def test_runtime_voice(request: Request):
+@router.get("/audio/providers")
+async def audio_providers(request: Request):
+    """Safe metadata only. This endpoint never performs provider I/O."""
+    return await request.app.state.services.tts_registry.provider_metadata()
+
+
+@router.put("/audio/providers/settings")
+async def update_audio_provider_settings(payload: TtsProviderSettingsUpdate, request: Request):
+    from app.speech.synthesis_config import UniversalTtsSettings
     services = request.app.state.services
-    text = "Olá. Este é um teste da voz atual da NYRA."
-    prepared = ProsodyProcessor().prepare(text, provider=services.tts.name)
+    registry = services.tts_registry
+    target = payload.provider or registry.configured_provider
+    updates: dict[str, object] = {}
+    universal = registry.universal
+    if payload.universal is not None:
+        try:
+            universal = UniversalTtsSettings.model_validate(payload.universal)
+        except ValueError:
+            raise HTTPException(422, "Configuração TTS inválida. Verifique URL, placeholders e formato; segredos pertencem ao Broker.") from None
+        # Reject known broker secrets even if pasted into an innocuous field.
+        encoded = json.dumps(universal.model_dump(mode="json"))
+        identities = ["gradium", "openai", "elevenlabs"] + [p.credential_provider for p in registry.universal.custom_profiles]
+        for identity in identities:
+            secret = registry.credentials.get_for_authorized_provider(identity)
+            if secret and (secret in encoded or json.dumps(secret)[1:-1] in encoded):
+                raise HTTPException(422, "Credenciais não podem ser persistidas na configuração.")
+        updates["tts_universal"] = universal.model_dump(mode="json")
+    if payload.provider is not None:
+        updates["tts_provider_id"] = payload.provider
+    if payload.fallback_provider is not None:
+        updates["tts_provider_fallback"] = payload.fallback_provider
+    if payload.online_enabled is not None:
+        updates["tts_online_enabled"] = payload.online_enabled
+    if target == "openai":
+        if payload.model is not None:
+            updates["tts_openai_model"] = payload.model
+        if payload.voice is not None:
+            updates["tts_openai_voice"] = payload.voice
+    elif target == "elevenlabs":
+        if payload.model is not None:
+            updates["tts_elevenlabs_model"] = payload.model
+        if payload.voice is not None:
+            updates["tts_elevenlabs_voice_id"] = payload.voice
+    elif target == "gradium":
+        values = universal.model_dump(mode="json")
+        if payload.model is not None:
+            values["gradium"]["model"] = payload.model
+        if payload.voice is not None:
+            values["gradium"]["voice_id"] = payload.voice
+        try:
+            universal = UniversalTtsSettings.model_validate(values)
+        except ValueError:
+            raise HTTPException(422, "Voice ID/model Gradium inválido.") from None
+        updates["tts_universal"] = universal.model_dump(mode="json")
+    elif payload.model is not None or payload.voice is not None:
+        raise HTTPException(status_code=422, detail="Modelo/voz local permanecem sob o perfil local existente.")
+
+    # Existing speech owns its request snapshot. Apply settings to the next item,
+    # never cancel playback just because the operator changed providers.
+    if "tts_universal" in updates:
+        registry.configure_universal(universal)
+    registry.configure(
+        selected_provider=payload.provider,
+        fallback_provider=payload.fallback_provider,
+        online_enabled=payload.online_enabled,
+        provider_id=target if target in {"openai", "elevenlabs", "gradium"} else None,
+        model=payload.model,
+        voice=payload.voice,
+    )
+    for key, value in updates.items():
+        setattr(services.settings, key, universal if key == "tts_universal" else value)
+    if updates:
+        await asyncio.to_thread(save_runtime_settings, updates)
+    return await registry.provider_metadata()
+
+
+def _tts_credential_target(registry, provider_id):
+    if provider_id in {"openai", "elevenlabs", "gradium"}:
+        return registry.get(provider_id)
+    if any(p.credential_provider == provider_id for p in registry.universal.custom_profiles):
+        return registry.get("custom")
+    raise HTTPException(404, "Provider/perfil TTS desconhecido.")
+
+
+@router.put("/audio/providers/{provider_id}/credential")
+async def save_audio_provider_credential(
+    provider_id: str,
+    payload: TtsCredentialUpdate,
+    request: Request,
+):
+    registry = request.app.state.services.tts_registry
+    provider = _tts_credential_target(registry, provider_id)
+    try:
+        result = registry.credentials.save_credential(provider_id, payload.api_key.strip())
+    except Exception as exc:
+        logger.warning("tts_credential_save_failed", extra={"provider": provider_id, "error_type": type(exc).__name__})
+        raise HTTPException(status_code=503, detail="Não foi possível salvar a credencial com segurança.") from exc
+    if isinstance(provider, OnlineTtsProvider):
+        provider.last_status = provider.configuration().status
+    # Deliberately return only state; the secret is never read back by the UI.
+    return {"provider": provider_id, "configured": bool(result.get("success")), "status": provider.last_status.value}
+
+
+@router.delete("/audio/providers/{provider_id}/credential")
+async def delete_audio_provider_credential(provider_id: str, request: Request):
+    services = request.app.state.services
+    provider = _tts_credential_target(services.tts_registry, provider_id)
+    result = services.tts_registry.credentials.delete_credential(provider_id)
+    if isinstance(provider, OnlineTtsProvider):
+        provider.last_status = provider.configuration().status
+    if services.tts_registry.configured_provider == provider.provider_id:
+        await services.speech_queue.clear(cancel_active=True)
+        await services.tts_registry.cancel()
+        await services.event_bus.publish(EventType.SPEECH_CANCELLED, reason="tts_credential_removed")
+    return {"provider": provider_id, "configured": False, "removed": bool(result.get("success"))}
+
+
+@router.post("/audio/providers/{provider_id}/catalog/refresh")
+async def refresh_audio_provider_catalog(provider_id: str, request: Request):
+    if provider_id not in {"openai", "elevenlabs", "gradium"}:
+        raise HTTPException(status_code=404, detail="Provider online desconhecido.")
+    provider = request.app.state.services.tts_registry.get(provider_id)
+    try:
+        await provider.list_models(refresh=True)
+        await provider.list_voices(refresh=provider_id == "gradium")
+    except TtsProviderError as exc:
+        raise HTTPException(status_code=409, detail={"status": exc.status.value, "message": str(exc)}) from exc
+    return await request.app.state.services.tts_registry.provider_metadata()
+
+
+async def _run_voice_test(services, provider, *, source: str) -> dict[str, object]:
+    text = "Oi, eu sou a Kazumi. Como foi seu dia?"
+    prepared = ProsodyProcessor().prepare(text, provider=provider.provider_id)
     started = time.perf_counter()
     response_id = f"turn_{uuid4().hex}"
     playback_started = asyncio.Event()
     playback_started_at: float | None = None
+    streaming = provider.capabilities().supports_streaming
+    audio_url = None
+    packet_index = 0
+    sample_rate = 48000
 
     async def confirm_playback(event: Event) -> None:
         nonlocal playback_started_at
@@ -386,36 +528,55 @@ async def test_runtime_voice(request: Request):
             EventType.USER_TEXT_RECEIVED,
             response_id=response_id,
             turn_id=response_id,
-            source="voice_test",
+            source=source,
         )
         await services.event_bus.publish(
             EventType.TTS_STARTED,
             response_id=response_id,
             turn_id=response_id,
             state="neutral",
-            source="voice_test",
-            streaming=False,
+            source=source,
+            streaming=streaming,
         )
-        output = await services.speech_queue.synthesize(
-            services.tts,
-            prepared.speech_text,
-            "neutral",
-            SpeechPriority.USER,
-            response_id=response_id,
-            turn_id=response_id,
-        )
-        services.telemetry.mark(response_id, "t_first_audio")
+        async def emit_audio(packet):
+            nonlocal packet_index, sample_rate
+            if not packet.pcm and not packet.path:
+                return
+            sample_rate = packet.sample_rate
+            if packet_index == 0:
+                services.telemetry.mark(response_id, "t_first_audio")
+            if packet.path:
+                await services.event_bus.publish(EventType.TTS_CHUNK_FINISHED, response_id=response_id,
+                    turn_id=response_id, index=0, audio_url=f"/api/audio/{packet.path.name}", state="neutral", speech_text=prepared.speech_text)
+            else:
+                import base64
+                await services.event_bus.publish(EventType.TTS_PCM_CHUNK, response_id=response_id, turn_id=response_id,
+                    index=0, packet_index=packet_index, sample_rate=sample_rate,
+                    pcm=base64.b64encode(packet.pcm).decode("ascii"), final=False)
+            packet_index += 1
+        if streaming:
+            await services.event_bus.publish(EventType.TTS_CHUNK_STARTED, response_id=response_id,
+                turn_id=response_id, index=0, state="neutral", speech_text=prepared.speech_text)
+            await services.speech_queue.synthesize(provider, prepared.speech_text, "neutral", SpeechPriority.USER,
+                response_id=response_id, turn_id=response_id, on_audio=emit_audio)
+            await services.event_bus.publish(EventType.TTS_PCM_CHUNK, response_id=response_id, turn_id=response_id,
+                index=0, packet_index=packet_index, sample_rate=sample_rate, pcm="", final=True)
+        else:
+            output = await services.speech_queue.synthesize(provider, prepared.speech_text, "neutral", SpeechPriority.USER,
+                response_id=response_id, turn_id=response_id)
+            audio_url = f"/api/audio/{output.name}"
+        if not streaming:
+            services.telemetry.mark(response_id, "t_first_audio")
         services.telemetry.mark(response_id, "t_response_complete")
         finished_metrics = services.telemetry.finish(response_id)
-        audio_url = f"/api/audio/{output.name}"
         await services.event_bus.publish(
             EventType.TTS_FINISHED,
             response_id=response_id,
             turn_id=response_id,
             state="neutral",
             audio_url=audio_url,
-            source="voice_test",
-            streaming=False,
+            source=source,
+            streaming=streaming,
         )
         try:
             await asyncio.wait_for(playback_started.wait(), PLAYBACK_CONFIRMATION_SECONDS)
@@ -425,7 +586,7 @@ async def test_runtime_voice(request: Request):
                 response_id=response_id,
                 turn_id=response_id,
                 reason="playback_not_confirmed",
-                source="voice_test",
+                source=source,
             )
             raise HTTPException(
                 status_code=504,
@@ -437,19 +598,23 @@ async def test_runtime_voice(request: Request):
         if services.telemetry.active(response_id):
             services.telemetry.mark(response_id, "t_response_complete")
             services.telemetry.finish(response_id)
-        logger.exception(
-            "voice_test_failed stage=TTS exception_type=%s message=%s",
+        logger.warning(
+            "voice_test_failed stage=TTS exception_type=%s",
             type(exc).__name__,
-            str(exc),
         )
         await services.event_bus.publish(
             EventType.TTS_FAILED,
             response_id=response_id,
             turn_id=response_id,
             reason=type(exc).__name__,
-            source="voice_test",
+            source=source,
         )
         raise HTTPException(status_code=502, detail=f"Falha no TTS atual: {type(exc).__name__}") from exc
+    except asyncio.CancelledError:
+        if services.telemetry.active(response_id):
+            services.telemetry.mark(response_id, "t_response_complete")
+            services.telemetry.finish(response_id)
+        raise HTTPException(status_code=409, detail="Teste de voz interrompido.") from None
     finally:
         await services.event_bus.unsubscribe(confirm_playback)
     metrics = dict(services.telemetry.last_metrics)
@@ -459,17 +624,61 @@ async def test_runtime_voice(request: Request):
         metrics["playback_start_ms"] = round((playback_started_at - started) * 1000, 1)
     return {
         "audio_url": audio_url,
-        "provider": services.tts.name,
-        "primary_engine": services.tts.engine_id,
-        "active_engine": services.tts.active_engine,
-        "voice": services.tts.active_voice,
-        "fallback_active": services.tts.fallback_active,
-        "fallback_reason": services.tts.fallback_reason,
+        "provider": provider.name,
+        "primary_engine": provider.engine_id,
+        "active_engine": provider.active_engine,
+        "voice": provider.active_voice,
+        "fallback_active": provider.fallback_active,
+        "fallback_reason": provider.fallback_reason,
         "synthesis_ms": metrics.get("tts_first_audio_ms") or round((time.perf_counter() - started) * 1000, 1),
         "response_id": response_id,
         "playback_started": metrics.get("playback_start_ms") is not None,
         "playback_start_ms": metrics.get("playback_start_ms"),
     }
+
+
+@router.post("/audio/test-voice")
+async def test_runtime_voice(request: Request):
+    services = request.app.state.services
+    return await _run_voice_test(services, services.tts, source="voice_test")
+
+
+@router.post("/audio/providers/{provider_id}/test")
+async def test_audio_provider(provider_id: str, request: Request):
+    if provider_id not in {"local", "openai", "elevenlabs", "gradium", "custom"}:
+        raise HTTPException(status_code=404, detail="Provider TTS desconhecido.")
+    services = request.app.state.services
+    provider = services.tts_registry.get(provider_id)
+    if isinstance(provider, OnlineTtsProvider):
+        validation = provider.configuration()
+        if not validation.valid:
+            raise HTTPException(
+                status_code=409,
+                detail={"status": validation.status.value, "message": "Provider não está pronto para teste."},
+            )
+    return await _run_voice_test(services, provider, source=f"voice_test_{provider_id}")
+
+
+@router.post("/audio/providers/{provider_id}/connection")
+async def test_tts_connection(provider_id: str, request: Request):
+    if provider_id not in {"gradium", "custom"}:
+        raise HTTPException(404, "Teste de conexão não disponível neste adapter.")
+    provider = request.app.state.services.tts_registry.get(provider_id)
+    try:
+        return await provider.test_connection()
+    except TtsProviderError as exc:
+        raise HTTPException(409, {"status": exc.status.value, "message": str(exc)}) from None
+
+
+@router.get("/audio/providers/custom/profiles/{profile_id}/export")
+async def export_tts_profile(profile_id: str, request: Request):
+    registry = request.app.state.services.tts_registry
+    profile = next((p for p in registry.universal.custom_profiles if p.id == profile_id), None)
+    if not profile:
+        raise HTTPException(404, "Perfil não encontrado.")
+    # Schema has no credential value or arbitrary headers; credentials are
+    # separate Broker records derived from profile identity, not export data.
+    return profile.model_dump(mode="json")
 
 
 @router.post("/conversation/interrupt")
@@ -603,7 +812,7 @@ async def process_voice(payload: VoiceProcessorRequest, request: Request):
 @router.get("/avatar/controller")
 async def avatar_controller(request: Request):
     services = request.app.state.services
-    return {"state": services.avatar.status(), "providers": {"current": True, "vtube_studio": services.vtube_studio.readiness()}}
+    return {"state": services.avatar.status(), "providers": {"vtube_studio": services.vtube_studio.readiness()}}
 
 
 @router.get("/live2d/settings")
@@ -613,8 +822,14 @@ async def live2d_settings(request: Request):
 
 @router.put("/live2d/settings")
 async def live2d_update(payload: VTSSettingsUpdate, request: Request):
-    provider=request.app.state.services.vtube_studio; await provider.disconnect(); provider.update(payload)
-    if payload.enabled and payload.auto_connect: await provider.connect(False)
+    provider=request.app.state.services.vtube_studio
+    previous=provider.config
+    reconnect=(previous.enabled!=payload.enabled or previous.host!=payload.host or previous.port!=payload.port)
+    if reconnect:
+        await provider.disconnect()
+    provider.update(payload)
+    if reconnect and payload.enabled and payload.auto_connect:
+        await provider.connect(False)
     return provider.readiness()
 
 
@@ -653,12 +868,15 @@ async def live2d_cursor(payload: Live2DCursorRequest, request: Request):
 
 @router.post("/live2d/test/{mode}")
 async def live2d_test(mode: str, request: Request):
-    allowed={"neutral":"neutral","happy":"happy","curious":"curious","focused":"focused","concerned":"concerned","amused":"amused","surprised":"surprised","thinking":"focused","attention":"curious","head_tilt":"curious","nod":"neutral"}
-    if mode not in allowed: raise HTTPException(status_code=422,detail="Teste Live2D inválido")
-    avatar=request.app.state.services.avatar
-    if mode=="thinking": await avatar.mode("thinking",allowed[mode])
-    elif mode=="attention": await avatar.mode("listening",allowed[mode])
-    else: await avatar.update(expression=allowed[mode],head_tilt=.16 if mode=="head_tilt" else 0)
+    emotions={"neutral","friendly","focused","confident","positive","happy","relieved","concerned","warning","serious","empathetic","curious","surprised","amused","apologetic","uncertain","calm"}
+    services=request.app.state.services; avatar=services.avatar
+    if mode in emotions:
+        await services.emotional_presence.controlled_transition(mode,.35)
+    elif mode=="thinking": await avatar.mode("thinking")
+    elif mode=="attention": await avatar.mode("listening")
+    elif mode=="head_tilt": await avatar.update(head_tilt=.16)
+    elif mode=="nod": await avatar.update(head_tilt=0)
+    else: raise HTTPException(status_code=422,detail="Teste Live2D inválido")
     return avatar.status()
 
 
@@ -860,8 +1078,18 @@ async def brain_benchmark(payload: BrainBenchmarkRequest, request: Request):
 
 @router.get("/state")
 async def state(request: Request) -> dict:
-    current = await request.app.state.services.state_machine.current()
-    return {"state": current.value, "status": "IDLE"}
+    services = request.app.state.services
+    current = await services.state_machine.current()
+    persona = await services.persona_runtime.status() if services.persona_runtime else None
+    return {
+        "state": current.value,
+        "status": "IDLE",
+        "emotion_intensity": (persona or {}).get("emotion", {}).get("intensity", 0.0),
+        "dialogue_policy": (persona or {}).get("dialogue_policy", {}).get("mode", "inform"),
+        "current_focus": (
+            services.world_state.get_current_focus() if services.world_state else None
+        ),
+    }
 
 
 @router.get("/memory")
@@ -1094,18 +1322,41 @@ async def listening_lease(payload: ListeningLeaseRequest, request: Request):
 async def listening_playback(payload: PlaybackStateRequest, request: Request):
     services = request.app.state.services
     status = await services.listening.playback(payload.playing)
+    await services.conversation.playback(payload)
     if payload.playing and payload.response_id:
-        services.telemetry.playback_started(payload.response_id)
-        services.speech_queue.playback_started(payload.response_id)
-        await services.event_bus.publish(EventType.PLAYBACK_STARTED, response_id=payload.response_id)
+        if payload.audio_buffer_delay_ms is not None:
+            services.tts_registry.last_audio_buffer_delay_ms = payload.audio_buffer_delay_ms
+        if services.speech_queue.playback_started(payload.response_id):
+            services.telemetry.playback_started(payload.response_id)
+            await services.event_bus.publish(EventType.PLAYBACK_STARTED, response_id=payload.response_id)
     return status
 
 
 @router.post("/listening/speech-start")
 async def listening_speech_start(payload: ListeningLeaseRequest, request: Request):
+    return await _listening_speech_start(payload, request)
+
+
+from app.listening.models import SpeechEndRequest
+
+
+@router.post("/listening/speech-end")
+async def listening_speech_end(payload: SpeechEndRequest, request: Request):
+    services = request.app.state.services
+    if not services.listening.owns_lease(payload.client_id):
+        raise HTTPException(409, "lease_required")
+    age = time.time() - payload.ended_at
+    if not 0 <= age <= 60:
+        raise HTTPException(422, "Invalid speech timing")
+    services.conversation.last_speech_end = time.perf_counter() - age
+    services.conversation.session.user_speaking = False
+    return {"accepted": True}
+
+
+async def _listening_speech_start(payload: ListeningLeaseRequest, request: Request):
     services = request.app.state.services
     allowed, reason = services.listening.can_process(payload.client_id)
-    if services.listening.speaking and services.settings.voice_barge_in:
+    if allowed and services.listening.speaking and services.settings.voice_barge_in:
         interrupted = await services.conversation.speech_started("always_listening")
         return {"accepted": True, "interrupted": interrupted}
     if allowed:
@@ -1204,8 +1455,13 @@ async def poll_network_watch(request: Request):
 
 
 @router.get("/network-watch/metrics")
-async def network_watch_metrics(request: Request, minutes: int = 5):
-    return {"minutes": minutes, "samples": request.app.state.services.network_watch.sample_window(minutes)}
+async def network_watch_metrics(request: Request, minutes: int = 5, since: datetime | None = None):
+    monitor = request.app.state.services.network_watch
+    return {
+        "minutes": minutes,
+        "history_limit": monitor.samples.maxlen,
+        "samples": monitor.sample_window(minutes, since),
+    }
 
 
 @router.get("/network-watch/events")
@@ -1221,8 +1477,6 @@ async def network_watch_quality(request: Request, hours: int = 1):
 
 @router.post("/network-watch/debug")
 async def network_watch_debug(payload: NetworkDebugRequest, request: Request):
-    if request.app.state.services.settings.environment != "development":
-        raise HTTPException(status_code=404, detail="Debug indisponível")
     event = await request.app.state.services.network_watch.inject(payload.event)
     return event.model_dump(mode="json")
 
@@ -2772,6 +3026,8 @@ async def setting_update_v3(request: Request, payload: SettingUpdateRequest) -> 
         result = update_setting(services.settings, payload.key, payload.value)
         if payload.key.startswith("selfdev_") and getattr(services, "selfdev", None) is not None:
             await services.selfdev.refresh_settings()
+        if payload.key.startswith("proactive_") and getattr(services, "proactive_presence", None) is not None:
+            services.proactive_presence.refresh_settings()
         return result
     except KeyError as error:
         raise HTTPException(status_code=404, detail={

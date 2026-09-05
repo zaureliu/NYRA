@@ -20,6 +20,13 @@ export const extractTurnId = (payload: Record<string, unknown>): string | null =
 export const isTurnStartEvent = (eventType: string): boolean =>
   eventType === 'USER_TEXT_RECEIVED'
 
+/** Background polling is not evidence of tools executed for the current chat. */
+export const isConversationToolEvent = (event: TurnBoundEvent, filter: TurnFilter): boolean => {
+  if (event.type.endsWith('APPROVAL_REQUIRED')) return true // never hide approval
+  const turn = extractTurnId(event.payload)
+  return !!turn && filter.isActive(turn)
+}
+
 export const adoptInputTurn = (
   filter: TurnFilter,
   eventType: string,

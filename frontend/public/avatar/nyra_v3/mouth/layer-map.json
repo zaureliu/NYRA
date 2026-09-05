@@ -1,7 +1,0 @@
-{
-  "type": "vector-overlay-placeholder",
-  "states": ["mouth_closed", "mouth_small", "mouth_medium", "mouth_open", "mouth_smile"],
-  "driver": "WebAudio amplitude",
-  "implementation": "frontend/src/hooks/useAudioLipSync.ts",
-  "replaceable": true
-}

@@ -68,6 +68,8 @@ class UsbDeviceService:
         self._reconcile_lock = asyncio.Lock()
         self._stopping = False
         self._last_relevant_device_id: str | None = None
+        self._last_hardware_device_id: str | None = None
+        self.last_hardware_observation: dict[str, Any] | None = None
         self._native_active = False
         self._recovery_attempts = 0
         self._event_hints = 0
@@ -107,6 +109,10 @@ class UsbDeviceService:
                 state=self.state.value,
                 event_source=self.event_source if self._native_active else self.fallback,
                 connected=len(self._connected),
+                connected_devices=[
+                    record.public_dict() for record in self._connected.values()
+                    if record.relevance == DeviceRelevance.USER_RELEVANT
+                ],
             )
             await self._sync_computer_state()
         except Exception as error:  # noqa: BLE001 - optional monitor must not stop NYRA
@@ -183,12 +189,14 @@ class UsbDeviceService:
 
     async def refresh(self, *, reason: str = "manual") -> dict[str, Any]:
         async with self._reconcile_lock:
+            discovery_success = False
             try:
                 observations = await asyncio.to_thread(self.discovery.enumerate)
                 discovery_error = getattr(self.discovery, "last_error", None)
                 if discovery_error:
                     raise RuntimeError(str(discovery_error))
                 await self._reconcile(observations, initial=False, reason=reason)
+                discovery_success = True
                 self.last_heartbeat_at = utc_now()
                 if self._native_active:
                     self.state = UsbMonitorState.ACTIVE
@@ -203,16 +211,25 @@ class UsbDeviceService:
                 )
                 await self._monitor_failure(self.last_error)
             await self._sync_computer_state()
-            return await self.status_snapshot()
+            snapshot = await self.status_snapshot()
+            if reason == "hardware_grounding":
+                snapshot.update(
+                    discovery_success=discovery_success,
+                    observed_at=utc_now() if discovery_success else None,
+                    observed_devices=[record.public_dict() for record in self._connected.values()]
+                    if discovery_success else [],
+                )
+            return snapshot
 
     async def _reconcile(self, observations: list[UsbDeviceObservation], *,
                          initial: bool, reason: str) -> None:
         current_ids = {item.device_id for item in observations}
-        previous_ids = set(self._connected)
+        previous_connected = dict(self._connected)
+        previous_ids = set(previous_connected)
         next_connected: dict[str, UsbDeviceRecord] = {}
 
         for observation in observations:
-            prior_live = self._connected.get(observation.device_id)
+            prior_live = previous_connected.get(observation.device_id)
             new_connection = observation.device_id not in previous_ids
             identity_match = None
             if new_connection:
@@ -240,12 +257,15 @@ class UsbDeviceService:
                 continue
 
             if new_connection:
+                # Make the authoritative in-memory view match the event before
+                # subscribers are resumed. EventBus delivery is synchronous.
+                self._connected[record.device_id] = record
                 await self._connected_event(record, previous_record, identity_match)
             elif prior_live is not None:
                 await self._metadata_events(prior_live, record)
 
         for device_id in previous_ids - current_ids:
-            previous = self._connected.get(device_id)
+            previous = previous_connected.get(device_id)
             migrated_relevance = (
                 classify_relevance(previous.name, previous.device_instance_id or "").value
                 if initial and previous is not None else None
@@ -253,12 +273,19 @@ class UsbDeviceService:
             record = await self.registry.mark_disconnected(
                 device_id, relevance=migrated_relevance
             )
+            # Consumers reacting to the disconnect must not observe the device
+            # as connected through status_snapshot().
+            self._connected.pop(device_id, None)
             if (not initial and record is not None
                     and record.relevance == DeviceRelevance.USER_RELEVANT):
                 await self._disconnected_event(record)
 
         self._connected = next_connected
         self.last_heartbeat_at = utc_now()
+        world = getattr(self.computer_state, "world_state", None)
+        if world is not None and getattr(self.discovery, "simulated", True) is False:
+            world.ingest_usb_snapshot([record.public_dict() for record in self._connected.values()],
+                                      source=getattr(self.discovery, "source", "unknown"))
         await self._sync_computer_state()
 
     async def _connected_event(self, record: UsbDeviceRecord,
@@ -511,6 +538,9 @@ class UsbDeviceService:
 
     @staticmethod
     def can_handle_chat(text: str) -> bool:
+        from app.usb.hardware import hardware_request
+        if hardware_request(text) is not None:
+            return True
         plain = _plain(text)
         return bool(re.search(
             r"\b(usb|dispositivo|dispositivos|com\d*|porta com|pendrive|armazenamento)\b",
@@ -521,6 +551,12 @@ class UsbDeviceService:
         ))
 
     async def handle_chat(self, text: str) -> str | None:
+        from app.usb.hardware import discover_hardware, hardware_request, presence_reply
+
+        request = hardware_request(text)
+        if request is not None:
+            self.last_hardware_observation = await discover_hardware(self, request)
+            return presence_reply(self.last_hardware_observation)
         plain = _plain(text)
         usb_context = bool(re.search(
             r"\b(usb|dispositivo|dispositivos|com\d*|porta com|pendrive|armazenamento)\b",

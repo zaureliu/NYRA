@@ -29,7 +29,7 @@ RELEASE_GATE_REPORT = RUNTIME_ROOT / "reports" / "release-health.json"
 GATE_PROGRESS = RUNTIME_ROOT / "reports" / "release-gate-progress.json"
 
 # Versão oficial unificada do produto.
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 APP_NAME = "NYRA"
 
 # Artefatos mais antigos que isso não representam o build atual (closure §20):
@@ -363,6 +363,9 @@ async def support_bundle(services: Any) -> dict[str, Any]:
 
 async def world_state_snapshot(services: Any) -> dict[str, Any]:
     """Página World State (Parte S §103-§106): observações categorizadas."""
+    engine = getattr(services, "world_state", None)
+    if engine is not None:
+        return engine.operations_view()
     observations: list[dict[str, Any]] = []
 
     def observe(category: str, name: str, state: str, source: str,

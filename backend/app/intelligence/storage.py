@@ -65,6 +65,81 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
         "CREATE INDEX IF NOT EXISTS idx_events_entity ON intelligence_events(entity, timestamp DESC)",
         "CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON execution_traces(timestamp DESC)",
     )),
+    (3, (
+        """CREATE TABLE IF NOT EXISTS goals_v1 (
+            goal_id TEXT PRIMARY KEY, title TEXT NOT NULL, state TEXT NOT NULL,
+            project TEXT NOT NULL DEFAULT '', priority INTEGER NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            last_touched_at TEXT NOT NULL, document TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS open_loops_v1 (
+            loop_id TEXT PRIMARY KEY, title TEXT NOT NULL, type TEXT NOT NULL,
+            state TEXT NOT NULL, goal_id TEXT, project TEXT NOT NULL DEFAULT '',
+            dedup_key TEXT NOT NULL, source_turn TEXT, priority INTEGER NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            last_touched_at TEXT NOT NULL, document TEXT NOT NULL,
+            FOREIGN KEY(goal_id) REFERENCES goals_v1(goal_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS open_loop_history (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+            previous_state TEXT, new_state TEXT NOT NULL, reason TEXT NOT NULL,
+            evidence TEXT NOT NULL, created_at TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_goals_state_touched ON goals_v1(state, last_touched_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_open_loops_state_priority ON open_loops_v1(state, priority DESC, last_touched_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_open_loops_goal ON open_loops_v1(goal_id, last_touched_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_open_loops_project ON open_loops_v1(project, last_touched_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_open_loops_dedup ON open_loops_v1(dedup_key, state)",
+        "CREATE INDEX IF NOT EXISTS idx_open_loop_history_entity ON open_loop_history(entity_type, entity_id, sequence DESC)",
+    )),
+    (4, (
+        """CREATE TABLE IF NOT EXISTS proactive_decisions_v1 (
+            decision_id TEXT PRIMARY KEY, event_id TEXT NOT NULL,
+            event_type TEXT NOT NULL, source TEXT NOT NULL, entity TEXT NOT NULL,
+            goal_id TEXT, priority TEXT NOT NULL, score REAL NOT NULL,
+            decision TEXT NOT NULL, reason TEXT NOT NULL, repeat_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL, document TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS proactive_notifications_v1 (
+            notification_id TEXT PRIMARY KEY, decision_id TEXT NOT NULL,
+            priority TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL, document TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS proactive_cooldowns_v1 (
+            scope_key TEXT PRIMARY KEY, dedup_key TEXT NOT NULL,
+            last_event_at REAL NOT NULL, last_notified_at REAL,
+            expires_at REAL NOT NULL, repeat_count INTEGER NOT NULL DEFAULT 0
+        )""",
+        """CREATE TABLE IF NOT EXISTS proactive_incidents_v1 (
+            incident_key TEXT PRIMARY KEY, is_open INTEGER NOT NULL,
+            notified_at REAL, updated_at REAL NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS proactive_deferred_v1 (
+            dedup_key TEXT PRIMARY KEY, expires_at REAL NOT NULL,
+            created_at TEXT NOT NULL, document TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_proactive_decisions_created ON proactive_decisions_v1(created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_proactive_decisions_event ON proactive_decisions_v1(event_type, entity, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_proactive_notifications_read ON proactive_notifications_v1(read, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_proactive_cooldowns_expiry ON proactive_cooldowns_v1(expires_at)",
+    )),
+    (5, (
+        """CREATE TABLE IF NOT EXISTS nyra_identity_v1 (
+            singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+            identity_version INTEGER NOT NULL, document TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS relationship_state_v1 (
+            singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+            document TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS emotional_state_v1 (
+            singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+            primary_emotion TEXT NOT NULL, document TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""",
+    )),
 )
 
 
@@ -115,6 +190,12 @@ class IntelligenceStore:
             "memory": "memory_v2", "documents": "knowledge_documents",
             "chunks": "knowledge_chunks", "tasks": "autonomous_tasks_v2",
             "events": "intelligence_events", "traces": "execution_traces",
+            "goals": "goals_v1", "open_loops": "open_loops_v1",
+            "proactive_decisions": "proactive_decisions_v1",
+            "proactive_notifications": "proactive_notifications_v1",
+            "persona_identity": "nyra_identity_v1",
+            "relationship_state": "relationship_state_v1",
+            "emotional_state": "emotional_state_v1",
         }
         values: dict[str, int] = {}
         async with aiosqlite.connect(self.database_path) as db:

@@ -52,6 +52,8 @@ class EventIntelligenceEngine:
                 pass
 
     async def observe(self, event: Event) -> None:
+        if event.type.value == "TTS_PCM_CHUNK":
+            return  # transient playback audio is never an intelligence record
         payload = redact(event.payload)
         type_value = event.type.value
         severity = "ERROR" if any(term in type_value.casefold() for term in ("fail", "error", "offline", "crash")) else "WARNING" if "degraded" in type_value.casefold() else "INFO"

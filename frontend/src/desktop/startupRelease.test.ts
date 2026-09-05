@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import launcher from '../../../scripts/start-nyra.ps1?raw'
+import rootLauncher from '../../../start-nyra.ps1?raw'
 import runtimePaths from '../../../scripts/runtime-paths.ps1?raw'
 import hiddenEntry from '../../../scripts/launch-nyra.vbs?raw'
 import shortcutInstaller from '../../../scripts/install-shortcut.ps1?raw'
@@ -13,6 +14,8 @@ describe('release startup', () => {
     expect(launcher).not.toContain("keep_alive = '30m'")
     expect(launcher).toContain('/health')
     expect(launcher).toContain('Find-NyraPythonExecutable')
+    expect(launcher).toContain("backend_start owner=desktop sidecar=frozen")
+    expect(launcher).toContain('backend_online reused=false owner=desktop')
     expect(runtimePaths).toContain("'.venv\\Scripts\\python.exe'")
     expect(runtimePaths).toContain("'backend\\.venv\\Scripts\\python.exe'")
     expect(launcher).not.toContain('127.0.0.1:5173')
@@ -21,6 +24,8 @@ describe('release startup', () => {
 
   it('uses a hidden entrypoint and the official executable icon', () => {
     expect(hiddenEntry).toContain('shell.Run command, 0, False')
+    expect(rootLauncher).toContain("scripts\\start-nyra.ps1")
+    expect(rootLauncher).not.toContain('Set-MpPreference')
     expect(shortcutInstaller).toContain('wscript.exe')
     expect(shortcutInstaller).toContain("'NYRA.lnk'")
     expect(shortcutInstaller).toContain("$icon = if (Test-Path -LiteralPath $release)")

@@ -188,6 +188,128 @@
 .sentinel-metrics { border-color: var(--line); border-radius: var(--radius-sm); background: rgba(5, 11, 27, .66); }
 .network-graph { background: rgba(5, 10, 24, .75); }
 
+/* Network Observability V2 — scoped to the Network page. */
+.network-page { --network-surface: #091116; --network-border: #1d3037; }
+.network-toolbar { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin:-32px 0 14px; color:var(--muted); font:8px IBM Plex Mono,monospace; letter-spacing:.12em; }
+.network-toolbar div { display:flex; gap:3px; padding:3px; border:1px solid var(--network-border); border-radius:6px; background:#071014; }
+.network-toolbar button { border:0; border-radius:4px; padding:6px 10px; background:transparent; color:#789097; font:9px IBM Plex Mono,monospace; cursor:pointer; }
+.network-toolbar button.active { background:#173039; color:#bce9e6; }
+.network-dashboard { display:grid; gap:14px; }
+.network-surface,.network-chart-card,.network-metric-card,.network-target { background:linear-gradient(145deg,rgba(10,20,25,.98),rgba(6,12,16,.98)); border:1px solid var(--network-border); border-radius:8px; }
+.network-summary-grid { display:grid; grid-template-columns:repeat(7,minmax(112px,1fr)); gap:8px; }
+.network-metric-card { min-height:82px; padding:12px; position:relative; overflow:hidden; }
+.network-metric-card::before { content:""; position:absolute; inset:0 auto 0 0; width:2px; background:#46616a; }
+.network-metric-card.tone-healthy::before { background:#54c6a7; }.network-metric-card.tone-warning::before { background:#e2b86d; }.network-metric-card.tone-degraded::before,.network-metric-card.tone-critical::before { background:#ef7284; }.network-metric-card.tone-collecting::before { background:#6a9fca; }
+.network-metric-card>span { display:block; margin-bottom:10px; color:#728990; font:7px IBM Plex Mono,monospace; letter-spacing:.12em; }
+.network-metric-card>strong { display:block; overflow:hidden; color:#d5e7e9; font:600 13px IBM Plex Mono,monospace; text-overflow:ellipsis; white-space:nowrap; }
+.network-metric-card>small { display:block; margin-top:5px; color:#61767c; font:7px IBM Plex Mono,monospace; }
+.network-quality-stack { display:grid; grid-template-columns:2fr 1fr; gap:12px; }
+.network-chart-card { min-width:0; padding:14px 16px 11px; }
+.network-chart-card>header,.network-surface>header,.network-target>header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.network-chart-card h3,.network-section-heading h2 { margin:0; color:#a7bec2; font:600 9px IBM Plex Mono,monospace; letter-spacing:.1em; }
+.network-chart-card p { margin:5px 0 0; color:#5e747b; font:8px IBM Plex Mono,monospace; }
+.network-chart-legend { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:9px; color:#81979c; font:7px IBM Plex Mono,monospace; }
+.network-chart-legend span { display:flex; align-items:center; gap:4px; white-space:nowrap; }.network-chart-legend i { width:13px; height:2px; }
+.network-timeseries { display:block; width:100%; height:138px; margin-top:10px; overflow:visible; }
+.network-timeseries polyline { fill:none; stroke-width:1.35; vector-effect:non-scaling-stroke; }
+.network-timeseries circle { vector-effect:non-scaling-stroke; opacity:.75; }
+.network-grid-line { fill:none; stroke:#17282e; stroke-width:.45; vector-effect:non-scaling-stroke; }
+.network-time-axis { display:flex; justify-content:space-between; color:#526970; font:7px IBM Plex Mono,monospace; }
+.network-interface-panel { padding:15px 17px; }
+.network-interface-panel header span,.network-events header span { display:block; color:#71878d; font:7px IBM Plex Mono,monospace; letter-spacing:.13em; }
+.network-interface-panel header strong,.network-events header strong { display:block; margin-top:6px; color:#d2e5e7; font:600 13px IBM Plex Mono,monospace; }
+.network-interface-panel header em { color:#789096; font:normal 8px IBM Plex Mono,monospace; }
+.network-interface-panel dl { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin:14px 0 0; border-top:1px solid #17272d; }
+.network-interface-panel dl>div { min-width:0; padding:11px 10px 7px 0; }
+.network-interface-panel dt,.network-target dt { color:#61767d; font:7px IBM Plex Mono,monospace; letter-spacing:.09em; }
+.network-interface-panel dd,.network-target dd { margin:5px 0 0; overflow:hidden; color:#bed1d4; font:9px IBM Plex Mono,monospace; text-overflow:ellipsis; white-space:nowrap; }
+.network-section-heading { display:flex; align-items:baseline; justify-content:space-between; margin:4px 1px 8px; }.network-section-heading span { color:#566d74; font:7px IBM Plex Mono,monospace; }
+.network-target-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.network-target { padding:13px; border-top:2px solid #435d65; }
+.network-target.state-healthy { border-top-color:#54c6a7; }.network-target.state-down { border-top-color:#ef7284; }
+.network-target header span { color:#7d9398; font:7px IBM Plex Mono,monospace; letter-spacing:.1em; }.network-target header strong { color:#a8bdc1; font:8px IBM Plex Mono,monospace; }
+.network-target p { margin:10px 0; overflow:hidden; color:#d0e0e2; font:10px IBM Plex Mono,monospace; text-overflow:ellipsis; white-space:nowrap; }
+.network-target dl { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0; }
+.network-events { padding:15px 17px; }.network-events header small { color:#637a80; font:8px IBM Plex Mono,monospace; }
+.network-events ol { max-height:310px; overflow:auto; margin:14px 0 0; padding:0; list-style:none; }
+.network-events li { display:grid; grid-template-columns:66px 62px minmax(0,1fr) auto; align-items:center; gap:9px; min-height:37px; border-top:1px solid #14242a; }
+.network-events time,.network-events li>strong { color:#71868c; font:7px IBM Plex Mono,monospace; }.network-events li>strong { color:#82999f; }
+.network-events .severity-warning>strong { color:#e2b86d; }.network-events .severity-critical>strong { color:#ef7284; }.network-events .severity-recovery>strong,.network-events .severity-notice>strong { color:#65cbb3; }
+.network-events li p { margin:0; color:#a9bdc1; font:9px/1.4 IBM Plex Mono,monospace; }.simulation-badge { color:#9ca9d5; font:7px IBM Plex Mono,monospace; }
+.network-empty { display:grid; place-items:center; min-height:116px; color:#5f777e; font:9px IBM Plex Mono,monospace; letter-spacing:.12em; }
+.network-api-error { padding:9px 12px; border:1px solid #6e3e47; border-radius:6px; background:#1b1014; color:#dc9aa5; font:9px IBM Plex Mono,monospace; }
+.network-settings-panel { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:9px; }
+.network-settings-panel fieldset { min-width:0; margin:0; padding:11px; border:1px solid var(--network-border); border-radius:8px; background:#091116; }
+.network-settings-panel legend { padding:0 5px; color:#789197; font:8px IBM Plex Mono,monospace; letter-spacing:.1em; }
+.network-settings-panel fieldset>div { display:grid; gap:8px; }
+.network-toggle,.network-number-field { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; color:#9cafb3; font:8px IBM Plex Mono,monospace; }
+.network-number-field { align-items:flex-start; flex-direction:column; }
+.network-input-with-unit { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; width:100%; border:1px solid #22363d; border-radius:5px; background:#060c0f; }
+.network-input-with-unit input { width:100%; min-width:0; border:0!important; background:transparent!important; color:#c6d8da!important; }
+.network-input-with-unit em { padding:0 8px; color:#647b82; font:normal 8px IBM Plex Mono,monospace; }
+.network-settings-panel fieldset button,.network-settings-footer button { border:1px solid #28434b; border-radius:5px; padding:8px 9px; background:#0d1d22; color:#9fc7c8; font:8px IBM Plex Mono,monospace; cursor:pointer; }
+.network-settings-footer { grid-column:1/-1; display:flex; align-items:center; gap:12px; padding-top:3px; }.network-settings-footer p { margin:0; color:#759096; font:8px IBM Plex Mono,monospace; }
+
+/* Comfortable readability tokens and overrides remain local to Network. */
+.network-page {
+  --network-font-xs: 11px;
+  --network-font-sm: 12px;
+  --network-font-md: 14px;
+  --network-font-lg: 16px;
+  --network-font-value: 20px;
+  --network-line-height: 1.4;
+}
+.network-page .ops-page-title { font-size:26px; line-height:1.2; }
+.network-page .ops-page-subtitle { font-size:15px; line-height:1.45; }
+.network-page>.ops-section-title { font-size:16px; line-height:1.35; }
+.network-toolbar { margin-top:-36px; font:var(--network-font-sm)/var(--network-line-height) IBM Plex Mono,monospace; letter-spacing:.1em; }
+.network-toolbar button { min-height:32px; padding:6px 11px; font:13px/1.3 IBM Plex Mono,monospace; }
+.network-summary-grid { grid-template-columns:repeat(7,minmax(128px,1fr)); }
+.network-metric-card { min-height:108px; padding:14px; }
+.network-metric-card>span { margin-bottom:11px; font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; letter-spacing:.1em; }
+.network-metric-card>strong { font:600 var(--network-font-value)/1.2 IBM Plex Mono,monospace; }
+.network-metric-card>small { margin-top:7px; font:var(--network-font-sm)/var(--network-line-height) IBM Plex Mono,monospace; }
+.network-chart-card { padding:16px 18px 13px; }
+.network-chart-card h3,.network-section-heading h2 { font:600 var(--network-font-lg)/1.3 IBM Plex Mono,monospace; letter-spacing:.08em; }
+.network-chart-card p { margin-top:6px; font:13px/var(--network-line-height) IBM Plex Mono,monospace; }
+.network-chart-legend { gap:11px; font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; }
+.network-timeseries { height:154px; margin-top:12px; }
+.network-time-axis { font:var(--network-font-xs)/1.35 IBM Plex Mono,monospace; }
+.network-interface-panel { padding:17px 19px; }
+.network-interface-panel header span,.network-events header span { font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; letter-spacing:.11em; }
+.network-interface-panel header strong,.network-events header strong { margin-top:7px; font:600 18px/1.25 IBM Plex Mono,monospace; }
+.network-interface-panel header em { font:normal var(--network-font-sm)/1.35 IBM Plex Mono,monospace; }
+.network-interface-panel dl>div { padding:13px 12px 9px 0; }
+.network-interface-panel dt,.network-target dt { font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; letter-spacing:.07em; }
+.network-interface-panel dd,.network-target dd { margin-top:6px; font:var(--network-font-md)/var(--network-line-height) IBM Plex Mono,monospace; }
+.network-section-heading { margin:5px 1px 9px; }
+.network-section-heading span { font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; }
+.network-target { padding:15px; }
+.network-target header span,.network-target header strong { font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; }
+.network-target header span { letter-spacing:.08em; }
+.network-target p { margin:12px 0; font:15px/var(--network-line-height) IBM Plex Mono,monospace; }
+.network-events { padding:17px 19px; }
+.network-events header small { font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; }
+.network-events li { grid-template-columns:82px 76px minmax(0,1fr) auto; gap:11px; min-height:49px; }
+.network-events time,.network-events li>strong { font:var(--network-font-sm)/1.35 IBM Plex Mono,monospace; }
+.network-events li p { font:var(--network-font-md)/var(--network-line-height) IBM Plex Mono,monospace; }
+.simulation-badge { font:var(--network-font-xs)/1.35 IBM Plex Mono,monospace; }
+.network-empty { font:13px/var(--network-line-height) IBM Plex Mono,monospace; letter-spacing:.1em; }
+.network-api-error { padding:10px 13px; font:13px/var(--network-line-height) IBM Plex Mono,monospace; }
+.network-settings-panel fieldset { padding:13px; }
+.network-settings-panel legend { padding:0 6px; font:13px/1.35 IBM Plex Mono,monospace; letter-spacing:.08em; }
+.network-settings-panel fieldset>div { gap:10px; }
+.network-toggle,.network-number-field { gap:9px; min-height:34px; font:var(--network-font-md)/var(--network-line-height) IBM Plex Mono,monospace; }
+.network-input-with-unit input { min-height:36px; font:15px/1.35 IBM Plex Mono,monospace; }
+.network-input-with-unit em { padding:0 9px; font:normal 13px/1.35 IBM Plex Mono,monospace; }
+.network-settings-panel fieldset button,.network-settings-footer button { min-height:38px; padding:9px 11px; font:14px/1.35 IBM Plex Mono,monospace; }
+.network-settings-footer { padding-top:4px; }
+.network-settings-footer p { font:13px/var(--network-line-height) IBM Plex Mono,monospace; }
+.network-page button:focus-visible,.network-page input:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
+.network-page button:disabled,.network-page input:disabled { opacity:.62; }
+@media (max-width:1200px) { .network-summary-grid { grid-template-columns:repeat(4,1fr); }.network-interface-panel dl { grid-template-columns:repeat(3,1fr); }.network-settings-panel { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:920px) { .network-toolbar { margin:0 0 12px; }.network-summary-grid { grid-template-columns:repeat(2,1fr); }.network-quality-stack { grid-template-columns:1fr; }.network-target-grid { grid-template-columns:repeat(2,1fr); }.network-interface-panel dl { grid-template-columns:repeat(2,1fr); }.network-settings-panel { grid-template-columns:repeat(2,1fr); } }
+
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns: 76px minmax(0, 1fr); }
   .app-sidebar .brand-copy, .app-sidebar .nav-label, .app-sidebar .nav-group-toggle span, .app-sidebar .nav-group-toggle i { width: 0; opacity: 0; pointer-events: none; }

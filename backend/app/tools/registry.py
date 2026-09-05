@@ -47,10 +47,12 @@ DOMAIN_HOMELAB_HA = "HOMELAB.HOME_ASSISTANT"
 DOMAIN_HOMELAB_OPENWRT = "HOMELAB.OPENWRT"
 DOMAIN_NETWORK = "NETWORK"
 DOMAIN_BROWSER = "BROWSER"
+DOMAIN_WEB_RESEARCH = "WEB_RESEARCH"
 DOMAIN_WORKFLOW = "WORKFLOW"
 DOMAIN_GENERIC = "GENERIC"
 
 _DOMAIN_TOOL_PREFIXES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("web_",), DOMAIN_WEB_RESEARCH),
     (("desktop_", "ui_", "clipboard_"), DOMAIN_DESKTOP),
     (("browser_",), DOMAIN_BROWSER),
     (("proxmox", "pve"), DOMAIN_HOMELAB_PROXMOX),
@@ -66,6 +68,12 @@ _DOMAIN_TOOL_PREFIXES: tuple[tuple[tuple[str, ...], str], ...] = (
 
 def classify_domain(text: str) -> str:
     """Classify the operator request into one routing domain before tool selection."""
+    from app.usb.hardware import hardware_request
+    from app.web_research.planner import standalone_research_request
+    if standalone_research_request(text):
+        return DOMAIN_WEB_RESEARCH
+    if hardware_request(text) is not None:
+        return DOMAIN_GENERIC
     value = " ".join(text.casefold().split())
     if re.search(r"\b(clipboard|transfer\w*)\b", value):
         return DOMAIN_DESKTOP
@@ -170,7 +178,10 @@ class ToolRegistry:
                     if domain == DOMAIN_DESKTOP
                     else {"system_shell", "remote_shell", "desktop_windows", "desktop_find_application"}
                 )
-                support_names |= {"monitor_create", "monitor_status", "monitor_list", "monitor_cancel"}
+                if domain == DOMAIN_WEB_RESEARCH:
+                    support_names = set()
+                else:
+                    support_names |= {"monitor_create", "monitor_status", "monitor_list", "monitor_cancel"}
                 support = [
                     tool for tool in tools
                     if tool.name in support_names and _tool_domain(tool.name) != domain
@@ -190,6 +201,12 @@ class ToolRegistry:
 
     def should_route_to_agent(self, text: str) -> bool:
         """Use tool schemas only for requests that require observable state or action."""
+        from app.usb.hardware import hardware_request
+        from app.web_research.planner import standalone_research_request
+        if standalone_research_request(text):
+            return True
+        if hardware_request(text) is not None:
+            return True
         value = " ".join(text.casefold().split())
         if re.search(
             r"\b(monitora|monitore|monitorar|monitoramento|acompanha|acompanhe|acompanhar|"

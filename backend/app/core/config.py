@@ -12,6 +12,8 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.paths import CONFIG_ROOT, DATA_ROOT, PROJECT_ROOT, resolve_packaged_path
+from app.speech.recognition.models import STTSettings
+from app.speech.synthesis_config import UniversalTtsSettings
 
 
 def _private_config_path(local_name: str, public_name: str) -> Path:
@@ -63,8 +65,21 @@ class Settings(BaseSettings):
     stt_beam_size: int = Field(1, ge=1, le=10)
     stt_cpu_threads: int = Field(4, ge=0, le=64)
     stt_workers: int = Field(1, ge=1, le=8)
+    stt_recognition: STTSettings = Field(default_factory=STTSettings)
     silence_threshold: float = Field(0.018, ge=0, le=1)
     tts_provider: Literal["auto", "chatterbox", "xtts", "kokoro", "pyttsx3", "edge_tts", "disabled"] = "edge_tts"
+    # Logical provider layer. The legacy tts_provider remains the Voice Lab
+    # engine selector; runtime conversation routes through this local-first layer.
+    tts_provider_id: Literal["local", "openai", "elevenlabs", "gradium", "custom"] = "local"
+    tts_universal: UniversalTtsSettings = Field(default_factory=UniversalTtsSettings)
+    tts_provider_fallback: Literal["local"] = "local"
+    tts_online_enabled: bool = False
+    tts_local_engine: Literal["auto", "chatterbox", "chatterbox_multilingual_v3", "chatterbox_ptbr", "xtts", "kokoro", "pyttsx3", "disabled"] = "kokoro"
+    tts_openai_model: str = "gpt-4o-mini-tts"
+    tts_openai_voice: str = "coral"
+    tts_elevenlabs_model: str = "eleven_multilingual_v2"
+    tts_elevenlabs_voice_id: str = ""
+    tts_online_timeout_seconds: float = Field(30, ge=5, le=120)
     tts_language: str = "pt-BR"
     tts_model_path: Path = Path("data/models/kokoro-v1.0.int8.onnx")
     tts_voices_path: Path = Path("data/models/voices-v1.0.bin")
@@ -116,6 +131,7 @@ class Settings(BaseSettings):
     listening_privacy_indicator: bool = True
     listening_audio_debug: bool = False
     conversation_engine: bool = True
+    natural_conversation_enabled: bool = True
     voice_barge_in: bool = True
     voice_stream_tts: bool = True
 
@@ -250,6 +266,12 @@ class Settings(BaseSettings):
     watchdog_enabled: bool = True
     watchdog_heartbeat_path: Path = DATA_ROOT / "watchdog-heartbeat.json"
     proactive_operator_enabled: bool = False
+    proactive_presence_enabled: bool = True
+    proactive_presence_mode: Literal["NORMAL", "QUIET", "DO_NOT_DISTURB"] = "NORMAL"
+    proactive_voice_enabled: bool = False
+    proactive_presence_cooldown_seconds: int = Field(300, ge=10, le=86400)
+    proactive_presence_max_per_hour: int = Field(6, ge=1, le=60)
+    proactive_presence_defer_ttl_seconds: int = Field(1800, ge=30, le=86400)
     elevated_session_default_ttl_seconds: int = Field(300, ge=60, le=900)
 
     homelab_poll_interval: int = Field(60, ge=10, le=86400)

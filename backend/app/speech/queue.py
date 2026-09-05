@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
@@ -33,6 +34,12 @@ class _SpeechItem:
     conversation_id: str | None = field(default=None, compare=False)
     created_at: float = field(default=0.0, compare=False)
     options: VoiceSynthesisOptions | None = field(default=None, compare=False)
+    provider_id: str = field(default="unknown", compare=False)
+    model_id: str | None = field(default=None, compare=False)
+    voice: str | None = field(default=None, compare=False)
+    emotion: str = field(default="neutral", compare=False)
+    audio_format: str = field(default="wav", compare=False)
+    on_audio: Callable[..., Awaitable[None]] | None = field(default=None, compare=False)
 
 
 class SpeechQueue:
@@ -45,7 +52,7 @@ class SpeechQueue:
     """
 
     def __init__(self) -> None:
-        self._queue: asyncio.PriorityQueue[_SpeechItem] = asyncio.PriorityQueue()
+        self._queue: asyncio.PriorityQueue[_SpeechItem] = asyncio.PriorityQueue(maxsize=48)
         self._sequence = itertools.count()
         self._worker: asyncio.Task[None] | None = None
         self._active: asyncio.Task[Path] | None = None
@@ -85,6 +92,7 @@ class SpeechQueue:
         turn_id: str | None = None,
         conversation_id: str | None = None,
         options: VoiceSynthesisOptions | None = None,
+        on_audio: Callable[..., Awaitable[None]] | None = None,
     ) -> Path:
         self.start()
         loop = asyncio.get_running_loop()
@@ -92,7 +100,7 @@ class SpeechQueue:
         # Auto-tag: rotas sem identidade (alerts/proativo/legacy) herdam o turno
         # corrente; fora de turno ficam soltas mas ainda são purgáveis por geração.
         context_turn = get_current_turn_id()
-        if turn_id is None and context_turn:
+        if turn_id is None and response_id is None and context_turn:
             turn_id = context_turn
             if response_id is None:
                 response_id = turn_id
@@ -101,9 +109,33 @@ class SpeechQueue:
             _SpeechItem(
                 int(priority), next(self._sequence), provider, text, state, result,
                 response_id, chunk_index, turn_id, conversation_id, time.time(), options,
+                str(getattr(provider, "provider_id", getattr(provider, "name", "unknown"))),
+                getattr(provider, "model_id", None),
+                getattr(provider, "default_voice", None),
+                str(getattr(options, "emotion", state) or state),
+                "wav",
+                on_audio,
             )
         )
         return await result
+
+    async def _stream_item(self, item):
+        audio_started = None
+        audio_seconds = 0.0
+        async for packet in item.provider.stream_audio(item.text, item.state, item.options):
+            if item.result.cancelled():
+                raise asyncio.CancelledError
+            if packet.pcm:
+                if audio_started is None:
+                    audio_started = time.monotonic()
+                # Backpressure to provider: at most one second ahead of the
+                # real-time player, instead of overflowing its bounded queue.
+                delay = audio_seconds - (time.monotonic() - audio_started) - 1.0
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                audio_seconds += len(packet.pcm) / (packet.sample_rate * 2)
+            await item.on_audio(packet)
+        return None
 
     async def clear(self, cancel_active: bool = False) -> int:
         cleared = 0
@@ -136,7 +168,7 @@ class SpeechQueue:
                 break
             self._queue.task_done()
             belongs = bool(response_id) and (item.response_id == response_id or item.turn_id == response_id)
-            if belongs:
+            if belongs or (item.turn_id is None and item.response_id is not None):
                 retained.append(item)
                 continue
             if item.priority <= SpeechPriority.CRITICAL:
@@ -213,13 +245,21 @@ class SpeechQueue:
                         self.counters["tts_order_violations"] += 1
                     last_user_chunk = (item.turn_id, max(item.chunk_index, last_index if last_index is not None else -1))
                 self._active_item = item
-                synthesis = (
+                if item.result.cancelled():
+                    continue
+                synthesis = self._stream_item(item) if item.on_audio else (
                     item.provider.synthesize(item.text, item.state, item.options)
                     if item.options is not None
                     else item.provider.synthesize(item.text, item.state)
                 )
                 self._active = asyncio.create_task(synthesis, name="nyra-tts-synthesis")
-                output = Path(await self._active)
+                raw_output = await self._active
+                if item.on_audio:
+                    if not item.result.done():
+                        item.result.set_result(None)
+                    self.counters["tts_items_synthesized"] += 1
+                    continue
+                output = Path(raw_output)
                 if not output.is_absolute():
                     raise FileNotFoundError(f"TTS provider returned a relative output path: {output}")
                 output = output.resolve(strict=True)
@@ -231,7 +271,9 @@ class SpeechQueue:
             except asyncio.CancelledError:
                 if not item.result.done():
                     item.result.cancel()
-                if self._worker and asyncio.current_task() is self._worker:
+                # Cancellation of the child synthesis is NOT shutdown of this
+                # worker. Keep servicing independent/newer speech after barge-in.
+                if asyncio.current_task().cancelling():
                     raise
             except Exception as exc:
                 if not item.result.done():

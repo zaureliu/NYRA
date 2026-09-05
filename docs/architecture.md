@@ -16,7 +16,7 @@ tokens -> SentenceAssembler -> Pronunciation -> TTS -> Voice Processor
 
 `RealtimeOrchestrator` preserva o contrato anterior, mas coordena stream, sentenças, fila ordenada, telemetria e cancelamento sem conhecer providers concretos. Cada resposta possui `response_id`; em `SMART_DUPLEX`, `USER_SPEECH_STARTED` cancela stream e chunks pendentes e retorna a `LISTENING`. `HALF_DUPLEX` permanece o padrão seguro.
 
-`PCAwareness` coleta somente sinais autorizados e efêmeros. `ContextSelector` seleciona o mínimo relevante para o prompt. `AttentionEngine`, `ReactionEngine` e `ProactiveEngine` aplicam prioridade, decay, cooldowns e orçamento de fala. `SkillRegistry` continua sendo uma allowlist tipada. Shell arbitrário existe exclusivamente como chamada nativa `system_shell`; texto livre de resposta nunca é executado.
+`PCAwareness` coleta somente sinais autorizados e efêmeros. `ContextSelector` seleciona o mínimo relevante para o prompt. `AttentionEngine` e `ReactionEngine` controlam reações do turno; `ProactivePresenceService` decide a apresentação de eventos assíncronos com relevância, cooldown e orçamento de notificações. `SkillRegistry` continua sendo uma allowlist tipada. Shell arbitrário existe exclusivamente como chamada nativa `system_shell`; texto livre de resposta nunca é executado.
 
 ```text
 Microfone/web → STT → Orchestrator → contexto seletivo → LLMProvider
@@ -28,11 +28,22 @@ Resposta → Prosody/display+speech → TTSProvider → áudio → lip sync
         tools nativas / system_shell mediado / monitor / integrações
 ```
 
-O dashboard web e o Desktop Presence Tauri consomem o mesmo FastAPI/WebSocket. `AvatarRenderer` mantém SVG, PNG, Layered e FutureLive2D atrás de um contrato visual. A V3 implementa PNG/Layered e preserva SVG V2 como fallback.
+O dashboard web e o Desktop Presence Tauri consomem o mesmo FastAPI/WebSocket. Desktop Presence é VTS-only: recebe o modelo atual por Spout2 e não inclui renderer, modelo ou personagem alternativos.
 
 Chatterbox roda por subprocesso em `.venv-chatterbox`; Kokoro permanece no `.venv` principal. Essa fronteira evita conflito entre PyTorch/NumPy do Chatterbox e ONNX/NumPy do MVP.
 
 O FastAPI compõe serviços independentes no `lifespan`. `ChatOrchestrator` coordena uma conversa sem conhecer Ollama, faster-whisper ou SAPI diretamente; ele depende das abstrações `LLMProvider`, `STTProvider` e `TTSProvider`.
+
+### TTS Provider Layer V1
+
+`TtsProviderRegistry` separa o texto que a NYRA quer falar de quem gera o
+áudio. O provider lógico `local` encapsula o engine local existente e permanece
+primário e fallback por padrão. OpenAI e ElevenLabs são adapters opcionais,
+lazy e desabilitados até opt-in + credencial + configuração válida. Todos
+entregam WAV à mesma `SpeechQueue`; playback, lip sync, barge-in, dispositivo de
+saída e ownership de turno continuam únicos e provider-agnostic. Emoção e
+persona chegam como `VoiceStylePlan`, que cada adapter traduz somente quando a
+capability real existe. Detalhes em [online-voice-providers.md](online-voice-providers.md).
 
 ## Contexto
 
@@ -50,9 +61,9 @@ O barramento assíncrono publica `USER_SPEECH_RECEIVED`, `USER_TEXT_RECEIVED`, `
 
 O contrato já separa reprodução, status e captura. A extensão deverá publicar `USER_SPEECH_STARTED`, cancelar a tarefa de TTS/reprodução com um token, emitir `TTS_INTERRUPTED` e preservar no histórico apenas o trecho realmente reproduzido. Cancelamento nunca deve interromper uma transação de memória no meio.
 
-## Avatar
+## VTube Studio Presence
 
-O manifest V3 separa assets e lógica. O renderer recebe `state`, `status`, `mouth`, variante e preferências. O `LayeredRenderer` usa base RGBA e overlays substituíveis; falhas caem no SVG V2. Uma implementação Live2D futura apenas implementa esse contrato.
+Não existe renderer ou modelo visual embutido. A API VTS aplica estado, emoção, lip sync e mouse somente aos parâmetros descobertos; Spout2 apresenta o modelo atual com alpha. Ausência do VTS deixa a camada de personagem vazia.
 ### Pronunciation V3.2
 
 O texto técnico segue separado em `display_text` e `speech_text`. `PronunciationEngine` carrega defaults + overrides, protege URLs/paths, resolve longest-match, normaliza números/unidades e aplica aliases por provider antes da prosódia. O Pronunciation Lab usa endpoints locais de preview/export/import e hot reload por síntese.
@@ -63,7 +74,7 @@ Desktop/dashboard capture -> in-memory PCM ring -> local VAD/faster-whisper
   -> AlwaysListeningManager -> wake-word/hands-free policy -> ChatOrchestrator
 
 NetworkWatchMonitor -> rolling metrics -> NetworkRuleEngine -> EventBus
-  -> ProactiveNetworkAlerts -> SpeechQueue -> TTS fallback chain -> overlay
+  -> ProactivePresenceService -> UI/chat | SpeechQueue opt-in -> overlay
 ```
 
 `AlwaysListeningManager`, `NetworkWatchMonitor`, `SystemShellService`, `RemoteShellService`, `AgentController` e `SpeechQueue` são serviços gerenciados pelo lifespan do FastAPI. Preferências runtime persistem separadamente dos defaults versionados. Probes estruturados continuam read-only; shells recebem somente argumentos do tool calling nativo e impedem execução sensível sem policy/approval backend.
@@ -90,7 +101,7 @@ RealtimeOrchestrator → AgentController/run_id → Ollama tools schema → Tool
 
 ## Utamo Sentinel Bridge
 
-O módulo `app.integrations.sentinel` mantém discovery, autenticação, Socket.IO, validação, dedupe e histórico separados do Network Watch. O Sentinel continua responsável por detectar alertas. A NYRA consome somente o schema público v1 e emite `SENTINEL_STATUS_CHANGED`, `SENTINEL_EVENT` e `SENTINEL_ALERT` no Event Bus. `ProactiveSentinelAlerts` decide UI/fala e usa a mesma Pronunciation Engine e SpeechQueue das conversas.
+O módulo `app.integrations.sentinel` mantém discovery, autenticação, Socket.IO, validação, dedupe e histórico separados do Network Watch. O Sentinel continua responsável por detectar alertas. A NYRA consome somente o schema público v1 e emite `SENTINEL_STATUS_CHANGED`, `SENTINEL_EVENT` e `SENTINEL_ALERT` no Event Bus. O `ProactivePresenceService` centraliza a decisão de apresentação; voz, quando habilitada, usa a mesma Pronunciation Engine e SpeechQueue das conversas.
 
 ## Operator V2 (operador autônomo)
 
@@ -111,6 +122,14 @@ ComputerPipeline -> Desktop/Operator capabilities -> EffectVerificationService
 ```
 
 `app.computer` acrescenta contexto operacional e aprendizado ao operador existente sem criar um segundo executor. A percepção produz snapshots limitados de processos, janelas, arquivos recentes e metadados do clipboard; UIA é consultada sob demanda e pixels/OCR continuam sendo fallback. `ComputerStateService` mantém freshness por slot e referências naturais isoladas por conversa. Texto e voz convergem no mesmo `IntentResolver`, e `ComputerPipeline` só aceita o resultado estruturado do operador como evidência — texto livre da resposta nunca vira execução nem prova de sucesso.
+
+`app.world_state` agrega esses sinais verificados em um estado compartilhado,
+event-driven e com TTL por categoria. O engine não substitui percepção,
+Operator, Tasks, MonitorJobs, USB, Network Watch, integrações nem Artifact
+Context. Ele oferece snapshot, seleção relevante, foco atual, timeline curta e
+health; persiste somente referências que fazem sentido após restart. O Context
+Engine recebe um resumo compacto e o Universal Operator usa o foco fresco antes
+de qualquer redescoberta. Consulte [World State Engine V1](world-state-engine.md).
 
 Para controle comum de aplicativos, `ActionResultPresenter` é a fronteira entre o resultado estruturado e a conversa. PID, HWND, janelas, processo, método, tentativas e `effect_verified` permanecem no resultado interno para auditoria, diagnóstico e consultas técnicas explícitas. Somente `user_facing_response`, produzido depois de ACT→VERIFY, alimenta a resposta principal e o TTS; uma verificação negativa produz uma resposta de impossibilidade de confirmação, nunca sucesso.
 
@@ -140,3 +159,49 @@ O repositório estável, o workspace de candidatos e o snapshot público são ro
 `app.intelligence` acrescenta uma camada integrada, sem substituir os executores ou as políticas existentes. O fluxo é `ContextEngine -> ModelRouterV2 -> policy/ActionBudget -> CapabilityRegistryV2/SkillRegistry -> tools existentes -> effect verification -> memory/trace/events`. Memory V2, RAG, tasks, eventos e traces compartilham o SQLite local, mas possuem tabelas, índices e ciclos de retenção logicamente separados. Conteúdo de documentos e web é envelopado como não confiável e nunca ganha autoridade de instrução.
 
 Detalhes dos contratos, schemas, defaults, APIs, estados de degradação e validação estão em [intelligence-platform-v2.md](intelligence-platform-v2.md).
+
+## Open Loops & Goal Memory V1
+
+`app.open_loops` é a autoridade persistente para objetivos, intenções pendentes,
+condições aguardadas e trabalho bloqueado. Ela não é um scheduler e não duplica
+Tasks: uma Task pode apontar para um goal principal, enquanto um goal agrega
+zero ou mais Tasks/Open Loops. Eventos estruturados de Tasks, MonitorJobs,
+Artifact Context e SelfDev atualizam os loops; texto do modelo nunca resolve ou
+autoriza execução. O World State recebe somente goal ativo, contagens e o loop
+mais relevante. O Context Engine recupera um Resume Context pequeno sob trust
+boundary explícito. Consulte [Open Loops & Goal Memory V1](open-loops-goal-memory-v1.md).
+
+## Proactive Presence Engine V1
+
+`app.proactive_presence` é uma camada event-driven de decisão e apresentação;
+ela não cria probes, polls, Tasks ou executores. Eventos existentes passam por
+normalização determinística, relevância contextual, cooldown semântico por
+evento/entidade/fonte/goal, coalescência, modo de silêncio e estado do usuário e
+da assistente. A saída é somente `IGNORE`, `LOG_ONLY`, `UI_NOTIFICATION`,
+`CHAT_MESSAGE`, `VOICE_AND_CHAT` ou `DEFER`.
+
+Somente o evento final `PROACTIVE_PRESENCE_NOTIFICATION` é apresentado no
+frontend. Decisões, cooldowns, incidentes e notificações persistem no SQLite
+local; a fila residente é limitada. A notificação sempre declara
+`execution_authorized=false` e consumo zero de Action Budget. Consulte
+[Proactive Presence Engine V1](proactive-presence-v1.md).
+
+## Persona & Emotional Runtime V1
+
+`app.persona_runtime` mantém identidade e personalidade estáveis separadas do
+Qwen, relacionamento útil aprendido gradualmente, emoção contextual com decay e
+histerese, e uma policy de diálogo determinística. O Context Builder injeta um
+resumo limitado antes do modelo; World State, Proactive Presence, TTS e Desktop
+Presence consomem o mesmo estado. Persistência continua no SQLite local e texto
+livre nunca pode alterar a identidade central nem autorizar execução. Consulte
+[Persona & Emotional Runtime V1](persona-emotional-runtime-v1.md).
+
+## Emotional Presence Synchronization V1
+
+`PersonaRuntime` publica `NYRA_EMOTION_CHANGED`; o
+`EmotionPresentationCoordinator` distribui o mesmo estado e intensidade para o
+texto, o adapter provider-agnostic de voz, Desktop Presence e VTube Studio.
+Estados operacionais não substituem emoção, lip sync continua derivado do áudio
+e o VTS redescobre hotkeys/expressions/parâmetros ao reconectar ou trocar de
+modelo. Alvos inexistentes degradam para expressão neutra sem inventar
+capacidade; se o VTS estiver offline, nenhuma personagem alternativa aparece. Detalhes em [Emotional Presence Sync V1](emotional-presence-sync-v1.md).

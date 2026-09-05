@@ -544,6 +544,121 @@ select:focus-visible, input:focus-visible, textarea:focus-visible {
 .ops-kv dt { color: var(--ops-faint); font-size: var(--fs-meta); align-self: center; }
 .ops-kv dd { margin: 0; color: var(--ops-text-soft); text-align: right; word-break: break-all; }
 
+/* Integrations/Homelab density: keep related labels and values together.
+   Typography, colors, cards, metrics and data presentation stay unchanged. */
+:is(.integrations-density-page, .homelab-density-page) .ops-kv {
+  width: min(100%, 490px);
+  max-width: 100%;
+  grid-template-columns: max-content minmax(0, 1fr);
+  justify-content: start;
+  column-gap: 16px;
+  row-gap: 6px;
+}
+
+:is(.integrations-density-page, .homelab-density-page) .ops-kv dd {
+  text-align: left;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.ops-shell:has(.integrations-density-page) .ops-topbar-chips,
+.ops-shell:has(.homelab-density-page) .ops-topbar-chips {
+  min-width: 0;
+}
+
+.ops-shell:has(.integrations-density-page) :is(.ops-topbar, .ops-main),
+.ops-shell:has(.homelab-density-page) :is(.ops-topbar, .ops-main) {
+  min-width: 0;
+}
+
+.homelab-density-page .homelab-panel .panel-header {
+  justify-content: flex-start;
+  gap: 14px;
+}
+
+.homelab-density-page .homelab-hosts li {
+  display: grid;
+  grid-template-columns: 7px minmax(100px, 150px) minmax(80px, 220px) max-content;
+  justify-content: start;
+  column-gap: 10px;
+}
+
+.homelab-density-page .homelab-host-detail {
+  width: auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.homelab-density-page .homelab-panel > .integration-list:not(.homelab-hosts) li {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) max-content;
+  justify-content: start;
+  column-gap: 14px;
+}
+
+.ha-profile-table {
+  width: min(100%, 1060px);
+  max-width: 1060px;
+  table-layout: fixed;
+}
+
+.ha-profile-table th,
+.ha-profile-table td {
+  padding-right: 8px;
+  padding-left: 8px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.ha-profile-table th:nth-child(1) { width: 21%; }
+.ha-profile-table th:nth-child(2) { width: 25%; }
+.ha-profile-table th:nth-child(3) { width: 9%; }
+.ha-profile-table th:nth-child(4) { width: 13%; }
+.ha-profile-table th:nth-child(5) { width: 12%; }
+.ha-profile-table th:nth-child(6) { width: 20%; }
+
+.ha-profile-table td:nth-child(2) {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+.ha-profile-actions {
+  display: flex;
+  max-width: 360px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ha-profile-create-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ha-profile-create-row > input {
+  width: auto;
+  min-width: 180px;
+  max-width: 320px;
+  flex: 1 1 220px;
+}
+
+@media (max-width: 760px) {
+  :is(.integrations-density-page, .homelab-density-page) .ops-kv {
+    width: 100%;
+    grid-template-columns: minmax(104px, 38%) minmax(0, 1fr);
+  }
+
+  .homelab-density-page .homelab-hosts li {
+    grid-template-columns: 7px minmax(100px, 1fr) max-content;
+  }
+
+  .homelab-density-page .homelab-host-detail {
+    grid-column: 2 / 4;
+  }
+}
+
 .ops-restart-flag {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: var(--fs-status); color: var(--ops-warn);

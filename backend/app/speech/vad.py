@@ -53,7 +53,7 @@ class SileroVAD:
     def prepare(self, path: Path) -> PreparedAudio:
         from faster_whisper.audio import decode_audio
 
-        raw = decode_audio(str(path), sampling_rate=self.sample_rate).astype(np.float32)
+        raw = decode_audio(str(path) if isinstance(path, Path) else path, sampling_rate=self.sample_rate).astype(np.float32)
         if raw.size == 0:
             raise ValueError("Arquivo de áudio sem amostras")
         raw_rms = float(np.sqrt(np.mean(np.square(raw))))

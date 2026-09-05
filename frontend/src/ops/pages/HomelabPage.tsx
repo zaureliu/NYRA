@@ -13,7 +13,7 @@ export function HomelabPage() {
   const proxmox = data?.integrations?.proxmox
 
   return (
-    <div>
+    <div className="homelab-density-page">
       <header className="ops-page-header">
         <div>
           <h1 className="ops-page-title">Homelab</h1>

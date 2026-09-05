@@ -296,6 +296,7 @@ class ComputerAutonomyService:
                                 verified=effect.verified, source=effect.source,
                                 turn_id=turn_id)
             await self._publish("COMPUTER_STATE_UPDATED", action=intent.action,
+                                target=intent.target[:80],
                                 verified=result.verified, turn_id=turn_id)
             if result.verified is not True:
                 if not plan_result.get("success", result.verified):
@@ -372,6 +373,7 @@ class ComputerAutonomyService:
                 action=intent.action,
                 status="UNKNOWN" if effect is None or effect.verified is None else "FAILED")
         await self._publish("COMPUTER_STATE_UPDATED", action=intent.action,
+                            target=intent.target[:80],
                             verified=result.verified, turn_id=turn_id)
         self._finish(result, intent, started, conversation_id, turn_id, phase)
         return result

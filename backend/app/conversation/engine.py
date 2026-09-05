@@ -13,6 +13,7 @@ from app.core.runtime_settings import save_runtime_settings
 from app.core.turn import PipelineFailure, TurnContext, TurnError, new_turn_id
 from app.events import Event, EventBus, EventType
 from app.listening.models import ListeningMode
+from app.natural_conversation.session import ConversationSession
 from app.speech.tts_identity import NYRA_IDENTITY_ID, NYRA_VOICE_ID
 
 
@@ -50,6 +51,11 @@ class ConversationEngine:
         self._tts_switcher: TTSSwitcher | None = None
         self._lock = asyncio.Lock()
         self._last_error: str | None = None
+        self.session = ConversationSession()
+        self._voice_tasks: set[asyncio.Task] = set()
+        if self.orchestrator is not None:
+            self.orchestrator.voice_session = self.session
+        self.last_speech_end: float | None = None
 
     async def start(self) -> None:
         self.orchestrator.emotion_planner.configure(
@@ -60,13 +66,21 @@ class ConversationEngine:
 
     async def stop(self) -> None:
         await self.event_bus.unsubscribe(self._observe_runtime_event)
+        for task in list(self._voice_tasks):
+            task.cancel()
+        if self._voice_tasks:
+            await asyncio.gather(*self._voice_tasks, return_exceptions=True)
+        self._voice_tasks.clear()
+        self.session.close()
 
     def bind_tts_switcher(self, switcher: TTSSwitcher) -> None:
         self._tts_switcher = switcher
 
     async def speech_started(self, source: str = "microphone") -> bool:
         interrupted = False
-        if self.state == ConversationState.SPEAKING and self.settings.voice_barge_in:
+        self.session.user_speaking = True
+        self.session.last_activity_at = time.time()
+        if (self.state == ConversationState.SPEAKING or self.listening.speaking or self.session.playing_response) and self.settings.voice_barge_in:
             interrupted = await self.orchestrator.cancel_speech("vad_barge_in")
         await self.event_bus.publish(
             EventType.USER_SPEECH_STARTED,
@@ -99,9 +113,24 @@ class ConversationEngine:
             await self.transition(ConversationState.LISTENING, response_id=response_id, reason="empty_transcription")
         return response_id, result
 
-    async def direct_audio_turn(self, path, *, speech_end: float | None = None):
+    async def _completed_transcript(self, transcription, speech_end):
+        if not transcription.is_final:
+            raise ValueError("Interim transcripts cannot become conversation turns")
+        response_id = new_turn_id()
+        self.telemetry.start(response_id, speech_end=speech_end or time.perf_counter())
+        self.telemetry.mark(response_id, "t_stt_final")
+        await self.event_bus.publish(EventType.STT_COMPLETED, response_id=response_id,
+                                     turn_id=response_id, empty=not bool(transcription.text.strip()))
+        return response_id, transcription
+
+    async def direct_audio_turn(self, path, *, speech_end: float | None = None, transcription=None):
+        if getattr(self.settings, "natural_conversation_enabled", False):
+            if transcription is None:
+                _, transcription = await self.transcribe(path, speech_end=speech_end)
+            return await self._natural_turn(transcription, speech_end=speech_end)
         async with self._lock:
-            response_id, transcription = await self.transcribe(path, speech_end=speech_end)
+            response_id, transcription = (await self._completed_transcript(transcription, speech_end)
+                                          if transcription is not None else await self.transcribe(path, speech_end=speech_end))
             if not transcription.text.strip():
                 return {"accepted": False, "reason": "empty_transcription", "transcription": transcription.model_dump(mode="json")}
             turn = TurnContext(
@@ -111,6 +140,8 @@ class ConversationEngine:
             )
             if turn.turn_id != response_id and response_id.startswith("turn_"):
                 turn.turn_id = response_id
+            await self.event_bus.publish(EventType.USER_SPEECH_FINAL, response_id=response_id,
+                                         turn_id=turn.turn_id, text=transcription.text)
             chat = await self.orchestrator.converse(
                 transcription.text,
                 synthesize=True,
@@ -126,7 +157,18 @@ class ConversationEngine:
                 "chat": chat.model_dump(mode="json"),
             }
 
-    async def listening_audio_turn(self, path, client_id: str, *, speech_end: float | None = None):
+    async def listening_audio_turn(self, path, client_id: str, *, speech_end: float | None = None, transcription=None):
+        if getattr(self.settings, "natural_conversation_enabled", False):
+            allowed, reason = self.listening.can_process(client_id)
+            if not allowed:
+                return {"accepted": False, "reason": reason}
+            if transcription is None:
+                _, transcription = await self.transcribe(path, speech_end=speech_end)
+            decision = self.listening.decide(transcription.text)
+            if not decision.accepted:
+                self.session.user_speaking = False
+                return {"accepted": False, "reason": decision.reason, "decision": decision.model_dump(mode="json")}
+            return await self._natural_turn(transcription, text=decision.text, speech_end=speech_end)
         async with self._lock:
             allowed, reason = self.listening.can_process(client_id)
             if not allowed:
@@ -135,7 +177,8 @@ class ConversationEngine:
             stage = "STT"
             response_id: str | None = None
             try:
-                response_id, transcription = await self.transcribe(path, speech_end=speech_end)
+                response_id, transcription = (await self._completed_transcript(transcription, speech_end)
+                                              if transcription is not None else await self.transcribe(path, speech_end=speech_end))
                 if not transcription.text.strip():
                     return {
                         "accepted": False,
@@ -177,6 +220,8 @@ class ConversationEngine:
                 if turn.turn_id != response_id and response_id.startswith("turn_"):
                     turn.turn_id = response_id
                 stage = "LLM"
+                await self.event_bus.publish(EventType.USER_SPEECH_FINAL, response_id=response_id,
+                                             turn_id=turn.turn_id, text=decision.text)
                 chat = await self.orchestrator.converse(
                     decision.text,
                     synthesize=True,
@@ -217,7 +262,7 @@ class ConversationEngine:
                     failure_stage = stage
                     exception_type = type(exc).__name__
                     message = str(exc)
-                absolute_path = str(Path(path).resolve())
+                absolute_path = str(Path(path).resolve()) if path is not None else "in-memory-stt-stream"
                 logger.exception(
                     "always_listening_stage_failed stage=%s exception_type=%s message=%s path=%s",
                     failure_stage,
@@ -257,7 +302,7 @@ class ConversationEngine:
         return {
             "microphone": self.settings.microphone,
             "speaker": self.settings.speaker,
-            "voice": self.settings.tts_voice,
+            "voice": self.orchestrator.tts.active_voice,
             "speech_speed": self.settings.tts_speaking_rate,
             "volume": self.settings.audio_volume,
             "conversation_mode": self.settings.listening_mode,
@@ -266,6 +311,51 @@ class ConversationEngine:
             "emotion_mode": self.settings.voice_emotion_mode,
             "expressiveness": self.settings.voice_expressiveness,
         }
+
+    async def _natural_turn(self, transcription, *, text=None, speech_end=None):
+        if not getattr(transcription, "is_final", True):
+            raise ValueError("Interim transcripts cannot become conversation turns")
+        text = (text if text is not None else transcription.text).strip()
+        if not text:
+            self.session.user_speaking = False
+            return {"accepted": False, "reason": "empty_transcription"}
+        if self.session.closed or len(self._voice_tasks) >= 4:
+            return {"accepted": False, "reason": "session_backpressure"}
+        turn = TurnContext(text, conversation_id=self.session.conversation_id, approval_capable=False)
+        value = self.session.begin(turn, self.last_speech_end)
+        self.last_speech_end = None
+        await self.event_bus.publish(EventType.USER_SPEECH_FINAL, response_id=turn.response_id,
+                                     turn_id=turn.turn_id, text=text, conversation_id=turn.conversation_id)
+
+        async def respond():
+            try:
+                await self.orchestrator.converse(text, synthesize=True, speech_end=speech_end,
+                                                 response_id=turn.response_id, turn=turn)
+            except asyncio.CancelledError:
+                self.session.interrupt(turn.response_id)
+                raise
+            except Exception as exc:
+                self._last_error = f"VOICE:{type(exc).__name__}"
+                logger.warning("voice_turn_failed turn_id=%s exception_type=%s", turn.turn_id, type(exc).__name__)
+                await self.transition(ConversationState.LISTENING, reason="voice_turn_failed", turn_id=turn.turn_id)
+            finally:
+                value.ended_at = time.time()
+
+        task = asyncio.create_task(respond(), name=f"nyra-voice-{turn.turn_id}")
+        self._voice_tasks.add(task)
+        task.add_done_callback(self._voice_tasks.discard)
+        # STT transport can now close. A slow model/tool/TTS never owns capture.
+        return {"accepted": True, "deferred": True, "reason": "continuous_session",
+                "turn_id": turn.turn_id, "conversation_id": turn.conversation_id,
+                "transcription": transcription.model_dump(mode="json")}
+
+    async def playback(self, payload) -> None:
+        spoken = self.session.playback(payload)
+        if spoken:
+            from app.memory.models import MemoryCategory, MemoryCreate
+            await self.orchestrator.memory.add(MemoryCreate(category=MemoryCategory.SHORT_TERM,
+                                                            role="assistant", content=spoken, importance=5))
+            await self.orchestrator.memory.retain()
 
     async def update_audio_settings(self, value: AudioSettingsUpdate) -> dict[str, Any]:
         updates = {
@@ -305,6 +395,30 @@ class ConversationEngine:
         await self.event_bus.publish(EventType.CONVERSATION_STATE_CHANGED, state=state.value, **safe)
 
     async def _observe_runtime_event(self, event: Event) -> None:
+        if event.type == EventType.TASK_STATE_CHANGED:
+            task_id = str(event.payload.get("task_id") or "")
+            if self.session.find(event.payload.get("source_turn")):
+                if event.payload.get("state") in {"COMPLETED", "FAILED", "CANCELLED"}:
+                    self.session.pending_tool_runs.discard(task_id)
+                elif len(self.session.pending_tool_runs) < 64:
+                    self.session.pending_tool_runs.add(task_id)
+        value = self.session.find(event.payload.get("response_id") or event.payload.get("turn_id"))
+        if value:
+            if event.type == EventType.LLM_TOKEN_RECEIVED:
+                value.marks.setdefault("first_token", time.perf_counter())
+                value.generated_text += str(event.payload.get("delta") or "")
+            elif event.type == EventType.TTS_CHUNK_STARTED:
+                value.marks.setdefault("tts_request", time.perf_counter())
+                if event.payload.get("speech_text"):
+                    value.chunks[int(event.payload.get("index", 0))] = str(event.payload["speech_text"])
+            elif event.type == EventType.TTS_CHUNK_FINISHED:
+                index = int(event.payload.get("index", 0))
+                value.chunks[index] = str(event.payload.get("speech_text") or event.payload.get("display_text") or "")
+                value.emotion = str(event.payload.get("state") or value.emotion)
+            elif event.type == EventType.NYRA_RESPONSE:
+                value.generated_text = str(event.payload.get("text") or value.generated_text)
+            elif event.type == EventType.SPEECH_CANCELLED:
+                self.session.interrupt(value.response_id)
         if event.type != EventType.REALTIME_STATUS_CHANGED:
             return
         raw = str(event.payload.get("status") or "")
@@ -316,6 +430,10 @@ class ConversationEngine:
     def status(self) -> dict[str, Any]:
         return {
             "enabled": self.settings.conversation_engine,
+            "natural_conversation": {**self.session.snapshot(), "enabled": getattr(self.settings, "natural_conversation_enabled", False),
+                                     "active_background_tasks": len(self._voice_tasks),
+                                     "speech_queue_state": getattr(getattr(self.orchestrator, "speech_queue", None), "pending", 0),
+                                     "echo_guard": "browser_aec_and_playback_reference"},
             "state": self.state.value,
             "last_error": self._last_error,
             "audio": self.audio_settings(),

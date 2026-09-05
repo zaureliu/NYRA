@@ -69,6 +69,7 @@ class ToolObservation(BaseModel):
     stderr: str = ""
     message: str = ""
     structured_evidence: str = ""
+    hardware_facts: list[dict] = Field(default_factory=list)
     effect_observed: bool | None = None
     timed_out: bool = False
     stdout_truncated: bool = False
@@ -181,6 +182,8 @@ class GroundingLedger:
             stderr=_clean_text(data.get("stderr"), _MAX_EVIDENCE_CHARS // 2),
             message=_clean_text(data.get("message"), 2000),
             structured_evidence=structured_evidence,
+            hardware_facts=[fact for fact in (data.get("hardware_facts") or [])[:32]
+                            if isinstance(fact, dict)] if isinstance(data.get("hardware_facts"), list) else [],
             effect_observed=effect_observed,
             timed_out=bool(data.get("timed_out")),
             stdout_truncated=bool(data.get("stdout_truncated")),

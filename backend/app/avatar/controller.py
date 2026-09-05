@@ -19,6 +19,11 @@ class AvatarState(BaseModel):
     mouth_open: float = Field(0, ge=0, le=1)
     neural_link: str = "idle"
     animation: str = "idle"
+    emotion_intensity: float = Field(0, ge=0, le=.65)
+    transition_ms: int = Field(0, ge=0, le=5000)
+    transition_ease: str = "ease-out"
+    minimum_hold_ms: int = Field(0, ge=0, le=60000)
+    presentation_cooldown_ms: int = Field(0, ge=0, le=60000)
 
 
 class AvatarController:
@@ -52,6 +57,29 @@ class AvatarController:
         if expression:
             values["expression"] = expression
         return await self.update(**values)
+
+    async def apply_emotion(self, emotion: str, intensity: float, transition: dict) -> AvatarState:
+        """Apply canonical emotion without changing the operational animation."""
+        expressions = {
+            "neutral": "neutral", "friendly": "slight_smile",
+            "focused": "focused", "confident": "slight_smile",
+            "positive": "slight_smile", "happy": "happy",
+            "relieved": "slight_smile", "concerned": "concerned",
+            "warning": "focused", "serious": "focused",
+            "empathetic": "concerned", "curious": "curious",
+            "surprised": "surprised", "amused": "amused",
+            "apologetic": "concerned", "uncertain": "concerned",
+            "calm": "neutral",
+        }
+        return await self.update(
+            expression=expressions.get(emotion, "neutral"),
+            expression_weight=min(.65, max(0.0, float(intensity))),
+            emotion_intensity=min(.65, max(0.0, float(intensity))),
+            transition_ms=int(transition.get("transition_ms") or 0),
+            transition_ease=str(transition.get("ease") or "ease-out"),
+            minimum_hold_ms=int(transition.get("minimum_hold_ms") or 0),
+            presentation_cooldown_ms=int(transition.get("cooldown_ms") or 0),
+        )
 
     def status(self) -> dict:
         return self.state.model_dump(mode="json")

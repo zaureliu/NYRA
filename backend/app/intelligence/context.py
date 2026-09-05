@@ -11,6 +11,7 @@ from app.intelligence.trust import envelope
 
 
 SnapshotProvider = Callable[[], dict[str, Any] | Awaitable[dict[str, Any]]]
+RelevantStateProvider = Callable[[str], str | Awaitable[str]]
 
 
 class ContextEngine:
@@ -18,12 +19,16 @@ class ContextEngine:
 
     def __init__(self, memory: MemoryV2Service, knowledge: KnowledgeEngine, *,
                  budget_characters: int = 12_000, capability_provider: SnapshotProvider | None = None,
-                 runtime_provider: SnapshotProvider | None = None) -> None:
+                 runtime_provider: SnapshotProvider | None = None,
+                 world_state_provider: RelevantStateProvider | None = None,
+                 open_loop_provider: RelevantStateProvider | None = None) -> None:
         self.memory = memory
         self.knowledge = knowledge
         self.budget_characters = max(2_000, budget_characters)
         self.capability_provider = capability_provider
         self.runtime_provider = runtime_provider
+        self.world_state_provider = world_state_provider
+        self.open_loop_provider = open_loop_provider
         self._decisions: deque[dict[str, Any]] = deque(maxlen=100)
 
     async def assemble(self, request: str, *, project: str | None = None,
@@ -55,6 +60,34 @@ class ContextEngine:
             candidates.append(ContextBlock(
                 source=f"rag:{hit.chunk_id}", content=content, trust=TrustBoundary.DOCUMENT_CONTENT,
                 priority=65, relevance=hit.score, characters=len(content), provenance=hit.provenance,
+            ))
+        world_state = await self._relevant_world_state(request)
+        if world_state:
+            content = envelope(
+                world_state,
+                TrustBoundary.TOOL_TRUSTED,
+                {"source": "world_state", "grounded": True},
+            )
+            candidates.append(ContextBlock(
+                source="world_state", content=content,
+                trust=TrustBoundary.TOOL_TRUSTED,
+                priority=88, relevance=.98, characters=len(content),
+                provenance={"source": "world_state", "grounded": True},
+            ))
+        open_loop_context = await self._relevant_open_loop(request)
+        if open_loop_context:
+            content = envelope(
+                open_loop_context,
+                TrustBoundary.TOOL_TRUSTED,
+                {"source": "open_loops_engine", "grounded": True,
+                 "authorization": False},
+            )
+            candidates.append(ContextBlock(
+                source="open_loops", content=content,
+                trust=TrustBoundary.TOOL_TRUSTED,
+                priority=89, relevance=.99, characters=len(content),
+                provenance={"source": "open_loops_engine", "grounded": True,
+                            "authorization": False},
             ))
         if include_runtime:
             capability, runtime = await asyncio.gather(
@@ -110,6 +143,28 @@ class ContextEngine:
             return value if isinstance(value, dict) else {}
         except Exception as error:
             return {"state": "DEGRADED", "error_code": type(error).__name__}
+
+    async def _relevant_world_state(self, request: str) -> str:
+        if self.world_state_provider is None:
+            return ""
+        try:
+            value = self.world_state_provider(request)
+            if asyncio.iscoroutine(value):
+                value = await value
+            return str(value or "")[:1800]
+        except Exception:
+            return ""
+
+    async def _relevant_open_loop(self, request: str) -> str:
+        if self.open_loop_provider is None:
+            return ""
+        try:
+            value = self.open_loop_provider(request)
+            if asyncio.iscoroutine(value):
+                value = await value
+            return str(value or "")[:2400]
+        except Exception:
+            return ""
 
     @staticmethod
     def _compact(value: dict[str, Any]) -> str:

@@ -103,6 +103,23 @@ class OllamaProvider(LLMProvider):
             raise RuntimeError("Ollama returned an empty response")
         return content
 
+    async def structured(self, messages: list[LLMMessage], schema: dict) -> str:
+        """Opt-in typed proposals; normal conversation is unchanged.
+
+        Grammar decoding is not required: callers enforce Pydantic schemas.
+        Some local runners disconnect on `format`; keep this transport usable
+        with the same completion engine and validate before any downstream use.
+        """
+        payload = {'model': self.model, 'messages': self._wire_messages(messages), 'stream': False,
+                   'think': False, 'keep_alive': ollama_keep_alive_payload(self.keep_alive),
+                   'options': {'temperature': 0, 'num_ctx': self.context_size}}
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            response = await client.post(f'{self.base_url}/api/chat', json=payload)
+            response.raise_for_status()
+            value = response.json().get('message', {}).get('content', '')
+        logger.info('llm_structured_response provider=ollama schema=%s', schema.get('title', 'proposal'))
+        return value
+
     async def complete(
         self,
         messages: list[LLMMessage],

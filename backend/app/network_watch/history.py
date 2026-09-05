@@ -26,9 +26,13 @@ class NetworkHistory:
                     duration_seconds REAL,
                     metrics TEXT NOT NULL DEFAULT '{}',
                     diagnosis TEXT,
-                    recovered_at TEXT
+                    recovered_at TEXT,
+                    simulated INTEGER NOT NULL DEFAULT 0
                 )"""
             )
+            columns = {row[1] for row in await (await db.execute("PRAGMA table_info(network_events)")).fetchall()}
+            if "simulated" not in columns:
+                await db.execute("ALTER TABLE network_events ADD COLUMN simulated INTEGER NOT NULL DEFAULT 0")
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_network_events_timestamp ON network_events(timestamp)"
             )
@@ -38,8 +42,8 @@ class NetworkHistory:
         async with aiosqlite.connect(self.database_path) as db:
             await db.execute(
                 """INSERT INTO network_events(
-                    timestamp,type,severity,message,duration_seconds,metrics,diagnosis,recovered_at
-                ) VALUES(?,?,?,?,?,?,?,?)""",
+                    timestamp,type,severity,message,duration_seconds,metrics,diagnosis,recovered_at,simulated
+                ) VALUES(?,?,?,?,?,?,?,?,?)""",
                 (
                     event.timestamp.isoformat(),
                     event.type,
@@ -49,6 +53,7 @@ class NetworkHistory:
                     json.dumps(event.metrics, ensure_ascii=False),
                     event.diagnosis,
                     event.recovered_at.isoformat() if event.recovered_at else None,
+                    int(event.simulated),
                 ),
             )
             await db.commit()
@@ -67,6 +72,7 @@ class NetworkHistory:
             {
                 **dict(row),
                 "metrics": json.loads(row["metrics"] or "{}"),
+                "simulated": bool(row["simulated"]),
             }
             for row in rows
         ]

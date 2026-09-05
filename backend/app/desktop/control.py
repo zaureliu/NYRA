@@ -1153,12 +1153,14 @@ class DesktopController:
             )
         try:
             if app:
-                executable = shutil.which(self.spec(app).executable) or self.spec(app).executable
+                executable = shutil.which(self.spec(app).executable) or expand_launch_target(self.spec(app).executable)
                 creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                gui_env = os.environ.copy()
+                gui_env.pop('ELECTRON_RUN_AS_NODE', None)
                 subprocess.Popen(  # noqa: S603 - executável vem do registry confiável; caminho validado acima
                     [executable, str(resolved)], stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    close_fds=True, creationflags=creationflags,
+                    close_fds=True, creationflags=creationflags, env=gui_env,
                 )
             else:
                 result = ctypes.windll.shell32.ShellExecuteW(None, verb, str(resolved), None, None, 1)

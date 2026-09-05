@@ -1,12 +1,13 @@
 from __future__ import annotations
 import asyncio
+import logging
 from pathlib import Path
 
 import pytest
 
 from app.avatar.controller import AvatarState
 from app.avatar.vtube_studio.auth import VTSAuth
-from app.avatar.vtube_studio.models import VTSConnectionState, VTubeStudioConfig
+from app.avatar.vtube_studio.models import MouseTrackingMode, VTSConnectionState, VTubeStudioConfig
 from app.avatar.vtube_studio.parameters import discover_ids, mouth_parameter_values, parameter_values, resolve_mapping
 from app.avatar.vtube_studio.protocol import request
 from app.avatar.vtube_studio.provider import VTubeStudioAvatarProvider
@@ -34,18 +35,27 @@ def test_vts_discovers_standard_eye_and_head_cursor_parameters():
 
 
 @pytest.mark.asyncio
-async def test_vts_presence_does_not_fight_existing_head_or_eye_tracking():
+async def test_vts_mouse_tracking_injects_only_discovered_parameters():
     provider = VTubeStudioAvatarProvider(VTubeStudioConfig(enabled=True, renderer="VTUBE_STUDIO"))
     provider.state = VTSConnectionState.MODEL_LOADED
     provider.mapping = {"eye_x": ["ParamEyeBallX"], "eye_y": ["ParamEyeBallY"], "head_x": ["ParamAngleX"], "head_y": ["ParamAngleY"]}
-    assert not await provider.apply_cursor(AvatarState(expression="focused"), 1, -.5)
-    assert provider.last_cursor == {"input_x": 1.0, "input_y": -.5, "applied": False}
+    calls=[]
+    class FakeClient:
+        async def call(self,kind,data=None):
+            calls.append((kind,data)); return {"data":{}}
+    provider.client=FakeClient()
+    assert await provider.apply_cursor(AvatarState(expression="focused"), 1, -.5)
+    assert calls[0][0]=="InjectParameterDataRequest"
+    assert {item["id"] for item in calls[0][1]["parameterValues"]}=={"ParamEyeBallX","ParamEyeBallY","ParamAngleX","ParamAngleY"}
+    assert provider.last_cursor["applied"] is True
 
 
-def test_presence_defaults_to_auto_with_bounded_watchdog_and_mouth_only_injection():
+def test_presence_defaults_to_vts_only_with_tracking_and_migrates_legacy_config():
     config = VTubeStudioConfig()
-    assert config.enabled and config.renderer == "AUTO" and config.spout_sender == "AUTO"
-    assert config.frame_watchdog_seconds == 12 and not config.cursor_attention
+    assert config.enabled and config.renderer == "VTUBE_STUDIO" and config.spout_sender == "AUTO"
+    assert config.frame_watchdog_seconds == 12 and config.mouse_tracking == MouseTrackingMode.HEAD_EYES
+    assert VTubeStudioConfig.model_validate({"renderer":"INTERNAL","cursor_attention":False}).model_dump(mode="json")["renderer"]=="VTUBE_STUDIO"
+    assert VTubeStudioConfig.model_validate({"renderer":"AUTO","cursor_attention":False}).mouse_tracking==MouseTrackingMode.OFF
     mapping = resolve_mapping({"ParamMouthOpenY", "ParamAngleX", "ParamEyeBallX"})
     values = mouth_parameter_values(AvatarState(mouth_open=.42, head_x=1, eye_x=1), mapping)
     assert values == [{"id": "ParamMouthOpenY", "value": .42, "weight": 1}]
@@ -57,7 +67,7 @@ def test_vts_state_hotkeys_are_optional_and_presence_health_is_recorded():
     assert provider._resolve_hotkey("thinking") == "h1"
     assert provider._resolve_hotkey("alert") == "h2"
     assert provider._resolve_hotkey("speaking") is None
-    status = provider.record_presence({"state": "VTS_ACTIVE", "alpha": "VALID", "fallback_active": False, "token": "never"})
+    status = provider.record_presence({"state": "VTS_ACTIVE", "alpha": "VALID", "vts_active": True, "token": "never"})
     assert status["state"] == "VTS_ACTIVE" and "token" not in status
 
 
@@ -104,6 +114,69 @@ async def test_vts_auth_required_and_malformed_update_falls_back():
     provider.state=VTSConnectionState.READY; provider.authenticated=True; provider.mapping={"mouth_open":["MouthOpen"]}
     await provider.apply(AvatarState(mouth_open=.5))
     assert provider.state==VTSConnectionState.RECONNECTING
+
+
+@pytest.mark.asyncio
+async def test_vts_stale_token_is_renewed_once_during_automatic_startup(monkeypatch):
+    provider=VTubeStudioAvatarProvider(VTubeStudioConfig(enabled=True,auto_connect=True))
+    requested=asyncio.Event(); calls=[]
+
+    class StaleAuth:
+        token="stale-token"
+        def load_token(self): return self.token
+        def clear_token(self): self.token=None
+        async def state(self): return {"active":True}
+        async def authenticate(self,token): return token=="fresh-token"
+        async def request_token(self):
+            calls.append("request")
+            self.token="fresh-token"
+            return self.token
+
+    class FakeClient:
+        socket=object()
+        async def connect(self): pass
+        async def close(self): self.socket=None
+        async def call(self,kind,data=None):
+            if kind=="CurrentModelRequest": return {"data":{"modelLoaded":True,"modelName":"NYRA Live2D","modelID":"model-1"}}
+            if kind=="InputParameterListRequest": return {"data":{"defaultParameters":[{"name":"MouthOpen"}]}}
+            if kind=="HotkeysInCurrentModelRequest": return {"data":{"availableHotkeys":[]}}
+            return {"data":{}}
+
+    provider.auth=StaleAuth(); provider.client=FakeClient()
+    original_connect=provider.connect
+    async def observed_connect(request_authorization=False):
+        result=await original_connect(request_authorization)
+        requested.set()
+        return result
+    monkeypatch.setattr(provider,"connect",observed_connect)
+    provider.state=VTSConnectionState.AUTH_REQUIRED
+    task=asyncio.create_task(provider._reconnect_loop())
+    await asyncio.wait_for(requested.wait(),1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError): await task
+
+    assert calls==["request"]
+    assert provider.authenticated is True
+    assert provider.state==VTSConnectionState.READY
+    assert provider._authorization_requested is False
+
+
+def test_vts_presence_logs_initial_active_unavailable_and_recovery(caplog):
+    provider=VTubeStudioAvatarProvider(VTubeStudioConfig())
+    caplog.set_level(logging.INFO,logger="nyra")
+
+    provider.record_presence({"state":"VTS_CONNECTING","alpha":"UNKNOWN","vts_active":False,"sender":"VTubeStudioSpout"})
+    provider.record_presence({"state":"VTS_ACTIVE","alpha":"VALID","vts_active":True,"sender":"VTubeStudioSpout"})
+    provider.record_presence({"state":"VTS_DEGRADED","alpha":"UNKNOWN","vts_active":False,"error":"SPOUT_SENDER_LOST"})
+    provider.record_presence({"state":"VTS_ACTIVE","alpha":"VALID","vts_active":True,"sender":"VTubeStudioSpout"})
+
+    messages=[record.message for record in caplog.records]
+    assert messages==[
+        "spout_sender_detected",
+        "vts_presence_active",
+        "vts_presence_unavailable",
+        "vts_presence_recovered",
+    ]
 
 
 def test_brain_selection_requires_confirmation_and_preserves_fallback():

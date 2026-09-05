@@ -618,8 +618,7 @@ def _collect_vts_presence(services) -> SubsystemHealth:
         entry.enabled = False; entry.state = SubsystemState.DISABLED; entry.healthy = True
         return entry
     status = provider.readiness(); config = status.get("config", {}); presence = status.get("vts_presence", {})
-    mode = config.get("renderer", "AUTO")
-    if not config.get("enabled", True) or mode in {"INTERNAL", "CURRENT"}:
+    if not config.get("enabled", True):
         entry.enabled = False; entry.state = SubsystemState.DISABLED; entry.healthy = True
     elif presence.get("state") == "VTS_ACTIVE" and presence.get("alpha") == "VALID":
         entry.state = SubsystemState.READY; entry.healthy = True
@@ -631,7 +630,7 @@ def _collect_vts_presence(services) -> SubsystemHealth:
         "api_state": status.get("state"),
         "api_port": config.get("port"),
         "model_name": status.get("model"),
-        "spout_state": presence.get("state", "INTERNAL_ACTIVE"),
+        "spout_state": presence.get("state", "VTS_UNAVAILABLE"),
         "sender": presence.get("sender"),
         "width": presence.get("width", 0),
         "height": presence.get("height", 0),
@@ -639,7 +638,7 @@ def _collect_vts_presence(services) -> SubsystemHealth:
         "alpha": presence.get("alpha", "UNKNOWN"),
         "last_frame_ms": presence.get("last_frame_age_ms"),
         "renderer": "DIRECTX11_DIRECTCOMPOSITION",
-        "fallback_active": presence.get("fallback_active", True),
+        "vts_active": presence.get("vts_active", False),
     }
     return entry
 

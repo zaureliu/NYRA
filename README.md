@@ -1,4 +1,4 @@
-# NYRA 0.4.0
+# NYRA 0.5.0
 
 NYRA é uma assistente de IA local-first para conversa, voz, operação segura do Windows e observação de homelab. A arquitetura separa identidade, modelos, memória, contexto, política, capacidades, ferramentas, execução, verificação e observabilidade. Texto livre produzido pelo LLM nunca é executado diretamente.
 
@@ -11,7 +11,11 @@ NYRA é uma assistente de IA local-first para conversa, voz, operação segura d
 - Universal Operator com resolução canônica de aplicativos, comandos compostos e verificação de efeito;
 - Browser Operator CDP/DOM-first e visão estrutural; modelo local de visão é opcional;
 - `system_shell`, Trusted SSH e Agent Loop com schemas, limites, redaction e approvals de uso único;
-- voz local, Desktop Presence Tauri, Avatar V2 e integração opcional com VTube Studio;
+- conversa contínua com turn detection, barge-in e Speech Planner;
+- STT local/Faster-Whisper ou Deepgram Nova-3 opcional; TTS Local/Kokoro, OpenAI, ElevenLabs, Gradium nativo e Custom declarativo;
+- Web Research com fontes reais, busca com fallback, HTTPS verificado e provenance;
+- Hardware Engineering com descoberta, continuidade de projetos, pesquisa, build e verificação de efeitos;
+- presença exclusivamente via VTube Studio/Spout2, com mouse tracking e sincronização emocional;
 - integrações opt-in para Home Assistant, OpenWrt, Proxmox e Utamo Sentinel;
 - SelfDev V2 isolado, com candidates em worktrees, gates de segurança e rollback.
 
@@ -23,7 +27,7 @@ Recursos opcionais nunca são reportados como `ONLINE` sem confirmação do back
 - Frontend React/Vite/TypeScript e desktop Tauri 2.
 - SQLite local com migrations, WAL, foreign keys, FTS5 e domínios lógicos separados.
 - Ollama atrás de `LLMProvider`; nenhum modelo é baixado silenciosamente.
-- STT local com faster-whisper e VAD; TTS principal configurável, com fallback local do Windows.
+- STT Provider abstraction e fila única de fala: cloud STT/TTS são opcionais, com Credential Broker e fallback local.
 - Approval Gate, Credential Broker, Grounding e Tool Registry permanecem autoridades independentes.
 - Conteúdo de documentos, web, memória e tools conserva trust boundary e não ganha autoridade de system prompt.
 
@@ -34,7 +38,8 @@ Consulte [arquitetura](docs/architecture.md), [Intelligence Platform V2](docs/in
 - Windows 10/11 para a experiência desktop completa;
 - Python 3.11, Node.js/npm e Rust para desenvolvimento/build;
 - Ollama local com pelo menos um modelo compatível instalado;
-- microfone, VTube Studio, serviços de homelab e modelo vision são opcionais.
+- microfone, VTube Studio, serviços de homelab e modelo vision são opcionais;
+- os modelos públicos de TTS usados no build são baixados explicitamente pelo setup e verificados por SHA-256; não acompanham o Git.
 
 ## Instalação
 
@@ -71,6 +76,8 @@ Preencha os arquivos `.local.*` somente no seu host. Eles são ignorados pelo Gi
 
 O SelfDev usa caminhos configuráveis (`NYRA_SELFDEV_WORKSPACE`, `NYRA_SELFDEV_CANONICAL_ROOT` e `NYRA_SELFDEV_PUBLIC_SNAPSHOT`). Os defaults são relativos ao clone, não dependem de um usuário ou drive específico e a publicação automática continua opt-in.
 
+Projetos gerados usam `<USER_HOME>/NYRA-Projects`, fora do source. `NYRA_PROJECTS_ROOT` permite escolher outro workspace. `NYRA_DATA_HOME` isola bancos, caches e logs de runtime. Nenhum corpus de knowledge ou projeto do operador acompanha o clone.
+
 ## Intelligence Platform V2
 
 `backend/app/intelligence/` integra:
@@ -96,7 +103,17 @@ O Browser Operator prioriza DOM/CDP e Accessibility. Conteúdo web é `WEB_CONTE
 
 Push-to-talk e Always Listening compartilham o pipeline de conversa, cancelamento e barge-in. Áudio de debug fica desligado por padrão. Samples, gravações, caches e modelos permanecem fora do Git.
 
-O Avatar V2 é o fallback visual oficial. A integração Live2D/VTube Studio depende de assets externos em camadas; sem esses assets, o runtime permanece funcional com o avatar incluído.
+A presença visual é VTube Studio-only. Sem VTS/modelo configurado, a interface continua disponível com estado indisponível explícito, sem avatar interno de fallback. Modelos, rigs, texturas e expressões de terceiros não são distribuídos.
+
+Deepgram Nova-3 oferece STT streaming, incluindo partial/final separados. Gradium possui adapter nativo PCM/WebSocket; Custom suporta contratos REST/WebSocket declarativos, não qualquer API arbitrária. Credenciais são configuradas pelo Credential Broker. Cloud exige opt-in e pode gerar custos. Qualidade, latência e capacidades acústicas dependem do provider e do ambiente; testes sem chave não comprovam serviço cloud real.
+
+Veja [Natural Conversation](docs/voice/natural-conversation-runtime.md), [STT](docs/voice/stt-providers.md), [TTS](docs/voice/tts-providers.md) e [VTube Studio](docs/vtube-studio-integration.md).
+
+## Pesquisa e engenharia
+
+[Web Research](docs/web-research.md) consulta fontes públicas com TLS validado, DuckDuckGo HTML e fallback Bing RSS; URLs explícitas podem ser consultadas diretamente. Falha da busca não significa falta de Internet. Conteúdo externo é dado não confiável, não instrução executável.
+
+[Hardware Engineering](docs/hardware-engineering.md) reutiliza descoberta USB/serial e ferramentas determinísticas. Projetos mantêm contexto, provenance e histórico; mudanças gerais de código e replanejamento permanecem limitados por evidência, revisão e ciclos bounded. Build, flash e efeito físico são estados distintos. Sem dispositivo comprovado, não há afirmação de LED aceso, sensor respondendo ou gravação bem-sucedida.
 
 ## Homelab e segurança
 
@@ -119,7 +136,7 @@ cd ..\desktop\src-tauri
 cargo fmt --check
 ```
 
-Os resultados reais e limitações desta versão estão em [docs/releases/0.4.0.md](docs/releases/0.4.0.md). Testes simulados ou mockados não são apresentados como E2E real.
+Os resultados reais e limitações desta versão estão em [docs/releases/0.5.0.md](docs/releases/0.5.0.md). Testes simulados ou mockados não são apresentados como E2E real.
 
 ## Estrutura
 

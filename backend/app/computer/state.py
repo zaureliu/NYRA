@@ -107,11 +107,13 @@ class ComputerStateService:
         base_dir: Path | None = None,
         clock: Callable[[], float] = time.time,
         idle_fn: Callable[[], float] | None = None,
+        world_state=None,
     ) -> None:
         self.perception = perception
         self.desktop = desktop
         self.clock = clock
         self._idle_fn = idle_fn or _last_input_idle_seconds
+        self.world_state = world_state
         self.slots: dict[str, StateSlot] = {}
         self._overlays: dict[tuple[str, str], dict[str, dict]] = {}
         self._conversation_targets: dict[str, dict[str, dict]] = {}
@@ -284,6 +286,28 @@ class ComputerStateService:
     def _foreground_reference(self, wanted_kind: str | None) -> ResolvedTarget | None:
         if wanted_kind in {"file", "folder", "browser"}:
             return None
+        # Shared World State is the first grounded fast-path. It already
+        # applied TTL/provenance rules, so stale focus never resolves a pronoun.
+        if self.world_state is not None:
+            try:
+                observed = self.world_state.get_current_focus()
+                focus = observed.get("value") if isinstance(observed, dict) else None
+                if isinstance(focus, dict):
+                    app = focus.get("app") if isinstance(focus.get("app"), dict) else {}
+                    title = str(focus.get("title") or "").strip()
+                    process = str(focus.get("process") or app.get("process") or "").casefold().removesuffix(".exe")
+                    display = str(app.get("display_name") or title or process).strip()
+                    if display:
+                        return ResolvedTarget(
+                            kind="window", display_name=display,
+                            process_names=(process,) if process else (),
+                            title_tokens=(title.casefold(),) if title else (display.casefold(),),
+                            hwnd=int(focus.get("hwnd") or 0) or None,
+                            source_slot="world_state.current_focus",
+                            freshness=Freshness.FRESH,
+                        )
+            except Exception:  # noqa: BLE001 - local fallback remains available
+                pass
         foreground, freshness = self.get("foreground_window")
         if not isinstance(foreground, dict) or freshness == Freshness.UNKNOWN:
             return None

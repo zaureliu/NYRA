@@ -244,7 +244,12 @@ class SelfDevelopmentService:
     def submit_explicit_issue(self, title: str, description: str, components: list[str]) -> dict[str, Any]:
         issue = self.detector.explicit_feature_gap(title, description, components)
         self.notifications.add(NotificationType.ISSUE_DETECTED, issue.title, issue.description, issue_id=issue.issue_id)
-        self._schedule_audit(EventType.SELFDEV_ISSUE_DETECTED, issue_id=issue.issue_id, issue_type=issue.type.value)
+        self._schedule_audit(
+            EventType.SELFDEV_ISSUE_DETECTED,
+            issue_id=issue.issue_id,
+            issue_type=issue.type.value,
+            title=issue.title,
+        )
         return issue.model_dump(mode="json")
 
     def issues(self) -> list[dict[str, Any]]:

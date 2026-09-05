@@ -7,6 +7,7 @@ DesktopController e leitura remota continua no RemoteShellService.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import mimetypes
@@ -33,7 +34,7 @@ ArtifactAction = Literal[
 
 _TEXT_SUFFIXES = {
     ".log", ".txt", ".md", ".json", ".yaml", ".yml", ".xml", ".csv",
-    ".py", ".ps1", ".ini", ".cfg", ".conf", ".toml", ".sh",
+    ".py", ".ps1", ".ini", ".cfg", ".conf", ".toml", ".sh", ".c", ".cpp", ".h", ".hpp",
 }
 _LOG_SUFFIXES = {".log", ".out", ".err"}
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
@@ -61,6 +62,7 @@ _POSIX_PATH = re.compile(
 _URL = re.compile(r"(?P<path>https?://[^\s<>()\[\]{}\"']+)", re.IGNORECASE)
 
 _REFERENCE_NOUNS = {
+    "código": "file", "codigo": "file",
     "log": "log", "logs": "log", "arquivo": "file", "arquivos": "file",
     "relatório": "report", "relatorio": "report", "pasta": "folder",
     "diretório": "folder", "diretorio": "folder", "imagem": "image",
@@ -69,14 +71,14 @@ _REFERENCE_NOUNS = {
 }
 _CONTEXT_MARKERS = re.compile(
     r"\b(?:esse|essa|este|esta|isso|ele|ela|dele|dela|a[ií]|anterior|[uú]ltim[oa]|"
-    r"que\s+voc[eê]\s+(?:gerou|criou|salvou|baixou|mostrou|mencionou)|"
+    r"que\s+voc[eê]\s+(?:gerou|criou|salvou|baixou|mostrou|mencionou|mexeu|alterou|modificou|editou)|"
     r"que\s+(?:foi\s+)?(?:gerado|criado|salvo|baixado|mostrado)|"
     r"acabou\s+de\s+(?:gerar|criar|salvar|baixar)|caminho\s+que\s+voc[eê]\s+mostrou)\b",
     re.IGNORECASE,
 )
 _TYPE_REFERENCE = re.compile(
     r"\b(?:logs?|arquivos?|relat[oó]rios?|pastas?|diret[oó]rios?|imagens?|"
-    r"[aá]udios?|documentos?|downloads?|urls?|links?)\b",
+    r"[aá]udios?|documentos?|downloads?|urls?|links?|c[oó]digos?)\b",
     re.IGNORECASE,
 )
 
@@ -483,11 +485,12 @@ class ArtifactContextService:
     """ReferenceResolver + ArtifactResolver + ArtifactActionRouter."""
 
     def __init__(self, *, memory: RecentArtifactMemory | None = None, desktop=None,
-                 remote_shell=None, state=None) -> None:
+                 remote_shell=None, state=None, event_bus=None) -> None:
         self.memory = memory or RecentArtifactMemory()
         self.desktop = desktop
         self.remote_shell = remote_shell
         self.state = state
+        self.event_bus = event_bus
         self.metrics: dict[str, int] = {
             "artifact_reference_resolved": 0,
             "app_resolver_called_for_artifact": 0,
@@ -499,7 +502,36 @@ class ArtifactContextService:
         self.memory.note_turn(conversation_id, turn_id)
 
     def register(self, path: str, **metadata: Any) -> RecentArtifact:
-        return self.memory.register(path, **metadata)
+        artifact = self.memory.register(path, **metadata)
+        self._publish_artifact(artifact)
+        return artifact
+
+    def _publish_artifact(self, artifact: RecentArtifact) -> None:
+        """Bridge verified metadata onto EventBus without blocking its owner."""
+        if self.event_bus is None:
+            return
+        verified = artifact.exists_state in {"created", "verified"}
+        if not verified or artifact.source_type == "assistant_mention":
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Sync setup/tests reconcile from RecentArtifactMemory on startup.
+            return
+        from app.events import EventType
+
+        task = loop.create_task(
+            self.event_bus.publish(
+                EventType.ARTIFACT_CONTEXT_UPDATED,
+                artifact=artifact.model_dump(mode="json"),
+                verified=True,
+                source="artifact_context",
+            ),
+            name="nyra-artifact-world-state",
+        )
+        task.add_done_callback(
+            lambda done: None if done.cancelled() else done.exception()
+        )
 
     async def try_handle(self, text: str, *, conversation_id: str = "default",
                          turn_id: str | None = None) -> ArtifactActionResult | None:
@@ -927,7 +959,7 @@ class ArtifactContextService:
                 state = "created"
             else:
                 state = "unknown"
-            self.memory.register(
+            self.register(
                 path, host_scope=scope,
                 host_id=host_id if scope == "remote" else None,
                 conversation_id=conversation, source_turn_id=turn_id,

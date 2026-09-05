@@ -93,6 +93,17 @@ class BrainManager(LLMProvider):
             self.last_runtime_metrics = provider.last_runtime_metrics
             return result
 
+    async def structured(self, messages: list[LLMMessage], schema: dict) -> str:
+        """Same local model routing/fallback for schema-validated engineering data."""
+        selected, fallback = await self._route_model(messages)
+        try:
+            return await self._provider(selected).structured(messages, schema)
+        except (httpx.HTTPError, TimeoutError) as error:
+            if not self._can_fallback(selected, fallback):
+                raise
+            self.last_fallback = {'from': selected, 'to': fallback, 'error': type(error).__name__}
+            return await self._provider(fallback).structured(messages, schema)
+
     async def stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
         emitted = False
         selected, fallback = await self._route_model(messages)

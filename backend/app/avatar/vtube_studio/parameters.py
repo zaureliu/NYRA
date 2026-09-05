@@ -2,7 +2,7 @@ from __future__ import annotations
 
 PARAMETER_CANDIDATES = {
  "head_x":["FaceAngleX","ParamAngleX"], "head_y":["FaceAngleY","ParamAngleY"], "head_tilt":["FaceAngleZ","ParamAngleZ"],
- "eye_x":["EyeLeftX","EyeRightX","FacePositionX","ParamEyeBallX"], "eye_y":["EyeLeftY","EyeRightY","FacePositionY","ParamEyeBallY"],
+ "eye_x":["EyeBallX","ParamEyeBallX","EyeLeftX","EyeRightX"], "eye_y":["EyeBallY","ParamEyeBallY","EyeLeftY","EyeRightY"],
  "mouth_open":["MouthOpen","VoiceVolumePlusMouthOpen","ParamMouthOpenY"], "mouth_form":["MouthSmile","ParamMouthForm"],
  "body_x":["BodyAngleX","ParamBodyAngleX"], "breathing":["ParamBreath"],
  "neural_link":["NyraNeuralLink","ParamNyraNeuralLink"], "attention":["NyraAttention","ParamNyraAttention"],
@@ -34,3 +34,35 @@ def mouth_parameter_values(state, mapping: dict[str, list[str]]) -> list[dict]:
         {"id": parameter_id, "value": state.mouth_open, "weight": 1}
         for parameter_id in mapping.get("mouth_open", [])
     ]
+
+
+def mouse_parameter_values(frame, mapping: dict[str, list[str]]) -> list[dict]:
+    """Map a normalized tracking frame only to parameters the model exposes."""
+    from app.avatar.vtube_studio.models import MouseTrackingMode
+
+    values: list[dict] = []
+    if frame.mode != MouseTrackingMode.OFF or frame.reset_all:
+        eye_x = 0.0 if frame.reset_all else frame.eye_x
+        eye_y = 0.0 if frame.reset_all else frame.eye_y
+        values.extend({"id": item, "value": eye_x, "weight": 1} for item in mapping.get("eye_x", []))
+        values.extend({"id": item, "value": eye_y, "weight": 1} for item in mapping.get("eye_y", []))
+    if frame.mode == MouseTrackingMode.HEAD_EYES or frame.reset_head or frame.reset_all:
+        head_x = 0.0 if frame.reset_head or frame.reset_all else frame.head_x * 22.0
+        head_y = 0.0 if frame.reset_head or frame.reset_all else frame.head_y * 14.0
+        values.extend({"id": item, "value": head_x, "weight": 1} for item in mapping.get("head_x", []))
+        values.extend({"id": item, "value": head_y, "weight": 1} for item in mapping.get("head_y", []))
+    return values
+
+
+def emotion_parameter_values(emotion: str, intensity: float, mapping: dict[str, list[str]]) -> list[dict]:
+    """Only inject explicitly NYRA-owned custom emotion parameters.
+
+    Generic face and mouth tracking parameters remain owned by VTube Studio and
+    lip sync. Unsupported emotions therefore produce no parameter request.
+    """
+    selected = "concern" if emotion in {"concerned", "empathetic", "apologetic", "uncertain"} else "amused" if emotion == "amused" else None
+    values: list[dict] = []
+    for key in ("concern", "amused"):
+        value = min(1.0, max(0.0, float(intensity) / .65)) if key == selected else 0.0
+        values.extend({"id": parameter_id, "value": value, "weight": 1} for parameter_id in mapping.get(key, []))
+    return values

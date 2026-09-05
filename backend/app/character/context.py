@@ -84,8 +84,9 @@ def is_simple_conversation(value: str) -> bool:
 
 
 class ContextBuilder:
-    def __init__(self, memory: MemoryRepository) -> None:
+    def __init__(self, memory: MemoryRepository, persona_runtime=None) -> None:
         self.memory = memory
+        self.persona_runtime = persona_runtime
         self.system_prompt = (IDENTITY_ROOT / "system_prompt.md").read_text(encoding="utf-8")
         self.casual_system_prompt = _CASUAL_SECTION.sub("\n", self.system_prompt)
         self.adult_mode = False
@@ -123,7 +124,17 @@ class ContextBuilder:
             relevant = []
 
         base_prompt = self.system_prompt if tool_context else self.casual_system_prompt
-        context_parts = [base_prompt, f"\nESTADO INTERNO ATUAL: {state.value}"]
+        context_parts = [base_prompt]
+        if self.persona_runtime is not None:
+            persona_context = await self.persona_runtime.build_context(
+                user_text,
+                fallback_memories=[item.content for item in relevant[:2]],
+            )
+            context_parts.append("\n" + persona_context)
+            if timings is not None:
+                timings["persona_context_characters"] = float(len(persona_context))
+        else:
+            context_parts.append(f"\nESTADO INTERNO ATUAL: {state.value}")
         selected_context_data = ""
         if not tool_context:
             context_parts.append(

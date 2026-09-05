@@ -37,13 +37,13 @@ constexpr uint32_t kSenderNameBytes = 256;
 constexpr uint32_t kSenderInfoBytes = 280;
 
 enum class RendererState : int32_t {
-    InternalActive = 0,
+    VtsOffline = 0,
     VtsDiscovering = 1,
     VtsConnecting = 2,
     VtsWaitingFrames = 3,
     VtsActive = 4,
     VtsDegraded = 5,
-    FallbackInternal = 6,
+    VtsUnavailable = 6,
 };
 
 enum class AlphaState : int32_t { Unknown = 0, Valid = 1, Opaque = 2, Empty = 3 };
@@ -62,9 +62,6 @@ struct SharedTextureInfo {
 static_assert(sizeof(SharedTextureInfo) == kSenderInfoBytes, "Spout SharedTextureInfo ABI changed");
 
 struct Config {
-    // Bootstrap is always safe: only the authenticated VTS status received
-    // through the Presence WebView is allowed to switch this to AUTO/VTS.
-    std::string mode = "INTERNAL";
     std::string sender = "AUTO";
     float scale = 1.0f;
     float offset_x = 0.0f;
@@ -72,7 +69,7 @@ struct Config {
     uint32_t watchdog_seconds = 12;
 
     bool operator==(const Config& other) const {
-        return mode == other.mode && sender == other.sender
+        return sender == other.sender
             && scale == other.scale && offset_x == other.offset_x
             && offset_y == other.offset_y && watchdog_seconds == other.watchdog_seconds;
     }
@@ -81,7 +78,6 @@ struct Config {
 
 struct Runtime {
     std::atomic<bool> running{false};
-    std::atomic<bool> internal_visible{true};
     HWND owner = nullptr;
     HWND overlay = nullptr;
     std::thread worker;
@@ -625,15 +621,8 @@ void clear_receiver_status() {
     g_runtime.status.receiver_adapter[0] = 0;
 }
 
-void publish_fallback_before_release(RendererState state, AlphaState alpha, const std::string& error) {
+void publish_unavailable(RendererState state, AlphaState alpha, const std::string& error) {
     publish_status(state, alpha, error);
-    // The WebView first restores the internal avatar and then acknowledges it.
-    // Keep the last valid GPU frame until that acknowledgement so failover can
-    // never expose an empty Presence between the two independent renderers.
-    const auto deadline = Clock::now() + std::chrono::milliseconds(1200);
-    while (g_runtime.running.load() && !g_runtime.internal_visible.load() && Clock::now() < deadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
 }
 
 void worker_loop() {
@@ -661,7 +650,7 @@ void worker_loop() {
     uint32_t overlay_width = 1, overlay_height = 1;
     bool was_active = false;
 
-    publish_status(RendererState::InternalActive, AlphaState::Unknown);
+    publish_status(RendererState::VtsDiscovering, AlphaState::Unknown);
     while (g_runtime.running.load()) {
         MSG message{};
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
@@ -676,27 +665,14 @@ void worker_loop() {
         }
         if (config != active_config) {
             active_config = config;
-            if (was_active && !g_runtime.internal_visible.load()) {
-                publish_fallback_before_release(
-                    config.mode == "INTERNAL" ? RendererState::InternalActive : RendererState::VtsDiscovering,
-                    alpha,
-                    {});
-            }
+            if (was_active) publish_unavailable(RendererState::VtsDiscovering, alpha, {});
             receiver.reset();
             selected.clear();
             alpha = AlphaState::Unknown;
             valid_frames = 0;
             clear_receiver_status();
             ShowWindow(g_runtime.overlay, SW_HIDE);
-            publish_status(
-                config.mode == "INTERNAL" ? RendererState::InternalActive : RendererState::VtsDiscovering,
-                AlphaState::Unknown);
-        }
-
-        if (config.mode == "INTERNAL") {
-            sync_overlay(g_runtime.owner, g_runtime.overlay, false, overlay_width, overlay_height);
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            continue;
+            publish_status(RendererState::VtsDiscovering, AlphaState::Unknown);
         }
 
         const auto now = Clock::now();
@@ -706,7 +682,7 @@ void worker_loop() {
             selected = select_sender(senders, config);
             if (selected.empty()) {
                 publish_status(
-                    was_active ? RendererState::VtsDegraded : RendererState::FallbackInternal,
+                    was_active ? RendererState::VtsDegraded : RendererState::VtsUnavailable,
                     AlphaState::Unknown,
                     "SPOUT_SENDER_NOT_FOUND");
                 sync_overlay(g_runtime.owner, g_runtime.overlay, false, overlay_width, overlay_height);
@@ -742,7 +718,7 @@ void worker_loop() {
             last_metadata = now;
             SharedTextureInfo current{};
             if (!read_shared_map(selected, &current, sizeof(current)) || !receiver.metadata_matches(current)) {
-                publish_fallback_before_release(RendererState::VtsDegraded, alpha, "SPOUT_SENDER_LOST");
+                publish_unavailable(RendererState::VtsDegraded, alpha, "SPOUT_SENDER_LOST");
                 receiver.reset();
                 selected.clear();
                 alpha = AlphaState::Unknown;
@@ -761,7 +737,7 @@ void worker_loop() {
                 g_runtime.status.last_frame_age_ms = static_cast<uint64_t>(std::max<int64_t>(0, age));
             }
             if (age > static_cast<int64_t>(config.watchdog_seconds) * 1000) {
-                publish_fallback_before_release(RendererState::VtsDegraded, alpha, "SPOUT_FRAME_TIMEOUT");
+                publish_unavailable(RendererState::VtsDegraded, alpha, "SPOUT_FRAME_TIMEOUT");
                 receiver.reset();
                 selected.clear();
                 alpha = AlphaState::Unknown;
@@ -774,7 +750,7 @@ void worker_loop() {
 
         std::string error;
         if (!receiver.copy_frame(error)) {
-            publish_fallback_before_release(RendererState::VtsDegraded, alpha, error);
+            publish_unavailable(RendererState::VtsDegraded, alpha, error);
             ShowWindow(g_runtime.overlay, SW_HIDE);
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
@@ -798,7 +774,7 @@ void worker_loop() {
                 g_runtime.status.alpha = static_cast<int32_t>(alpha);
             }
             if (previous_alpha == AlphaState::Valid && alpha != AlphaState::Valid) {
-                publish_fallback_before_release(
+                publish_unavailable(
                     RendererState::VtsDegraded,
                     alpha,
                     alpha == AlphaState::Opaque ? "SPOUT_ALPHA_OPAQUE" : "SPOUT_FRAME_EMPTY");
@@ -807,10 +783,10 @@ void worker_loop() {
         }
 
         sync_overlay(g_runtime.owner, g_runtime.overlay,
-                     alpha == AlphaState::Valid && valid_frames >= 3 && !g_runtime.internal_visible.load(),
+                     alpha == AlphaState::Valid && valid_frames >= 3,
                      overlay_width, overlay_height);
         if (!receiver.render(g_runtime.overlay, overlay_width, overlay_height, config, error)) {
-            publish_fallback_before_release(RendererState::VtsDegraded, alpha, error);
+            publish_unavailable(RendererState::VtsDegraded, alpha, error);
             receiver.reset();
             selected.clear();
             alpha = AlphaState::Unknown;
@@ -867,7 +843,7 @@ extern "C" bool nyra_spout_start(void* owner_hwnd) {
     {
         std::scoped_lock lock(g_runtime.status_mutex);
         g_runtime.status = {};
-        g_runtime.status.state = static_cast<int32_t>(RendererState::InternalActive);
+        g_runtime.status.state = static_cast<int32_t>(RendererState::VtsOffline);
     }
     try {
         g_runtime.worker = std::thread(worker_loop);
@@ -885,16 +861,12 @@ extern "C" void nyra_spout_stop() {
 }
 
 extern "C" void nyra_spout_configure(
-    const char* mode,
     const char* sender,
     float scale,
     float offset_x,
     float offset_y,
     uint32_t watchdog_seconds) {
     std::scoped_lock lock(g_runtime.config_mutex);
-    g_runtime.config.mode = mode && *mode ? mode : "AUTO";
-    if (g_runtime.config.mode == "CURRENT") g_runtime.config.mode = "INTERNAL";
-    if (g_runtime.config.mode == "LIVE2D") g_runtime.config.mode = "VTUBE_STUDIO";
     g_runtime.config.sender = sender && *sender ? sender : "AUTO";
     g_runtime.config.scale = std::clamp(scale, 0.1f, 4.0f);
     g_runtime.config.offset_x = std::clamp(offset_x, -1.0f, 1.0f);
@@ -906,8 +878,4 @@ extern "C" void nyra_spout_get_status(NyraSpoutStatus* status) {
     if (!status) return;
     std::scoped_lock lock(g_runtime.status_mutex);
     *status = g_runtime.status;
-}
-
-extern "C" void nyra_spout_set_internal_visible(bool visible) {
-    g_runtime.internal_visible.store(visible);
 }

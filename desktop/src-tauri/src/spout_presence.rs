@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpoutPresenceConfig {
-    pub mode: String,
     #[serde(default = "default_sender")]
     pub sender: String,
     #[serde(default = "default_scale")]
@@ -33,7 +32,7 @@ fn default_watchdog() -> u32 {
 pub struct SpoutPresenceStatus {
     pub state: &'static str,
     pub alpha: &'static str,
-    pub fallback_active: bool,
+    pub vts_active: bool,
     pub sender: Option<String>,
     pub width: u32,
     pub height: u32,
@@ -52,13 +51,13 @@ pub struct SpoutPresenceStatus {
 
 fn state_name(value: i32) -> &'static str {
     match value {
-        0 => "INTERNAL_ACTIVE",
+        0 => "VTS_OFFLINE",
         1 => "VTS_DISCOVERING",
         2 => "VTS_CONNECTING",
         3 => "VTS_WAITING_FRAMES",
         4 => "VTS_ACTIVE",
         5 => "VTS_DEGRADED",
-        6 => "FALLBACK_INTERNAL",
+        6 => "VTS_UNAVAILABLE",
         _ => "VTS_DEGRADED",
     }
 }
@@ -80,15 +79,6 @@ fn format_name(value: i32) -> Option<String> {
         91 => Some("DXGI_FORMAT_B8G8R8A8_UNORM_SRGB".to_string()),
         0 => None,
         other => Some(format!("DXGI_FORMAT_{other}")),
-    }
-}
-
-pub fn normalize_mode(value: &str) -> Result<&'static str, String> {
-    match value.trim().to_ascii_uppercase().as_str() {
-        "AUTO" => Ok("AUTO"),
-        "VTUBE_STUDIO" | "LIVE2D" => Ok("VTUBE_STUDIO"),
-        "INTERNAL" | "CURRENT" => Ok("INTERNAL"),
-        _ => Err("INVALID_RENDERER_MODE".to_string()),
     }
 }
 
@@ -145,7 +135,6 @@ mod native {
         fn nyra_spout_start(owner_hwnd: *mut c_void) -> bool;
         fn nyra_spout_stop();
         fn nyra_spout_configure(
-            mode: *const c_char,
             sender: *const c_char,
             scale: f32,
             offset_x: f32,
@@ -153,7 +142,6 @@ mod native {
             watchdog_seconds: u32,
         );
         fn nyra_spout_get_status(status: *mut NativeStatus);
-        fn nyra_spout_set_internal_visible(visible: bool);
     }
 
     pub struct SpoutPresence {
@@ -183,13 +171,10 @@ mod native {
             &self,
             config: SpoutPresenceConfig,
         ) -> Result<SpoutPresenceStatus, String> {
-            let mode = CString::new(normalize_mode(&config.mode)?)
-                .map_err(|_| "INVALID_RENDERER_MODE".to_string())?;
             let sender = CString::new(config.sender.trim())
                 .map_err(|_| "INVALID_SPOUT_SENDER".to_string())?;
             unsafe {
                 nyra_spout_configure(
-                    mode.as_ptr(),
                     sender.as_ptr(),
                     config.scale,
                     config.offset_x,
@@ -207,7 +192,7 @@ mod native {
             SpoutPresenceStatus {
                 state,
                 alpha: alpha_name(native.alpha),
-                fallback_active: state != "VTS_ACTIVE",
+                vts_active: state == "VTS_ACTIVE",
                 sender: c_string(&native.sender),
                 width: native.width,
                 height: native.height,
@@ -229,10 +214,6 @@ mod native {
             if self.started.swap(false, Ordering::SeqCst) {
                 unsafe { nyra_spout_stop() };
             }
-        }
-
-        pub fn set_internal_visible(&self, visible: bool) {
-            unsafe { nyra_spout_set_internal_visible(visible) };
         }
     }
 
@@ -275,9 +256,9 @@ mod native {
         }
         pub fn status(&self) -> SpoutPresenceStatus {
             SpoutPresenceStatus {
-                state: "INTERNAL_ACTIVE",
+                state: "VTS_UNAVAILABLE",
                 alpha: "UNKNOWN",
-                fallback_active: true,
+                vts_active: false,
                 sender: None,
                 width: 0,
                 height: 0,
@@ -295,7 +276,6 @@ mod native {
             }
         }
         pub fn stop(&self) {}
-        pub fn set_internal_visible(&self, _visible: bool) {}
     }
     pub use SpoutPresence as PlatformSpoutPresence;
 }
@@ -335,14 +315,7 @@ mod tests {
         }
     }
     #[test]
-    fn renderer_modes_preserve_legacy_values() {
-        assert_eq!(normalize_mode("AUTO").unwrap(), "AUTO");
-        assert_eq!(normalize_mode("LIVE2D").unwrap(), "VTUBE_STUDIO");
-        assert_eq!(normalize_mode("CURRENT").unwrap(), "INTERNAL");
-        assert!(normalize_mode("SCREENSHOT").is_err());
-    }
-    #[test]
-    fn only_active_state_can_hide_internal_avatar() {
+    fn only_active_state_has_a_visible_vts_character() {
         for state in 0..=6 {
             assert_eq!(state_name(state) == "VTS_ACTIVE", state == 4);
         }

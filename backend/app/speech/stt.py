@@ -3,15 +3,17 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import logging
+import io
 import time
+import wave
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
 from app.speech.vad import AudioMetrics, SileroVAD, VADConfig, VADResult
+from app.speech.recognition.models import RealtimeSTTProvider as StreamingSTTProvider
 
 
 logger = logging.getLogger("nyra.microphone")
@@ -37,13 +39,6 @@ class STTProvider(ABC):
 
     @abstractmethod
     async def transcribe(self, path: Path) -> Transcription: ...
-
-
-class StreamingSTTProvider(STTProvider):
-    """Future partial-transcription contract; partials are never sent to the LLM automatically."""
-
-    @abstractmethod
-    async def stream_transcribe(self, source) -> AsyncIterator[str]: ...
 
 
 class FasterWhisperSTT(STTProvider):
@@ -100,7 +95,21 @@ class FasterWhisperSTT(STTProvider):
     async def transcribe(self, path: Path) -> Transcription:
         if not path.exists() or path.stat().st_size == 0:
             raise ValueError("Arquivo de áudio vazio")
-        prepared = await asyncio.to_thread(self.vad.prepare, path)
+        return await self._transcribe_source(path)
+
+    async def transcribe_pcm(self, audio: bytes, sample_rate: int) -> Transcription:
+        """Reuse the decoder, Silero and model without writing microphone audio."""
+        source = io.BytesIO()
+        with wave.open(source, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(sample_rate)
+            wav.writeframes(audio)
+        source.seek(0)
+        return await self._transcribe_source(source)
+
+    async def _transcribe_source(self, source) -> Transcription:
+        prepared = await asyncio.to_thread(self.vad.prepare, source)
         if prepared.vad.enabled and not prepared.vad.speech_detected:
             logger.info(
                 "speech_rejected_by_vad",

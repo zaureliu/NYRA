@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.5.0 — 2026-09-05
+
+### Added
+
+- Deepgram Nova-3 streaming STT, canonical interim/final transcripts and local Faster-Whisper fallback.
+- Continuous Natural Conversation sessions, turn detection, barge-in, interrupted-turn tracking and Speech Planner.
+- Universal TTS providers: Local/Kokoro, OpenAI, ElevenLabs, native Gradium and declarative Custom REST/WebSocket profiles.
+- Grounded Hardware Engineering with project continuation, general code modification, bounded build repair and dynamic plan revision.
+- World State, Open Loops/Goal Memory, Proactive Presence and Persona/Emotional Runtime integration.
+- Network Observability V2 and VTube Studio-only presence with mouse tracking.
+
+### Changed
+
+- Natural Web Research preserves source provenance through the conversation/tool bridge and prioritizes specific official documentation.
+- Public hardware project workspaces are configurable with `NYRA_PROJECTS_ROOT`; default is `<USER_HOME>/NYRA-Projects`.
+- Public source snapshot excludes operator state and unfinished model-specific VTS changes.
+
+### Fixed
+
+- Decode bounded gzip/deflate responses before Web extraction; distinguish provider degradation from unavailable Internet.
+- Correct HTTPS query validation, freshness routing and retrieved version excerpts.
+- Preserve hardware grounding: user statements are not observed device state; build/upload is not proof of physical effect.
+- Improve Voice settings readability and coordinated shutdown/cancellation lifecycle.
+
+### Removed
+
+- Obsolete internal-avatar fallback, old rig scaffolding and local validation screenshots from the current public source tree.
+
+### Security
+
+- Cloud credentials remain in Credential Broker, never configuration exports or release assets.
+- TLS verification remains enabled. Custom TTS uses declarative contracts, not executable templates.
+- Public release gates exclude private knowledge, projects, audio, credential stores, runtime databases and third-party VTube models.
+
+### Known Limitations
+
+- Cloud STT/TTS requires opt-in and provider credentials; provider charges may apply.
+- Streaming/acoustic features depend on provider capabilities. Local fallback remains available.
+- Physical flash, serial and effect validation require compatible hardware/toolchains; simulations are not physical proof.
+- VTube expressions depend on the loaded model; model assets are not included.
+- DuckDuckGo may return HTTP 202; Bing RSS and direct HTTPS provide fallback paths.
+- See [release notes](docs/releases/0.5.0.md) for reproducibility and validation boundaries.
+
 ## 0.4.0 — 2026-08-30
 
 ### Added

@@ -33,6 +33,7 @@ export function useNyraSocket({ setStatus, setState, setConnected, url, onEvent 
       if (event.type === 'REALTIME_STATUS_CHANGED' && event.payload.status && event.payload.status !== 'IDLE') setStatus(event.payload.status as ActivityStatus)
       if (event.type === 'CONVERSATION_STATE_CHANGED' && event.payload.state) setStatus(event.payload.state as ActivityStatus)
       if (event.type === 'STATE_CHANGED') setState(event.payload.current as EmotionalState)
+      if (event.type === 'NYRA_EMOTION_CHANGED' && event.payload.emotion) setState(event.payload.emotion as EmotionalState)
       if (event.type === 'NYRA_RESPONSE' && event.payload.state) setState(event.payload.state as EmotionalState)
       eventRef.current?.(event)
     }

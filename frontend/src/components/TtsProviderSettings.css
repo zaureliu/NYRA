@@ -1,0 +1,17 @@
+/* Scoped to synthesis controls; no global typography or STT changes. */
+.voice-page .tts-provider-settings { font-size: 14px; line-height: 1.5; min-width: 0; }
+.voice-page .tts-provider-settings h3 { font-size: 20px; line-height: 1.35; }
+.voice-page .tts-provider-settings :is(label, button, .diagnostic-grid span, .diagnostic-grid b) { font-size: 14px; line-height: 1.45; min-width: 0; }
+.voice-page .tts-provider-settings :is(input:not([type="checkbox"]), select, textarea) { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; min-height: 38px; font-size: 15px; }
+.voice-page .tts-provider-settings textarea { resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
+.voice-page .tts-provider-settings .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.voice-page .tts-provider-settings .settings-actions { flex-wrap: wrap; }
+.voice-page .tts-provider-settings button { min-height: 38px; padding: 9px 12px; white-space: normal; }
+.voice-page .tts-provider-settings .diagnostic-grid b { overflow-wrap: anywhere; }
+.voice-page .tts-provider-settings .diagnostic-grid span { padding-block: 10px; }
+.voice-page .tts-provider-settings label:has(> input[type="checkbox"]) { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 36px; }
+.voice-page .tts-provider-settings input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 18px; }
+.voice-page .tts-provider-settings :is(p, .ops-hint, .lab-notice) { font-size: 13px; line-height: 1.5; }
+.voice-page .tts-provider-settings summary { font-size: 15px; padding-block: 8px; }
+.voice-page .tts-provider-settings fieldset { min-width: 0; border: 1px solid var(--border-subtle, #334); border-radius: 8px; margin-block: 12px; }
+@media (max-width: 720px) { .voice-page .tts-provider-settings .settings-grid { grid-template-columns: 1fr; } }

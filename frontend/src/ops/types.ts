@@ -42,7 +42,7 @@ export interface IntelligenceStatus {
   state: string
   started_at: string
   storage: { ok: boolean; state: string; schema_version: number; quick_check?: string }
-  counts: { memory: number; documents: number; chunks: number; tasks: number; events: number; traces: number }
+  counts: { memory: number; documents: number; chunks: number; tasks: number; events: number; traces: number; goals: number; open_loops: number }
   capabilities: {
     capabilities: IntelligenceCapability[]
     summary: Record<string, number>
@@ -58,6 +58,59 @@ export interface IntelligenceStatus {
   trace: { dropped_events: number }
   diagnostic_domains: string[]
   evaluation: { total?: number; passed?: number; failed?: number } | null
+  world_state?: {
+    health: { state: string; average_snapshot_latency_ms: number }
+    snapshot: {
+      current_app?: WorldStateValue | null
+      current_focus?: WorldStateValue | null
+      active_tasks?: WorldStateValue | null
+      active_monitors?: WorldStateValue | null
+      active_goal?: WorldStateValue | null
+      open_loop_count?: WorldStateValue | null
+      waiting_loop_count?: WorldStateValue | null
+      most_relevant_open_loop?: WorldStateValue | null
+      recent_events?: Array<{ event_type: string; summary: string; observed_at: string }>
+    }
+  } | null
+  open_loops?: {
+    state: string
+    counts: { open: number; waiting: number; blocked: number; recent_resolved: number }
+    sections: Record<'open' | 'waiting' | 'blocked' | 'recent_resolved', Array<{
+      id: string
+      title: string
+      state: string
+      priority: number
+      updated_at: string
+      waiting_for?: Record<string, unknown> | null
+      next_possible_action?: string | null
+    }>>
+    last_error?: string | null
+    dropped_events?: number
+  }
+  persona_runtime?: {
+    state: string
+    emotion: { primary: string; intensity: number; confidence: number; reason: string }
+    dialogue_policy: { mode: string }
+    performance: { average_overhead_ms: number; samples: number }
+  } | null
+  emotional_presence?: {
+    state: string
+    emotion: string
+    intensity: number
+    voice: { delivery: string; emotion_support: 'FULL' | 'PARTIAL' | 'NONE'; voice_identity: string }
+    avatar?: { state_expression: string; vts_kind: string; vts_target?: string | null; fallback?: string | null } | null
+    vts: { state: string; model?: string | null; hotkeys: unknown[]; expressions: unknown[] }
+    performance: { average_sync_ms: number; samples: number; sync_count: number }
+  } | null
+}
+
+export interface WorldStateValue {
+  value: unknown
+  source: string
+  observed_at: string
+  confidence: number
+  freshness: string
+  verified: boolean
 }
 
 export interface SettingEntry {

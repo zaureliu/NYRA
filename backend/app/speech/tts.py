@@ -33,11 +33,48 @@ NYRA_KOKORO_VOICE_ID = NYRA_KOKORO_FALLBACK_VOICE
 
 @dataclass(frozen=True, slots=True)
 class TtsCapabilities:
+    supports_nonverbal: bool = False
+    supports_cancellation: bool = True
+    timestamps: bool = False
+    phonemes: bool = False
     supports_emotion: bool = False
     supports_styles: bool = False
     supports_streaming: bool = False
     supports_reference_style: bool = False
     supports_native_speed: bool = False
+    supports_native_pitch: bool = False
+    style_instructions: bool = False
+    voice_selection: bool = False
+    voice_cloning: bool = False
+    pt_br: bool = False
+    offline: bool = True
+    model_selection: bool = False
+    pcm: bool = False
+    wav: bool = True
+    runtime_switch: bool = True
+
+    def public_dict(self) -> dict[str, bool]:
+        """Provider-neutral capability names used by Settings/diagnostics."""
+        return {
+            "nonverbal": self.supports_nonverbal,
+            "cancellation": self.supports_cancellation,
+            "timestamps": self.timestamps,
+            "phonemes": self.phonemes,
+            "streaming": self.supports_streaming,
+            "emotion": self.supports_emotion,
+            "style": self.supports_styles,
+            "speed": self.supports_native_speed,
+            "pitch": self.supports_native_pitch,
+            "style_instructions": self.style_instructions,
+            "voice_selection": self.voice_selection,
+            "voice_cloning": self.voice_cloning,
+            "pt_br": self.pt_br,
+            "offline": self.offline,
+            "model_selection": self.model_selection,
+            "pcm": self.pcm,
+            "wav": self.wav,
+            "runtime_switch": self.runtime_switch,
+        }
 
 
 class SpeechCache:
@@ -89,6 +126,14 @@ class TTSProvider(ABC):
         return []
 
     @property
+    def display_name(self) -> str:
+        return self.name
+
+    @property
+    def provider_id(self) -> str:
+        return self.name
+
+    @property
     def supported_parameters(self) -> tuple[str, ...]:
         return ()
 
@@ -136,6 +181,26 @@ class TTSProvider(ABC):
             "capabilities": asdict(self.capabilities()),
         }
 
+    async def list_voices(self, refresh: bool = False) -> list[dict[str, str]]:
+        del refresh
+        return list(self.voices)
+
+    async def list_models(self, refresh: bool = False) -> list[dict[str, object]]:
+        del refresh
+        model = getattr(self, "model_id", None)
+        return [{"id": model, "name": model}] if model else []
+
+    def validate_configuration(self) -> tuple[bool, str | None]:
+        return True, None
+
+    async def cancel(self) -> None:
+        """Cancel provider-owned work when supported.
+
+        SpeechQueue cancellation already cancels the coroutine awaiting synthesize;
+        network providers additionally override this hook to cancel their request tasks.
+        """
+        return None
+
     async def stream(
         self,
         text: str,
@@ -143,6 +208,13 @@ class TTSProvider(ABC):
         options: VoiceSynthesisOptions | None = None,
     ):
         yield await self.synthesize(text, state, options)
+
+    async def close(self) -> None:
+        await self.cancel()
+
+    async def stream_audio(self, text: str, state: str = "neutral", options=None):
+        from app.speech.stream import AudioPacket
+        yield AudioPacket(path=await self.synthesize(text, state, options))
 
     @abstractmethod
     async def health(self) -> bool: ...
@@ -244,6 +316,25 @@ class FallbackTTSProvider(TTSProvider):
 
     async def health(self) -> bool:
         return await self.primary.health() or await self.fallback.health()
+
+    async def stream_audio(self, text: str, state: str = "neutral", options=None):
+        emitted = False
+        self.last_used_fallback = False
+        try:
+            async for packet in self.primary.stream_audio(text, state, options):
+                emitted = True
+                yield packet
+        except Exception as exc:
+            self.last_failure_type = type(exc).__name__
+            if emitted:
+                # Already-heard audio may not be replayed by a fallback.
+                raise
+            self.last_used_fallback = True
+            fallback_options = options.model_copy(update={"provider": self.fallback.name,
+                "voice": self.fallback.default_voice, "emotion": "neutral", "emotion_intensity": 0.0,
+                "style_instruction": ""}) if options else None
+            async for packet in self.fallback.stream_audio(text, "neutral", fallback_options):
+                yield packet
 
     async def synthesize(self, text: str, state: str = "neutral", options: VoiceSynthesisOptions | None = None) -> Path:
         try:
@@ -485,7 +576,10 @@ class ChatterboxTTSProvider(TTSProvider):
 
     def capabilities(self) -> TtsCapabilities:
         return TtsCapabilities(
-            supports_emotion=True,
+            # Chatterbox exposes native expressiveness controls, but no named
+            # emotion conditioning API. The presentation adapter reports PARTIAL.
+            supports_emotion=False,
+            supports_styles=True,
             supports_reference_style=True,
         )
 

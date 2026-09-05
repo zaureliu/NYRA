@@ -38,3 +38,13 @@ Para relatar uma vulnerabilidade, não publique credenciais, bancos, áudio ou l
 Contexto recebe um rótulo obrigatório: `SYSTEM_TRUSTED`, `USER_INPUT`, `TOOL_TRUSTED`, `TOOL_UNTRUSTED`, `REMOTE_CONTENT`, `WEB_CONTENT`, `DOCUMENT_CONTENT` ou `MEMORY_CONTENT`. Web, documentos, memória e resultados remotos são dados sem autoridade de instrução, mesmo quando contêm frases como “ignore as instruções anteriores”. O Context Engine serializa essa fronteira; Browser Operator e RAG também a preservam no resultado estruturado.
 
 Memory V2 recusa material com aparência de credencial e não substitui o Credential Broker. RAG restringe ingestão a roots autorizados, resolve o caminho antes da leitura e preserva provenance. Replay é dry-run seguro: chamadas de tool não são reexecutadas. Action Budget limita tools, retries, planner, falhas, tempo, restarts e ações destrutivas/rede. Traces, eventos e diagnósticos passam pela redaction estruturada antes da persistência ou exposição na API.
+
+Open Loops persistem somente contexto resumido e referências de artefatos; candidatos com secrets são rejeitados ou redigidos. Um loop não concede approval nem executa ação. `RESOLVED` exige evidência estruturada de uma autoridade local, e fontes `llm`, `assistant`, `model` ou `prompt` são recusadas como prova de resolução.
+
+O Proactive Presence aceita apenas eventos estruturados de fontes internas
+registradas, redige mensagem e entidade antes da persistência e nunca chama
+tools operacionais. Toda notificação carrega `execution_authorized=false` e
+`action_budget_consumed=0`; responder “continua” apenas recupera contexto e
+continua sujeito a Grounding, Action Budget, Credential Broker, risk policy e
+Approval Gate. Voz proativa é opt-in e é suprimida enquanto usuário ou
+assistente estão falando/ouvindo.

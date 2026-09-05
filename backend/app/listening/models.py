@@ -13,6 +13,7 @@ class ListeningMode(StrEnum):
 
 class ListeningSettingsUpdate(BaseModel):
     enabled: bool = True
+    natural_conversation: bool = True
     mode: ListeningMode = ListeningMode.HANDS_FREE
     wake_word: str = Field("Nyra", min_length=2, max_length=32)
     hands_free_timeout_seconds: int = Field(120, ge=15, le=3600)
@@ -44,6 +45,15 @@ class ListeningLeaseRequest(BaseModel):
 class PlaybackStateRequest(BaseModel):
     playing: bool
     response_id: str | None = Field(default=None, max_length=100)
+    phase: str = Field(default="state", pattern=r"^(state|started|completed|interrupted|failed)$")
+    chunk_index: int | None = Field(default=None, ge=0, le=10000)
+    spoken_fraction: float | None = Field(default=None, ge=0, le=1)
+    barge_in_latency_ms: float | None = Field(default=None, ge=0, le=10000)
+    audio_buffer_delay_ms: float | None = Field(default=None, ge=0, le=180000)
+
+
+class SpeechEndRequest(ListeningLeaseRequest):
+    ended_at: float = Field(gt=0)
 
 
 class WakeWordMatch(BaseModel):

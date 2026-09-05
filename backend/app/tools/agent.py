@@ -84,6 +84,32 @@ class ToolAgentLoop:
             # Registries alternativos (testes/fakes) podem expor llm_tools() sem domínio.
             schemas = self.registry.llm_tools()
         ledger = GroundingLedger(turn_id=turn_id)
+        hardware_engine = getattr(self.registry, 'hardware_engine', None)
+        if hardware_engine is not None:
+            hardware_response = await hardware_engine.handle(user_text)
+            if hardware_response is not None:
+                return hardware_response
+        from app.usb.hardware import hardware_request, presence_reply
+        hardware_intent = hardware_request(user_text)
+        if hardware_intent is not None:
+            # The real discovery is mandatory; the model cannot skip it or
+            # replace it with a shell echo/network result. No physical action
+            # adapter exists in this baseline, so stop at the observed boundary.
+            if runtime and (runtime.cancelled() or runtime.expired()):
+                raise asyncio.CancelledError
+            result = await self._execute("hardware_discover", hardware_intent.model_dump())
+            observation = ledger.record(
+                tool_call_id=ledger.new_call_id(), tool_name=result.tool,
+                result_data=result.data, risk_level="READ_ONLY",
+            )
+            if runtime:
+                await runtime.record_step(
+                    result.tool, hardware_intent.model_dump(), {"risk_level": "READ_ONLY"},
+                    result.model_dump(mode="json"), observation=observation,
+                )
+                runtime.stop_reason = (str(result.data.get("error_code") or "HARDWARE_DISCOVERY_UNAVAILABLE")
+                                       if result.data.get("status") != "OBSERVED" else None)
+            return presence_reply(result.data)
         shell_calls = 0
         execution_results: list[ToolResult] = []
         read_only_retries = 0
@@ -536,6 +562,9 @@ class ToolAgentLoop:
         violations = self._grounding_violations(draft, results, ledger)
         if not violations:
             return draft
+        if any(item.kind == "UNVERIFIED_HARDWARE" for item in violations):
+            from app.usb.hardware import UNVERIFIED_RESPONSE
+            return UNVERIFIED_RESPONSE
         logger.info(
             "grounding_correction_triggered",
             extra={
@@ -584,6 +613,9 @@ class ToolAgentLoop:
         violations.extend(fabricated_value_claims(draft, ledger))
         violations.extend(unverified_effect_claims(draft, ledger))
         violations.extend(absence_claims_without_evidence(draft, ledger))
+        from app.usb.hardware import unsupported_hardware_claims
+        violations.extend(GroundingViolation(kind="UNVERIFIED_HARDWARE", detail=kind)
+                          for kind in unsupported_hardware_claims(draft, ledger.observations, ledger.turn_id))
         if cls._needs_grounding_correction(draft, results):
             violations.append(GroundingViolation(
                 kind="CONTRADICTION",

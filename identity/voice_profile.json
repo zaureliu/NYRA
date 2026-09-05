@@ -17,8 +17,8 @@
   "sentence_pause_ms": 240,
   "paragraph_pause_ms": 460,
   "selection": {
-    "reason": "Microsoft Edge Neural TTS en-US-AvaMultilingualNeural, aprovada pelo usuário após audição do candidate-c.wav.",
-    "selected_after_real_samples": true,
+    "reason": "Public optional voice profile: Microsoft Edge Neural TTS en-US-AvaMultilingualNeural. No private reference audio is included.",
+    "selected_after_real_samples": false,
     "pitch_shift": false,
     "speaker_embedding_changed": false,
     "reference_audio_required": false,

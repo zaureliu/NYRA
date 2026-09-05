@@ -16,6 +16,7 @@ from app.memory import MemoryRepository
 from app.orchestrator import ChatOrchestrator
 from app.speech.stt import STTProvider
 from app.speech.tts import TTSProvider
+from app.speech.provider_registry import TtsProviderRegistry
 from app.speech.queue import SpeechQueue
 from app.tools import RemoteShellService, SystemShellService, ToolRegistry
 from app.agent import AgentController
@@ -50,6 +51,7 @@ class Services:
     llm: LLMProvider
     stt: STTProvider
     tts: TTSProvider
+    tts_registry: TtsProviderRegistry
     tts_catalog: list[TTSProvider]
     tools: ToolRegistry
     shell: SystemShellService
@@ -93,6 +95,11 @@ class Services:
     usage_learning: Any = None
     skill_memory: Any = None
     usb: Any = None
+    world_state: Any = None
+    proactive_presence: Any = None
+    persona_runtime: Any = None
+    emotional_presence: Any = None
     # Plataforma integrada V2; inicializada após o container reunir as
     # autoridades legadas de policy, tools, capabilities e SelfDev.
     intelligence: Any = None
+    hardware_engine: Any = None

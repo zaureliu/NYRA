@@ -17,3 +17,5 @@ edge-tts>=7.2,<8
 python-socketio[client]>=5.11,<6
 websockets>=14,<18
 asyncssh>=2.14,<3
+pyserial>=3.5,<4
+pypdf>=6,<7

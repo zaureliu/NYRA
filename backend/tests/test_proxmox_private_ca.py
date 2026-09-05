@@ -20,7 +20,7 @@ def test_uses_private_ca_from_localappdata_when_present(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ssl, "create_default_context", create_context)
     client = ProxmoxReadOnlyClient(
-        "https://proxmox.utamo.test:8006", "user@pve!nyra", "secret"
+        "https://proxmox.example.local:8006", "user@pve!nyra", "secret"
     )
 
     assert client._httpx_verify() is expected_context
@@ -32,7 +32,7 @@ def test_uses_private_ca_from_localappdata_when_present(tmp_path, monkeypatch):
 def test_uses_system_trust_when_private_ca_is_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     client = ProxmoxReadOnlyClient(
-        "https://proxmox.utamo.test:8006", "user@pve!nyra", "secret"
+        "https://proxmox.example.local:8006", "user@pve!nyra", "secret"
     )
 
     assert client._httpx_verify() is True

@@ -39,3 +39,12 @@ Assim, 80 dos 91 elementos interativos antigos saíram da experiência principal
 sete ajustes finais foram consolidados no schema `AudioSettingsUpdate` e todos têm
 consumidor no runtime. Voice Hunter continua disponível somente como serviço de pesquisa
 e scripts técnicos; não participa da escolha normal de voz.
+
+## Evolução: provider layer opcional
+
+A conclusão acima permanece como registro da baseline V2 para o engine local.
+A camada posterior de providers adiciona um seletor lógico funcional
+Local/OpenAI/ElevenLabs, toggle online explícito, modelo/voz, Credential Broker e
+teste manual. Ela não substitui a escolha local histórica do Voice Lab: com o
+toggle desligado, o runtime continua integralmente local. Consulte
+[online-voice-providers.md](online-voice-providers.md).

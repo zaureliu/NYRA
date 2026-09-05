@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { apiSend } from '../../runtime/api'
 import { ModelSelectorCard } from '../components/ModelSelectorCard'
 import { SelfDevPanel } from '../components/SelfDevPanel'
@@ -48,6 +49,9 @@ export function SettingsPageV3() {
       )
       setPowerConfirm(null)
       setPowerApproval(null)
+      if (action === 'shutdown' && '__TAURI_INTERNALS__' in window) {
+        await invoke('quit_nyra')
+      }
     } catch (issue) {
       setActionError(issue instanceof Error ? issue.message : String(issue))
       setPowerConfirm(null)

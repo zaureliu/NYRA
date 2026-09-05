@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.speech.profile import VoiceSynthesisOptions
@@ -21,6 +23,23 @@ class ChatRequest(BaseModel):
         pattern=r"^turn_[0-9a-f]{8,64}$",
         description="Identificador imutável do turno; gerado pelo backend quando ausente.",
     )
+
+
+class TtsProviderSettingsUpdate(BaseModel):
+    provider: Literal["local", "openai", "elevenlabs", "gradium", "custom"] | None = None
+    fallback_provider: Literal["local"] | None = None
+    online_enabled: bool | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=128)
+    voice: str | None = Field(default=None, max_length=128)
+    universal: dict | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class TtsCredentialUpdate(BaseModel):
+    api_key: str = Field(min_length=1, max_length=4096)
+
+    model_config = {"extra": "forbid"}
 
 
 class RuntimeActionRequest(BaseModel):
@@ -61,9 +80,9 @@ class Live2DCursorRequest(BaseModel):
 
 
 class VTSPresenceReport(BaseModel):
-    state: str = Field(pattern=r"^(INTERNAL_ACTIVE|VTS_DISCOVERING|VTS_CONNECTING|VTS_WAITING_FRAMES|VTS_ACTIVE|VTS_DEGRADED|FALLBACK_INTERNAL)$")
+    state: str = Field(pattern=r"^(VTS_OFFLINE|VTS_DISCOVERING|VTS_CONNECTING|VTS_WAITING_FRAMES|VTS_ACTIVE|VTS_DEGRADED|VTS_UNAVAILABLE)$")
     alpha: str = Field(pattern=r"^(UNKNOWN|VALID|OPAQUE|EMPTY)$")
-    fallback_active: bool
+    vts_active: bool
     sender: str | None = Field(default=None, max_length=255)
     width: int = Field(default=0, ge=0, le=16384)
     height: int = Field(default=0, ge=0, le=16384)
@@ -78,6 +97,8 @@ class VTSPresenceReport(BaseModel):
     receiver_adapter: str | None = Field(default=None, max_length=255)
     memory_bytes: int = Field(default=0, ge=0)
     error: str | None = Field(default=None, max_length=128)
+
+    model_config = {"extra": "forbid"}
 
 
 class ImportanceUpdate(BaseModel):
@@ -142,4 +163,5 @@ __all__ = [
     "VTSSettingsUpdate", "Live2DLipSyncRequest", "Live2DCursorRequest", "VTSPresenceReport",
     "ShellApprovalDecision",
     "AudioSettingsUpdate", "InterruptionRequest",
+    "TtsProviderSettingsUpdate", "TtsCredentialUpdate",
 ]

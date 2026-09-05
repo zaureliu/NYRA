@@ -5,7 +5,6 @@ import { Live2DSettings } from './Live2DSettings'
 import { NetworkWatchSettings } from './NetworkWatchSettings'
 import { SentinelSettings } from './SentinelSettings'
 import { SkillsSettings } from './SkillsSettings'
-import { VisualSettings } from './VisualSettings'
 import type { MicrophoneAvailability, MicrophonePermission } from '../hooks/audioDevices'
 import type { AudioSettingsValue } from '../hooks/useAudioSettings'
 
@@ -50,8 +49,8 @@ export function SettingsPanel({
         <div className="settings-section-grid"><BrainLab/></div>
       </details>
       <details className="settings-accordion">
-        <summary><span><b>02</b><strong>Visual e avatar</strong><small>Renderer, Desktop Presence e bridge Live2D.</small></span><i>+</i></summary>
-        <div className="settings-section-grid"><VisualSettings/><Live2DSettings/></div>
+        <summary><span><b>02</b><strong>Desktop Presence</strong><small>VTube Studio, Spout2 e mouse tracking.</small></span><i>+</i></summary>
+        <div className="settings-section-grid"><Live2DSettings/></div>
       </details>
       <details className="settings-accordion">
         <summary><span><b>03</b><strong>Integrações e permissões</strong><small>Network Watch, Sentinel e skills allowlisted.</small></span><i>+</i></summary>

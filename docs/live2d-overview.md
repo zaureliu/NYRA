@@ -1,12 +1,13 @@
-# NYRA Live2D V5
+# VTube Studio Presence
 
-Fluxo implementado:
+Fluxo oficial:
 
 ```text
-Attention/Reaction -> AvatarController -> VTubeStudioAvatarProvider
- -> VTube Studio Public API -> parâmetros descobertos -> modelo Live2D
+Persona/Avatar state -> VTubeStudioAvatarProvider -> VTube Studio Public API
+VTube Studio current model -> Spout2 -> Desktop Presence
+Windows GetCursorPos -> normalized virtual desktop -> VTS parameters
 ```
 
-`AUTO` usa Live2D quando conectado/autenticado/modelo carregado e mantém o renderer atual como fallback. `LIVE2D` solicita o provider explicitamente; `CURRENT` desliga a injeção. O fechamento do VTS não afeta conversa, STT, TTS, Sentinel ou Network Watch.
+Desktop Presence usa exclusivamente o modelo atualmente carregado no VTube Studio. Uma troca de modelo é detectada pela API e recarrega parâmetros, hotkeys e expressions. VTS offline deixa a camada de personagem vazia; conversa, TTS e integrações continuam funcionando.
 
-Estado atual: bridge pronta, VTube Studio detectado, arte oficial `WAITING_FOR_LAYERED_ART`. Não se declara NYRA Live2D concluída antes do PSD, rig e export reais.
+Não existe renderer Live2D embutido nem cópia local do modelo.

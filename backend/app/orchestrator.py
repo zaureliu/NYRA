@@ -57,13 +57,14 @@ class ChatOrchestrator:
         self.event_bus = event_bus
         self.tts = tts
         self.speech_queue = speech_queue or SpeechQueue()
-        self.context = ContextBuilder(memory)
+        self.context = ContextBuilder(memory, getattr(state_machine, "persona_runtime", None))
         self.prosody = ProsodyProcessor()
         self.emotion_planner = EmotionPlanner()
         self.network_watch = None
         self.sentinel_watch = None
         self.tools = None
         self.shell = None
+        self.emotional_presence = None
 
     async def converse(self, text: str, synthesize: bool = True) -> ChatResult:
         pipeline_started = time.perf_counter()
@@ -101,7 +102,15 @@ class ChatOrchestrator:
             response,
             context={"technical": bool(runtime_context)},
         )
-        state = await self.state_machine.transition(state.__class__(emotion_plan.emotion.value))
+        state = await self.state_machine.transition(
+            state.__class__(emotion_plan.emotion.value),
+            intensity=emotion_plan.intensity,
+            confidence=emotion_plan.confidence,
+            reason=emotion_plan.reason,
+        )
+        persona_runtime = getattr(self.state_machine, "persona_runtime", None)
+        canonical_emotion = await persona_runtime.current_emotion() if persona_runtime is not None else None
+        canonical_intensity = canonical_emotion.intensity if canonical_emotion is not None else emotion_plan.intensity
         prepared = self.prosody.prepare(response, provider=self.tts.name)
         await self.memory.add(
             MemoryCreate(
@@ -118,7 +127,7 @@ class ChatOrchestrator:
             display_text=prepared.display_text,
             speech_text=prepared.speech_text,
             state=state.value,
-            emotion_intensity=emotion_plan.intensity,
+            emotion_intensity=canonical_intensity,
             emotion_engine_supported=self.tts.capabilities().supports_emotion,
         )
         conversation_logger.info(
@@ -131,11 +140,28 @@ class ChatOrchestrator:
         tts_ms = 0.0
         if synthesize and await self.tts.health():
             try:
-                await self.event_bus.publish(EventType.TTS_STARTED, state=state.value)
+                voice_build = self.emotional_presence.build_voice_style(
+                    context={"source": "chat"},
+                ) if self.emotional_presence is not None else None
+                voice_interface = voice_build.presentation if voice_build else (
+                    self.state_machine.persona_runtime.voice_interface(
+                        provider_supports_emotion=self.tts.capabilities().supports_emotion,
+                    )
+                    if getattr(self.state_machine, "persona_runtime", None) is not None else None
+                )
+                await self.event_bus.publish(
+                    EventType.TTS_STARTED, state=state.value,
+                    voice_emotion=voice_interface.model_dump(mode="json") if voice_interface else None,
+                    voice_style=voice_build.presentation.model_dump(mode="json") if voice_build else None,
+                )
                 tts_started = time.perf_counter()
-                _profile, defaults = load_voice_profile()
-                options = defaults.with_emotion(emotion_plan)
-                acoustic_state = state.value if self.tts.capabilities().supports_emotion else "neutral"
+                if voice_build:
+                    options = voice_build.options
+                    acoustic_state = voice_build.presentation.acoustic_emotion
+                else:
+                    _profile, defaults = load_voice_profile()
+                    options = defaults.with_emotion(emotion_plan)
+                    acoustic_state = state.value if self.tts.capabilities().supports_emotion else "neutral"
                 audio_path = await self.speech_queue.synthesize(
                     self.tts, prepared.speech_text, acoustic_state, SpeechPriority.USER,
                     options=options,
@@ -154,7 +180,7 @@ class ChatOrchestrator:
             display_text=prepared.display_text,
             speech_text=prepared.speech_text,
             state=state.value,
-            emotion_intensity=emotion_plan.intensity,
+            emotion_intensity=canonical_intensity,
             audio_url=audio_url,
             tts_provider=provider,
             timing={"llm_ms": llm_ms, "tts_ms": tts_ms, "total_ms": total_ms},

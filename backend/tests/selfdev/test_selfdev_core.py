@@ -60,6 +60,18 @@ def test_repository_mapper_is_incremental_and_answers_symbol_and_route_queries(t
         "export const GreeterClient = () => fetch('/api/hello')\n",
         encoding="utf-8",
     )
+    (repository / "target" / "deep").mkdir(parents=True)
+    (repository / "target" / "deep" / "must-not-index.py").write_text(
+        "raise RuntimeError('generated tree was traversed')\n", encoding="utf-8",
+    )
+    (repository / "node_modules" / "package").mkdir(parents=True)
+    (repository / "node_modules" / "package" / "index.js").write_text(
+        "export const generated = true\n", encoding="utf-8",
+    )
+    (repository / ".venv-chatterbox" / "Lib").mkdir(parents=True)
+    (repository / ".venv-chatterbox" / "Lib" / "ignored.py").write_text(
+        "raise RuntimeError('private venv was traversed')\n", encoding="utf-8",
+    )
     (repository / ".env").write_text("SECRET=never-index\n", encoding="utf-8")
     mapper = RepositoryMapper(repository, tmp_path / "state" / "index.json")
 
@@ -70,6 +82,12 @@ def test_repository_mapper_is_incremental_and_answers_symbol_and_route_queries(t
     assert first.files == 2 and first.changed == 2
     assert second.reused == 2 and second.changed == 0
     assert ".env" not in mapper.index["files"]
+    assert all(
+        "target/" not in path
+        and "node_modules/" not in path
+        and ".venv-chatterbox/" not in path
+        for path in mapper.index["files"]
+    )
     assert query.definitions("Greeter")[0]["path"] == "backend/api.py"
     assert query.route_consumers("/api/hello") == ["backend/api.py", "frontend/client.ts"]
 

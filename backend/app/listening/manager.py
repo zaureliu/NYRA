@@ -64,6 +64,10 @@ class AlwaysListeningManager:
         self._lease = None
 
     async def handle_event(self, event: Event) -> None:
+        if self.settings.natural_conversation_enabled and self.settings.voice_barge_in:
+            # Synthesis completion is NOT playback completion. Only the player
+            # acknowledgement owns this guard in a continuous voice session.
+            return
         if event.type == EventType.TTS_STARTED:
             self.speaking = True
             self._speaking_until = time.monotonic() + PLAYBACK_SAFETY_SECONDS
@@ -82,6 +86,7 @@ class AlwaysListeningManager:
     def config(self) -> ListeningSettingsUpdate:
         return ListeningSettingsUpdate(
             enabled=self.enabled,
+            natural_conversation=self.settings.natural_conversation_enabled,
             mode=self.settings.listening_mode,
             wake_word=self.settings.wake_word,
             hands_free_timeout_seconds=self.settings.hands_free_timeout_seconds,
@@ -104,6 +109,7 @@ class AlwaysListeningManager:
             self._hands_free_until = 0
             self._lease = None
         updates = {
+            "natural_conversation_enabled": value.natural_conversation,
             "always_listening_enabled": value.enabled,
             "listening_mode": value.mode.value,
             "wake_word": value.wake_word,
@@ -172,11 +178,11 @@ class AlwaysListeningManager:
             return False, "muted"
         if not self.owns_lease(client_id):
             return False, "lease_required"
-        if self.processing:
+        if self.processing and not self.settings.natural_conversation_enabled:
             return False, "busy"
         if self._is_speaking() and not self.settings.voice_barge_in:
             return False, "self_voice_guard"
-        if time.monotonic() < self._guard_until:
+        if time.monotonic() < self._guard_until and not self.settings.voice_barge_in:
             return False, "guard_interval"
         return True, "ready"
 

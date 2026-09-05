@@ -1,7 +1,0 @@
-{
-  "status": "WAITING_FOR_LAYERED_ART",
-  "classification": "FLATTENED_ONLY",
-  "canvas": {"recommended_width": 4096, "recommended_height": 4096, "framing": "bust"},
-  "groups": ["FACE", "BROWS", "EYES", "MOUTH", "HAIR", "BODY", "NEURAL_LINK"],
-  "reference": "frontend/public/avatar/nyra_v3/portrait/nyra-portrait-violet-rgba.png"
-}

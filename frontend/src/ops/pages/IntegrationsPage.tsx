@@ -59,7 +59,7 @@ export function IntegrationsPage({ onOpenSentinel }: { onOpenSentinel: () => voi
   }
 
   return (
-    <div>
+    <div className="integrations-density-page">
       <header className="ops-page-header">
         <div>
           <h1 className="ops-page-title">Integrações</h1>

@@ -1,5 +1,5 @@
 import { usePolling } from '../hooks'
-import { Card, Empty, ErrorAlert, StatusBadge, formatRelative } from '../ui'
+import { Card, Empty, ErrorAlert, KeyValue, StatusBadge, formatRelative } from '../ui'
 import { OperatorActivityPanel } from '../../components/OperatorActivityPanel'
 import type { HealthReport, IntelligenceStatus } from '../types'
 
@@ -47,6 +47,14 @@ export function OverviewPage({ activityFeed }: {
     return mergeStates(...values)
   }
   const selectedModel = intelligence.data?.model_router.last_route?.selected_model || 'Aguardando primeira rota'
+  const world = intelligence.data?.world_state
+  const worldApp = worldAppName(world?.snapshot.current_app?.value)
+  const worldFocus = worldFocusName(world?.snapshot.current_focus?.value)
+  const activeWorldTasks = worldListCount(world?.snapshot.active_tasks?.value)
+  const activeWorldMonitors = worldListCount(world?.snapshot.active_monitors?.value)
+  const loops = intelligence.data?.open_loops
+  const persona = intelligence.data?.persona_runtime
+  const emotionalPresence = intelligence.data?.emotional_presence
 
   return (
     <div>
@@ -83,6 +91,10 @@ export function OverviewPage({ activityFeed }: {
         <Card title="Memory V2" sub={intelligence.data ? `${intelligence.data.counts.memory} registros persistentes` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('memory_v2')} /></Card>
         <Card title="RAG local" sub={intelligence.data ? `${intelligence.data.counts.documents} documentos · ${intelligence.data.counts.chunks} chunks` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('rag_local')} /></Card>
         <Card title="Context Engine" sub={intelligence.data ? `Budget ${intelligence.data.context.budget_characters} caracteres` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('context_engine')} /></Card>
+        <Card
+          title="Persona Runtime"
+          sub={persona ? `${persona.emotion.primary} · ${(persona.emotion.intensity * 100).toFixed(0)}% · ${persona.dialogue_policy.mode}` : 'Emoção e policy indisponíveis'}
+        ><StatusBadge state={mergeStates(intelligenceState('persona_emotional_runtime'), intelligenceState('emotional_presence_sync'))} /></Card>
         <Card title="Task Engine" sub={intelligence.data ? `${intelligence.data.tasks.active_or_queued} ativas ou em fila` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('autonomous_tasks_v2')} /></Card>
         <Card title="Event Intelligence" sub={intelligence.data ? `${intelligence.data.counts.events} eventos correlacionáveis` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('event_intelligence')} /></Card>
         <Card title="Trace / Replay" sub={intelligence.data ? `${intelligence.data.counts.traces} entradas · ${intelligence.data.trace.dropped_events} descartadas` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('trace_replay')} /></Card>
@@ -92,6 +104,65 @@ export function OverviewPage({ activityFeed }: {
         <Card title="Diagnostics" sub={intelligence.data ? `${intelligence.data.diagnostic_domains.length} domínios` : 'Telemetria indisponível'}><StatusBadge state={intelligenceState('diagnostics_engine')} /></Card>
         <Card title="SelfDev" sub="Lifecycle isolado + rollback"><StatusBadge state={selfdev.data?.state ?? 'UNKNOWN'} /></Card>
       </div>
+
+      <h2 className="ops-section-title">World State</h2>
+      <Card
+        title="World State Engine"
+        sub="Estado local grounded, compartilhado e com TTL"
+        actions={<StatusBadge state={world?.health.state ?? 'UNKNOWN'} />}
+      >
+        <KeyValue rows={[
+          ['Current Focus', worldFocus],
+          ['Current App', worldApp],
+          ['Active Tasks', activeWorldTasks],
+          ['Active Monitors', activeWorldMonitors],
+          ['Recent Events', world?.snapshot.recent_events?.length ?? 0],
+          ['Freshness', world?.snapshot.current_focus?.freshness ?? world?.snapshot.current_app?.freshness ?? 'UNKNOWN'],
+          ['Current emotion', persona?.emotion.primary ?? 'UNKNOWN'],
+          ['Intensity', persona ? `${(persona.emotion.intensity * 100).toFixed(0)}%` : 'UNKNOWN'],
+          ['Dialogue policy', persona?.dialogue_policy.mode ?? 'UNKNOWN'],
+          ['Voice style', emotionalPresence ? `${emotionalPresence.voice.delivery} · ${emotionalPresence.voice.emotion_support}` : 'UNKNOWN'],
+          ['VTS expression', emotionalPresence?.avatar?.vts_target ?? emotionalPresence?.avatar?.fallback ?? 'neutral'],
+          ['Emotion sync', emotionalPresence?.state ?? 'UNKNOWN'],
+        ]} />
+      </Card>
+
+      <Card
+        title="Open Loops & Goals"
+        sub="Pendências persistentes; lembrar não autoriza executar"
+        actions={<StatusBadge state={mergeStates(loops?.state ?? 'UNKNOWN', intelligenceState('open_loops_engine'))} />}
+      >
+        <KeyValue rows={[
+          ['Open', loops?.counts.open ?? 0],
+          ['Waiting', loops?.counts.waiting ?? 0],
+          ['Blocked', loops?.counts.blocked ?? 0],
+          ['Recent resolved', loops?.counts.recent_resolved ?? 0],
+        ]} />
+        {loops && Object.values(loops.counts).some((count) => count > 0) ? (
+          <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+            {([
+              ['open', 'Open'], ['waiting', 'Waiting'], ['blocked', 'Blocked'],
+              ['recent_resolved', 'Recent resolved'],
+            ] as const).map(([key, label]) => (
+              <details key={key}>
+                <summary>{label} ({loops.counts[key]})</summary>
+                <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+                  {loops.sections[key].length === 0 ? (
+                    <li className="ops-hint">Nenhum item.</li>
+                  ) : loops.sections[key].map((item) => (
+                    <li key={item.id} style={{ marginBottom: 6 }}>
+                      <span>{item.title}</span>
+                      {item.next_possible_action ? (
+                        <div className="ops-hint">Próximo passo: {item.next_possible_action}</div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ))}
+          </div>
+        ) : <Empty text="Nenhum Open Loop registrado." />}
+      </Card>
 
       <div className="ops-grid-2" style={{ marginTop: 16 }}>
         <div>
@@ -163,4 +234,20 @@ function mapHA(status: HAStatusLite | null): string {
 
 function countAlerts(feed: Array<{ label: string }>): number {
   return feed.filter((item) => item.label.includes('ALERT') || item.label.includes('SENTINEL') || item.label.includes('NETWORK')).length
+}
+
+function worldAppName(value: unknown): string {
+  if (!value || typeof value !== 'object') return 'Não observado'
+  const app = value as Record<string, unknown>
+  return String(app.display_name || app.canonical_id || 'Não observado')
+}
+
+function worldFocusName(value: unknown): string {
+  if (!value || typeof value !== 'object') return 'Não observado'
+  const focus = value as Record<string, unknown>
+  return String(focus.title || worldAppName(focus.app) || 'Não observado')
+}
+
+function worldListCount(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0
 }

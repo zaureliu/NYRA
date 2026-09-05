@@ -4,24 +4,25 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart'
-import { AvatarRenderer } from '../avatar/AvatarRenderer'
-import { useVisualSettings } from '../avatar/visualSettings'
+import { usePresenceSettings } from './presenceSettings'
 import { useAudioLipSync } from '../hooks/useAudioLipSync'
 import { useNyraSocket, type NyraEvent } from '../hooks/useNyraSocket'
 import { usePushToTalk } from '../hooks/usePushToTalk'
+import type { STTResult } from '../runtime/stt'
 import { useAlwaysListening } from '../hooks/useAlwaysListening'
 import { useAudioSettings } from '../hooks/useAudioSettings'
-import { useStreamingAudioQueue } from '../hooks/useStreamingAudioQueue'
+import { useStreamingAudioQueue, type PlaybackAck } from '../hooks/useStreamingAudioQueue'
 import { microphoneStatusLabel } from '../hooks/audioDevices'
 import { useGlobalCursorFollow } from './useGlobalCursorFollow'
 import { TurnFilter, adoptInputTurn, extractTurnId } from '../runtime/turns'
 import { sendChat } from '../runtime/conversation'
-import { backendPresenceReport, canReplaceInternalAvatar, nativePresenceConfig, type NativePresenceStatus, type VtsBackendStatus } from './vtsPresence'
+import { backendPresenceReport, hasActiveVtsCharacter, nativePresenceConfig, type MouseTrackingMode, type NativePresenceStatus, type VtsBackendStatus } from './vtsPresence'
 import { computePresenceMenuLayout, PRESENCE_MENU_LIMITS, type PresenceMenuLayout } from './presenceMenu'
-import type { ActivityStatus, AvatarControl, EmotionalState } from '../types'
+import type { ActivityStatus, EmotionalState } from '../types'
+import { readProactivePresenceNotice } from '../runtime/proactivePresence'
 
 const API = 'http://127.0.0.1:8000'
-const BASE_SIZES = { bust: { width: 480, height: 560 }, full_body: { width: 420, height: 620 } } as const
+const BASE_SIZE = { width: 480, height: 560 } as const
 const applyClickThrough = (enabled: boolean) => invoke('set_click_through', { enabled }).catch(() => getCurrentWindow().setIgnoreCursorEvents(enabled))
 
 export function DesktopApp() {
@@ -36,9 +37,9 @@ export function DesktopApp() {
   const settingsRef = useRef<HTMLElement | null>(null)
   const [startup, setStartup] = useState(false)
   const [showOnline, setShowOnline] = useState(true)
-  const [visual, setVisual] = useVisualSettings()
-  const [avatarControl, setAvatarControl] = useState<Partial<AvatarControl>>({})
+  const [visual, setVisual] = usePresenceSettings()
   const [live2dExternal, setLive2dExternal] = useState(false)
+  const [mouseTracking, setMouseTracking] = useState<MouseTrackingMode>('HEAD_EYES')
   const [globalCursorAvailable, setGlobalCursorAvailable] = useState(true)
   const audio = useAudioSettings(API)
   const microphone = audio.settings.microphone
@@ -49,7 +50,7 @@ export function DesktopApp() {
     const now=performance.now(); if(value&&now-lipSyncSent.current<50)return; lipSyncSent.current=now
     void fetch(`${API}/api/live2d/lip-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value})}).catch(()=>undefined)
   },[])
-  const { mouth, play, stop: stopPlayback } = useAudioLipSync(audio.settings.speaker, sendLive2DMouth, audio.settings.volume)
+  const { play, stop: stopPlayback } = useAudioLipSync(audio.settings.speaker, sendLive2DMouth, audio.settings.volume)
   const always = useAlwaysListening({
     baseUrl: API,
     deviceId: microphone,
@@ -59,19 +60,16 @@ export function DesktopApp() {
     onDeviceSelected: chooseMicrophone,
   })
   useEffect(() => audio.reconcileDevices(always.devices), [always.devices, audio.reconcileDevices])
-  useGlobalCursorFollow(live2dExternal, updateGlobalCursorAvailability)
+  useGlobalCursorFollow(live2dExternal, mouseTracking, updateGlobalCursorAvailability)
 
-  useEffect(() => {
-    void invoke('vts_presence_set_internal_visible', { visible: !live2dExternal }).catch(() => undefined)
-  }, [live2dExternal])
-
-  const playbackGuard = useCallback(async (playing: boolean, responseId?: string) => {
-    await fetch(`${API}/api/listening/playback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playing, response_id: responseId }) }).catch(() => undefined)
+  const playbackGuard = useCallback(async (playing: boolean, responseId?: string, ack?: PlaybackAck) => {
+    await fetch(`${API}/api/listening/playback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playing, response_id: responseId, ...ack }) }).catch(() => undefined)
   }, [])
 
   const streaming = useStreamingAudioQueue(
     play, playbackGuard,
     useCallback((speaking) => setStatus(speaking ? 'SPEAKING' : 'IDLE'), []),
+    stopPlayback,
   )
   const turnFilter = useRef(new TurnFilter())
   const pendingTurnRequests = useRef(0)
@@ -84,19 +82,20 @@ export function DesktopApp() {
     // Turn isolation: bubble/áudio ignoram eventos tardios de turnos encerrados.
     if (event.type === 'NYRA_RESPONSE' && !turnFilter.current.accept(eventTurnId)) return
     if (event.type === 'TTS_CHUNK_FINISHED' && !turnFilter.current.accept(eventTurnId)) return
-    if (event.type === 'TTS_FINISHED' && event.payload.audio_url && !turnFilter.current.accept(eventTurnId)) return
+    if (event.type === 'TTS_PCM_CHUNK') {
+      if (!turnFilter.current.accept(eventTurnId)) return
+      streaming.enqueue({url: `pcm16:${Number(event.payload.sample_rate)}:${String(event.payload.pcm ?? '')}`,
+        responseId: String(event.payload.response_id), index: Number(event.payload.index) * 1000 + Number(event.payload.packet_index),
+        sentenceIndex: Number(event.payload.index), final: Boolean(event.payload.final)})
+    }
+    if (event.type === 'TTS_FINISHED' && event.payload.audio_url && event.payload.source !== 'proactive_presence' && !turnFilter.current.accept(eventTurnId)) return
     if (event.type === 'NYRA_RESPONSE' && visual.speechBubble) {
       const value = String(event.payload.display_text ?? event.payload.text ?? '')
       setBubble(value.length > 220 ? `${value.slice(0, 217)}…` : value)
     }
     if (event.type === 'TTS_FINISHED' && event.payload.audio_url) {
-      setStatus('SPEAKING')
       const responseId = String(event.payload.response_id ?? '') || undefined
-      void play(
-        `${API}${event.payload.audio_url}`,
-        () => { setStatus('IDLE'); void playbackGuard(false) },
-        () => { void playbackGuard(true, responseId) },
-      ).catch(() => { setStatus('IDLE'); void playbackGuard(false) })
+      streaming.enqueue({url: `${API}${event.payload.audio_url}`, responseId: responseId ?? 'notification', index: 0})
     }
     if (event.type === 'TTS_CHUNK_FINISHED' && event.payload.audio_url) {
       if (visual.speechBubble && event.payload.display_text) setBubble(String(event.payload.display_text))
@@ -105,8 +104,6 @@ export function DesktopApp() {
         responseId: String(event.payload.response_id ?? 'stream'), index: Number(event.payload.index ?? 0),
       })
     }
-    if (event.type === 'TTS_FINISHED') turnFilter.current.end(eventTurnId)
-    if (event.type === 'AVATAR_STATE_CHANGED') setAvatarControl(event.payload as Partial<AvatarControl>)
     if (event.type === 'SHELL_EXECUTION_STARTED') {
       setStatus('THINKING')
       if (visual.speechBubble) setBubble(`Executando diagnóstico local\n${String(event.payload.command ?? '')}`.slice(0, 220))
@@ -133,23 +130,14 @@ export function DesktopApp() {
       if (command === 'presence_toggle') void invoke('presence_toggle')
       if (command === 'presence_status') void invoke('presence_status')
     }
-    if (event.type === 'NETWORK_ALERT' && event.payload.desktop !== false) {
-      setBubble(String(event.payload.message ?? 'Mudança detectada na conexão.'))
-    }
-    if (event.type === 'SENTINEL_ALERT' && event.payload.desktop !== false) {
-      setBubble(String(event.payload.display_text ?? event.payload.message ?? 'Novo alerta do Sentinel.'))
-    }
-    if (event.type === 'MONITOR_NOTIFICATION') {
-      setBubble(String(event.payload.message ?? 'Atualização de monitoramento.').slice(0, 220))
-    }
-    if (event.type === 'SENTINEL_STATUS_CHANGED') {
-      const next = String(event.payload.state ?? '')
-      if (next === 'CONNECTED') setBubble('Sentinel connected')
-      if (next === 'AUTH_FAILED') setBubble('Sentinel encontrado · token rejeitado')
-      if (next === 'INCOMPATIBLE') setBubble('Sentinel encontrado · protocolo incompatível')
+    const proactiveNotice = readProactivePresenceNotice(event)
+    if (proactiveNotice) {
+      if (proactiveNotice.channels.includes('ui') && visual.speechBubble) {
+        setBubble(proactiveNotice.message.slice(0, 220))
+      }
     }
     if (event.type === 'SPEECH_CANCELLED') {
-      stopPlayback(); streaming.clear(); setStatus('LISTENING'); void playbackGuard(false)
+      streaming.clear(String(event.payload.response_id ?? '') || undefined); setStatus('LISTENING')
     }
   }, [play, playbackGuard, stopPlayback, streaming, visual.speechBubble])
 
@@ -161,15 +149,11 @@ export function DesktopApp() {
     onEvent,
   })
 
-  const handleAudio = useCallback(async (blob: Blob) => {
-    const body = new FormData()
-    body.append('audio', blob, 'desktop-ptt.webm')
-    const response = await fetch(`${API}/api/conversation/turn`, { method: 'POST', body })
-    const value = await response.json()
-    if (!response.ok || !value.accepted) throw new Error(value.detail ?? 'Nenhuma fala detectada')
+  const handleAudio = useCallback(async (value: STTResult) => {
+    if (!value.accepted) throw new Error(value.reason ?? 'Nenhuma fala detectada')
   }, [])
 
-  const { recording, start, stop } = usePushToTalk(handleAudio, microphone, .018, 1400, () => setStatus('IDLE'))
+  const { start, stop } = usePushToTalk(handleAudio, microphone, .018, 1400, () => setStatus('IDLE'))
   const startTalking = useCallback(async () => {
     if (status === 'SPEAKING' && audio.settings.allow_interruption) {
       stopPlayback(); streaming.clear()
@@ -195,10 +179,9 @@ export function DesktopApp() {
     const windowHandle = getCurrentWindow()
     void windowHandle.setAlwaysOnTop(visual.alwaysOnTop).catch(() => undefined)
     void applyClickThrough(visual.clickThrough).catch(() => undefined)
-    const base = BASE_SIZES[visual.characterView]
-    void windowHandle.setSize(new LogicalSize(base.width * visual.overlayScale, base.height * visual.overlayScale)).catch(() => undefined)
+    void windowHandle.setSize(new LogicalSize(BASE_SIZE.width * visual.overlayScale, BASE_SIZE.height * visual.overlayScale)).catch(() => undefined)
     void isAutostartEnabled().then(setStartup).catch(() => setStartup(false))
-  }, [visual.alwaysOnTop, visual.characterView, visual.clickThrough, visual.overlayScale])
+  }, [visual.alwaysOnTop, visual.clickThrough, visual.overlayScale])
 
   const updateSettingsLayout = useCallback(async () => {
     const element = settingsRef.current
@@ -274,7 +257,10 @@ export function DesktopApp() {
       try {
         const response = await fetch(`${API}/api/live2d/settings`)
         const value = await response.json() as VtsBackendStatus
-        if (!disposed) await invoke('vts_presence_configure', { config: nativePresenceConfig(value) })
+        if (!disposed) {
+          setMouseTracking(value.config.mouse_tracking ?? 'HEAD_EYES')
+          await invoke('vts_presence_configure', { config: nativePresenceConfig(value) })
+        }
       } catch { if (!disposed) setLive2dExternal(false) }
     }
     void configure()
@@ -290,7 +276,7 @@ export function DesktopApp() {
       try {
         const value = await invoke<NativePresenceStatus>('vts_presence_status')
         if (disposed) return
-        setLive2dExternal(canReplaceInternalAvatar(value))
+        setLive2dExternal(hasActiveVtsCharacter(value))
         const report = backendPresenceReport(value)
         const serialized = JSON.stringify(report)
         if (serialized !== lastReport && !reportInFlight) {
@@ -356,32 +342,19 @@ export function DesktopApp() {
     maxHeight: `${settingsLayout.maxHeight}px`,
   } as CSSProperties : undefined
 
-  return <main className={`desktop-presence state-${state} status-${status.toLowerCase()}`} data-transparent="true" data-live2d={live2dExternal} data-global-cursor={globalCursorAvailable ? 'available' : 'fallback'}>
+  return <main className={`desktop-presence state-${state} status-${status.toLowerCase()}`} data-transparent="true" data-live2d={live2dExternal} data-global-cursor={globalCursorAvailable ? 'available' : 'unavailable'}>
     {bubble && visual.speechBubble && <aside className="speech-bubble"><strong>NYRA</strong>{bubble}</aside>}
     <button className="drag-region" aria-label="Arrastar NYRA" onPointerDown={() => void getCurrentWindow().startDragging()} />
-    <button className="avatar-button" aria-label="Abrir conversa com NYRA" onClick={() => { setSettingsOpen(false); setMenu((value) => !value) }}>
-      {!live2dExternal&&<AvatarRenderer
-        state={state} status={recording ? 'LISTENING' : status} mouth={mouth} variant="desktop"
-        avatarVersion={visual.avatarVersion} renderer={visual.renderer}
-        characterView={visual.characterView}
-        idleAnimations={visual.idleAnimations} eyeMovement={visual.eyeMovement}
-        blink={visual.blink} debug={visual.debug}
-        control={avatarControl}
-        pointerSource="desktop-global"
-      />}
-    </button>
+    <button className="avatar-button" aria-label="Abrir conversa com NYRA" onClick={() => { setSettingsOpen(false); setMenu((value) => !value) }} />
     {(!connected || showOnline) && <div className={`presence-status ${connected ? 'online' : 'offline'}`}><i/>{connected ? 'ONLINE' : 'OFFLINE'}</div>}
     {(always.config?.privacy_indicator ?? true) && <div className={`mic-indicator ${always.status?.muted || !always.micActive ? 'off' : always.processing ? 'processing' : always.listening ? 'listening' : 'on'}`}><i/>MIC {always.status?.muted ? 'MUTED' : always.micActive ? (always.processing ? 'PROCESSING' : always.listening ? 'LISTENING' : 'ON') : microphoneStatusLabel(always.microphoneAvailability, false)}</div>}
     {menu && <section className="context-card"><textarea autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} placeholder="Digite para a NYRA..."/><div><button onClick={() => void send()}>ENVIAR</button><button onClick={() => void invoke('open_dashboard')}>PAINEL</button><button onClick={() => void getCurrentWindow().hide()}>OCULTAR</button></div></section>}
-    {settingsOpen && <section ref={settingsRef} className="context-card desktop-settings" style={settingsStyle} data-horizontal={settingsLayout?.horizontal ?? 'start'} data-vertical={settingsLayout?.vertical ?? 'end'}><strong>DESKTOP PRESENCE · AVATAR V2</strong>
+    {settingsOpen && <section ref={settingsRef} className="context-card desktop-settings" style={settingsStyle} data-horizontal={settingsLayout?.horizontal ?? 'start'} data-vertical={settingsLayout?.vertical ?? 'end'}><strong>DESKTOP PRESENCE · VTUBE STUDIO</strong>
       <label>Escala<select value={visual.overlayScale} onChange={(e) => setVisual({ ...visual, overlayScale: Number(e.target.value) })}>{[.5,.75,1,1.25,1.5].map((value) => <option key={value} value={value}>{Math.round(value*100)}%</option>)}</select></label>
-      <label>Character View<select value="bust" disabled><option value="bust">Avatar V2 / Portrait</option></select></label>
+      <label>Modelo<select value="current" disabled><option value="current">Modelo atual do VTube Studio</option></select></label>
+      <label>Mouse Tracking<select value={mouseTracking} disabled><option value="OFF">Off</option><option value="EYES">Eyes</option><option value="HEAD_EYES">Head + Eyes</option></select></label>
       <label><input type="checkbox" checked={visual.alwaysOnTop} onChange={(e) => setVisual({ ...visual, alwaysOnTop: e.target.checked })}/> Always on top</label>
       <label><input type="checkbox" checked={visual.speechBubble} onChange={(e) => setVisual({ ...visual, speechBubble: e.target.checked })}/> Balão de fala</label>
-      <label><input type="checkbox" checked={visual.idleAnimations} onChange={(e) => setVisual({ ...visual, idleAnimations: e.target.checked })}/> Animações idle</label>
-      <label><input type="checkbox" checked={visual.eyeMovement} onChange={(e) => setVisual({ ...visual, eyeMovement: e.target.checked })}/> Movimento dos olhos</label>
-      <label><input type="checkbox" checked={visual.blink} onChange={(e) => setVisual({ ...visual, blink: e.target.checked })}/> Blink</label>
-      <label><input type="checkbox" checked={visual.debug} onChange={(e) => setVisual({ ...visual, debug: e.target.checked })}/> Visual Debug</label>
       <label><input type="checkbox" checked={startup} onChange={() => void toggleStartup()}/> Iniciar com o Windows</label>
       <div><button onClick={() => void clickThrough()}>CLICK-THROUGH</button><button onClick={() => setSettingsOpen(false)}>FECHAR</button></div>
       <small>Ctrl+Shift+I; fallback Ctrl+Alt+I. O tray sempre recupera o modo interativo.</small>

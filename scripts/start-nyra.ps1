@@ -210,7 +210,9 @@ try {
     $health = Get-NyraHealth -Uri $backendHealthUri
     if ($health) {
         Write-LauncherLog -Level INFO -Message ("backend_online reused=true status=" + $health.status + " ready_ms=" + ($startupTimer.ElapsedMilliseconds - $backendStartedMs))
-    } else {
+    } elseif ($SkipDesktop) {
+        # Backend-only diagnostic mode has no desktop process to own the child,
+        # so it deliberately keeps the source/uvicorn launch path.
         if (-not $pythonExecutable) { throw 'Ambiente Python ausente em .venv e backend\.venv.' }
         $cleanPath = $env:Path
         Remove-Item Env:PATH -ErrorAction SilentlyContinue
@@ -225,6 +227,11 @@ try {
         } else {
             Write-LauncherLog -Level ERROR -Message ("backend_unavailable timeout_s=$BackendTimeoutSeconds")
         }
+    } else {
+        # In the official release the Tauri backend manager must be the sole
+        # owner. This gives Tray/UI Exit the token and process handle required
+        # to stop the frozen sidecar and release port 8000 deterministically.
+        Write-LauncherLog -Level INFO -Message 'backend_start owner=desktop sidecar=frozen'
     }
 
     if (-not $SkipDesktop) {
@@ -240,6 +247,15 @@ try {
             Start-Sleep -Milliseconds 900
             if ($desktopProcess.HasExited) { throw 'NYRA Desktop encerrou durante a inicializacao.' }
             Write-LauncherLog -Level INFO -Message ("desktop_started pid=" + $desktopProcess.Id + " ready_ms=" + $startupTimer.ElapsedMilliseconds)
+        }
+
+        if (-not $health) {
+            $health = Wait-NyraHealth -Uri $backendHealthUri -TimeoutSeconds $BackendTimeoutSeconds
+            if ($health) {
+                Write-LauncherLog -Level INFO -Message ("backend_online reused=false owner=desktop status=" + $health.status + " ready_ms=" + ($startupTimer.ElapsedMilliseconds - $backendStartedMs))
+            } else {
+                Write-LauncherLog -Level ERROR -Message ("backend_unavailable owner=desktop timeout_s=$BackendTimeoutSeconds")
+            }
         }
     }
 

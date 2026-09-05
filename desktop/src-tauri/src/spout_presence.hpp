@@ -28,13 +28,11 @@ struct NyraSpoutStatus {
 bool nyra_spout_start(void* owner_hwnd);
 void nyra_spout_stop();
 void nyra_spout_configure(
-    const char* mode,
     const char* sender,
     float scale,
     float offset_x,
     float offset_y,
     uint32_t watchdog_seconds);
 void nyra_spout_get_status(NyraSpoutStatus* status);
-void nyra_spout_set_internal_visible(bool visible);
 
 }

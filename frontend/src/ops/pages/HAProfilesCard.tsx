@@ -197,7 +197,7 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
       )}
 
       <div className="table-scroll">
-        <table className="ops-table">
+        <table className="ops-table ha-profile-table">
           <thead>
             <tr>
               <th>Perfil</th><th>URL</th><th>Auth</th><th>Estado</th><th>Último teste</th><th>Ações</th>
@@ -218,7 +218,7 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
                 <td><StatusBadge state={profile.status} /></td>
                 <td>{profile.last_test ? formatRelative(ago(profile.last_test.tested_at)) : '—'}</td>
                 <td>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <div className="ha-profile-actions">
                     <ActionButton small busy={busyId === `${profile.profile_id}:test`} disabled={!profile.enabled || !profile.url}
                       onClick={() => void run(profile, 'test')}>
                       Testar
@@ -335,7 +335,7 @@ export function HAProfilesCard({ onNotify }: { onNotify: (message: string) => vo
         </details>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="ha-profile-create-row">
         <input
           type="text"
           placeholder="Nome do novo perfil físico"

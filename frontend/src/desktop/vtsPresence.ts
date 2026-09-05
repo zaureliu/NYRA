@@ -1,8 +1,9 @@
-export type PresenceRendererMode = 'AUTO' | 'INTERNAL' | 'VTUBE_STUDIO' | 'CURRENT' | 'LIVE2D'
+export type MouseTrackingMode = 'OFF' | 'EYES' | 'HEAD_EYES'
 
 export interface VtsPresenceConfig {
   enabled: boolean
-  renderer: PresenceRendererMode
+  renderer: 'VTUBE_STUDIO'
+  mouse_tracking: MouseTrackingMode
   spout_sender: string
   presence_scale: number
   presence_offset_x: number
@@ -18,9 +19,9 @@ export interface VtsBackendStatus {
 }
 
 export interface NativePresenceStatus {
-  state: 'INTERNAL_ACTIVE' | 'VTS_DISCOVERING' | 'VTS_CONNECTING' | 'VTS_WAITING_FRAMES' | 'VTS_ACTIVE' | 'VTS_DEGRADED' | 'FALLBACK_INTERNAL'
+  state: 'VTS_OFFLINE' | 'VTS_DISCOVERING' | 'VTS_CONNECTING' | 'VTS_WAITING_FRAMES' | 'VTS_ACTIVE' | 'VTS_DEGRADED' | 'VTS_UNAVAILABLE'
   alpha: 'UNKNOWN' | 'VALID' | 'OPAQUE' | 'EMPTY'
-  fallbackActive: boolean
+  vtsActive: boolean
   sender?: string
   width: number
   height: number
@@ -37,17 +38,8 @@ export interface NativePresenceStatus {
   error?: string
 }
 
-const rendererMode = (mode: PresenceRendererMode) => {
-  if (mode === 'CURRENT') return 'INTERNAL'
-  if (mode === 'LIVE2D') return 'VTUBE_STUDIO'
-  return mode
-}
-
 export function nativePresenceConfig(status: VtsBackendStatus) {
-  const requested = rendererMode(status.config.renderer)
-  const apiReady = status.config.enabled && status.connected && status.authenticated && status.model_loaded
   return {
-    mode: requested === 'INTERNAL' || !apiReady ? 'INTERNAL' : requested,
     sender: status.config.spout_sender || 'AUTO',
     scale: status.config.presence_scale ?? 1,
     offsetX: status.config.presence_offset_x ?? 0,
@@ -56,14 +48,14 @@ export function nativePresenceConfig(status: VtsBackendStatus) {
   }
 }
 
-export const canReplaceInternalAvatar = (status: NativePresenceStatus) =>
-  status.state === 'VTS_ACTIVE' && status.alpha === 'VALID' && !status.fallbackActive
+export const hasActiveVtsCharacter = (status: NativePresenceStatus) =>
+  status.state === 'VTS_ACTIVE' && status.alpha === 'VALID' && status.vtsActive
 
 export function backendPresenceReport(status: NativePresenceStatus) {
   return {
     state: status.state,
     alpha: status.alpha,
-    fallback_active: status.fallbackActive,
+    vts_active: status.vtsActive,
     sender: status.sender ?? null,
     width: status.width,
     height: status.height,

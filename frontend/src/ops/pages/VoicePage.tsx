@@ -3,7 +3,10 @@ import { apiGet, apiSend } from '../../runtime/api'
 import { usePolling } from '../hooks'
 import { ActionButton, Card, ErrorAlert, StatusBadge, Toggle, formatMs } from '../ui'
 import { MicrophoneTest } from '../../components/MicrophoneTest'
+import { TtsProviderSettings } from '../../components/TtsProviderSettings'
+import { SttProviderSettings } from '../../components/SttProviderSettings'
 import type { VoiceBridgeStatus } from '../types'
+import './VoicePage.css'
 
 interface AudioSettingsShape {
   settings: {
@@ -17,6 +20,7 @@ interface AudioSettingsShape {
 }
 
 interface ConversationStatus {
+  natural_conversation?: { enabled: boolean; conversation_id: string; states: string[]; speech_queue_state: number; echo_guard: string; metrics: Record<string, {count: number; average_ms: number | null; p50_ms: number | null; p95_ms: number | null}> }
   state?: string
   stt_ready?: boolean
   tts_provider?: string
@@ -137,7 +141,7 @@ export function VoicePage() {
   const lastTurn = realtime.data?.last_turn as Record<string, number | string> | undefined
 
   return (
-    <div>
+    <div className="voice-page">
       <header className="ops-page-header">
         <div>
           <h1 className="ops-page-title">Voz</h1>
@@ -152,6 +156,10 @@ export function VoicePage() {
 
       <ErrorAlert message={error} />
       {notice && <div className="ops-alert info">{notice}</div>}
+
+      <Card title="Provider de voz" sub="Local por padrão; serviços online são opt-in">
+        <TtsProviderSettings />
+      </Card>
 
       <h2 className="ops-section-title">Perfis de conversação</h2>
       <Card sub="Cada perfil muda o runtime de verdade (persistido no backend)">
@@ -208,6 +216,19 @@ export function VoicePage() {
         </Card>
       </div>
 
+      <SttProviderSettings />
+      {conversation.data?.natural_conversation && <details className="ops-card" style={{fontSize: 14, marginTop: 14}}>
+        <summary style={{fontSize: 15}}>Diagnostics — Natural Conversation</summary>
+        <dl className="ops-kv">
+          <dt>Session</dt><dd style={{overflowWrap: 'anywhere'}}>{conversation.data.natural_conversation.conversation_id}</dd>
+          <dt>State</dt><dd>{conversation.data.natural_conversation.states.join(' + ')}</dd>
+          <dt>Speech queue</dt><dd>{conversation.data.natural_conversation.speech_queue_state}</dd>
+          <dt>Echo guard</dt><dd>AEC + playback reference</dd>
+        </dl>
+        {Object.entries(conversation.data.natural_conversation.metrics).map(([name, metric]) => <p key={name} style={{overflowWrap: 'anywhere'}}>
+          {name}: n={metric.count}; avg {formatMs(metric.average_ms)}; p50 {formatMs(metric.p50_ms)}; p95 {formatMs(metric.p95_ms)}
+        </p>)}
+      </details>}
       <h2 className="ops-section-title">Conversação</h2>
       <div className="ops-grid-2">
         <Card>
@@ -227,6 +248,9 @@ export function VoicePage() {
                 onChange={(value) => { setBargeIn(value); void putSetting('voice_barge_in', value) }} />
             </dd>
             <dt>Estado do pipeline</dt><dd>{conversation.data?.state ?? '—'}</dd>
+            <dt>Natural Conversation</dt>
+            <dd><Toggle checked={Boolean(conversation.data?.natural_conversation?.enabled)} label=""
+              onChange={(value) => void putSetting('natural_conversation_enabled', value)} /></dd>
           </dl>
         </Card>
         <Card title="Processor externo" sub="VoiceProcessorBridge — apenas localhost">

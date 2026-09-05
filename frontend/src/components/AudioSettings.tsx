@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AudioSettingsValue } from '../hooks/useAudioSettings'
 import type { MicrophoneAvailability, MicrophonePermission } from '../hooks/audioDevices'
 import { MicrophoneTest } from './MicrophoneTest'
+import { TtsProviderSettings } from './TtsProviderSettings'
 
 interface ConversationStatus {
   state: string
@@ -60,6 +61,7 @@ export function AudioSettings({ value, devices, microphoneAvailability, micropho
         <label>Velocidade <output>{draft.speech_speed.toFixed(2)}×</output><input type="range" min=".7" max="1.3" step=".01" value={draft.speech_speed} onChange={(event) => change('speech_speed', Number(event.target.value))}/></label>
         <label>Volume <output>{Math.round(draft.volume * 100)}%</output><input type="range" min="0" max="1" step=".05" value={draft.volume} onChange={(event) => change('volume', Number(event.target.value))}/></label>
       </div>
+      <TtsProviderSettings />
     </section>
     <section className="settings-group">
       <h3>CONVERSATION</h3>

@@ -1,7 +1,0 @@
-{
-  "type": "vector-overlay-placeholder",
-  "states": ["eyes_open", "eyes_half", "eyes_closed", "blink", "look_left", "look_right", "look_up", "look_down"],
-  "priority": ["eyes_open", "eyes_half", "eyes_closed", "blink"],
-  "implementation": "frontend/src/avatar/LayeredRenderer.tsx",
-  "replaceable": true
-}
