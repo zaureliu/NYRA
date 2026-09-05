@@ -38,7 +38,7 @@ class STTSettings(BaseModel):
     dictation: bool = False
     fallback: Literal["faster_whisper"] = "faster_whisper"
     keyterms_enabled: bool = False
-    keyterms: list[str] = Field(default_factory=list, max_length=20)
+    keyterms: list[str] = Field(default_factory=lambda: ["Kazumi"], max_length=20)
 
     @field_validator("keyterms")
     @classmethod

@@ -330,7 +330,7 @@ async def test_integrations_status_cards(tmp_path, runtime_file, monkeypatch):
     # reais do operador (estados da máquina real vazariam no resultado).
     monkeypatch.setattr(ha_profiles_mod, "PROFILES_PATH", tmp_path / "ha-profiles.json")
     monkeypatch.setattr(ha_profiles_mod, "SECRETS_DIR", tmp_path / "secrets")
-    monkeypatch.delenv("NYRA_HOME_ASSISTANT_TOKEN", raising=False)
+    monkeypatch.delenv("KAZUMI_HOME_ASSISTANT_TOKEN", raising=False)
     monkeypatch.setattr(pm_config_mod, "CONFIG_PATH", tmp_path / "proxmox-config.json")
     # O overlay runtime e o CredentialBroker também leem estado da máquina real;
     # sem neutralizá-los o card do Proxmox vira READY nesta máquina.
@@ -365,7 +365,7 @@ async def test_integrations_ha_ready_requires_auth(tmp_path, runtime_file, monke
 
     monkeypatch.setattr(ha_profiles_mod, "PROFILES_PATH", tmp_path / "ha-profiles.json")
     monkeypatch.setattr(ha_profiles_mod, "SECRETS_DIR", tmp_path / "secrets")
-    monkeypatch.delenv("NYRA_HOME_ASSISTANT_TOKEN", raising=False)
+    monkeypatch.delenv("KAZUMI_HOME_ASSISTANT_TOKEN", raising=False)
     monkeypatch.setattr(pm_config_mod, "CONFIG_PATH", tmp_path / "proxmox-config.json")
 
     settings = Settings(home_assistant_url="http://192.168.1.200",
@@ -440,7 +440,7 @@ def ha_store(tmp_path, monkeypatch):
     secrets_dir = tmp_path / "secrets"
     monkeypatch.setattr(mod, "PROFILES_PATH", profiles_path)
     monkeypatch.setattr(mod, "SECRETS_DIR", secrets_dir)
-    monkeypatch.delenv("NYRA_HOME_ASSISTANT_TOKEN", raising=False)
+    monkeypatch.delenv("KAZUMI_HOME_ASSISTANT_TOKEN", raising=False)
     yield mod, secrets_dir
 
 
@@ -521,7 +521,7 @@ async def test_bridge_rejects_non_loopback_endpoint(bridge_store):
     with pytest.raises(ValueError):
         await bridge.update({"endpoint": "http://192.168.1.55:9000"})
     with pytest.raises(ValueError):
-        await bridge.update({"endpoint": "http://nyra.example.com:9000"})
+        await bridge.update({"endpoint": "http://kazumi.example.com:9000"})
 
 
 async def test_bridge_probe_healthy_negotiates_capabilities(bridge_store, monkeypatch):

@@ -330,7 +330,7 @@ export function ProxmoxConfigCard({ onNotify }: { onNotify: (message: string) =>
           <Toggle checked label="TLS Verification (obrigatória)" disabled
             onChange={() => undefined} />
           <span className="ops-hint">
-            Para certificados internos, instale a CA do Proxmox no repositório de confiança do host NYRA.
+            Para certificados internos, instale a CA do Proxmox no repositório de confiança do host KAZUMI.
           </span>
           <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
             Preferred Node

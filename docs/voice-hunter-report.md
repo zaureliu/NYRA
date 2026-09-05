@@ -6,7 +6,7 @@ Pesquisa real executada em fontes primárias. Doze opções entraram no catálog
 
 | Candidate | Source | Type | Language | Gender | License | Allowed Use | Reference Allowed | Size | Provider | Naturalness estimate | Integration difficulty | Status |
 |---|---|---|---|---|---|---|---:|---:|---|---:|---|---|
-| OmniVoice BR-PT Calm Design | edwixx + k2-fsa | Synthetic | BR-PT/pt-BR experimental | female designed | Apache-2.0 | local, derivative, redistribution | yes | 2.45 GB checkpoint | OmniVoice → Chatterbox | 8.2 | HIGH | SAFE_FOR_NYRA_REFERENCE |
+| OmniVoice BR-PT Calm Design | edwixx + k2-fsa | Synthetic | BR-PT/pt-BR experimental | female designed | Apache-2.0 | local, derivative, redistribution | yes | 2.45 GB checkpoint | OmniVoice → Chatterbox | 8.2 | HIGH | SAFE_FOR_KAZUMI_REFERENCE |
 | Kokoro Dora | hexgrad/Kokoro-82M | Synthetic | pt-BR | female packaged voice | Apache-2.0 | direct local TTS | no | ~326 MB existing | Kokoro ONNX | 7.3 | LOW | SAFE_FOR_DIRECT_TTS |
 | Chatterbox default | ResembleAI/chatterbox | Synthetic | multilingual pt | synthetic female target | MIT | direct local TTS | no | existing install | Chatterbox | 7.0 | MEDIUM | SAFE_FOR_DIRECT_TTS |
 | Edge Thalita | Microsoft | TTS Provider | pt-BR | female | service terms | personal audition through provider | no | online | Edge TTS | 8.6 | LOW | AUDITION_ONLY |
@@ -17,7 +17,7 @@ Pesquisa real executada em fontes primárias. Doze opções entraram no catálog
 | F5-TTS pt-BR | firstpixel/fuuuzzy | Model | pt-BR | reference-dependent | CC-BY-NC-4.0 | non-commercial audition | no | 1.35 GB | F5-TTS | 8.4 | HIGH | AUDITION_ONLY |
 | Common Voice individual | Mozilla | Dataset | pt-BR | metadata-dependent | CC0 + dataset terms | corpus research/audition | no | not downloaded | dataset | 8.0 | HIGH | AUDITION_ONLY |
 | Piper pt-BR current | rhasspy/piper-voices | Model | pt-BR | not documented as suitable female | per-voice | unresolved for target | no | not downloaded | Piper | 6.5 | LOW | REJECTED |
-| Qwen3-TTS VoiceDesign 1.7B | QwenLM | Synthetic | Portuguese, pt-BR unconfirmed | female designed | Apache-2.0 | local synthetic voice design | yes | not downloaded | Qwen3-TTS | 8.5 | HIGH | SAFE_FOR_NYRA_REFERENCE |
+| Qwen3-TTS VoiceDesign 1.7B | QwenLM | Synthetic | Portuguese, pt-BR unconfirmed | female designed | Apache-2.0 | local synthetic voice design | yes | not downloaded | Qwen3-TTS | 8.5 | HIGH | SAFE_FOR_KAZUMI_REFERENCE |
 
 Contagem: 7 elegíveis por licença para referência ou TTS direto, 4 apenas para audição e 1 rejeitada. Três das sete elegíveis são opções pagas não ativadas; Qwen3 está elegível juridicamente, mas não foi instalado nem tecnicamente validado neste host.
 
@@ -88,4 +88,4 @@ As notas de catálogo apontam **Azure Luana MAI** como hipótese mais promissora
 4. Edge Thalita — baseline online atual, somente audição.
 5. Chatterbox default — baseline local direto; baixa inteligibilidade nesta execução.
 
-O perfil `NYRA_VOICE` não foi alterado e `data/voices/nyra_reference.wav` não foi criado. A escolha continua exclusivamente na interface.
+O perfil `KAZUMI_VOICE` não foi alterado e `data/voices/kazumi_reference.wav` não foi criado. A escolha continua exclusivamente na interface.

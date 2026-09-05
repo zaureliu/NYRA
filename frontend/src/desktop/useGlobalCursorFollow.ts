@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import { globalCursorPointer, type GlobalCursorSample } from './globalCursor'
 import type { MouseTrackingMode } from './vtsPresence'
 
-const NATIVE_CURSOR_EVENT = 'nyra-global-cursor'
+const NATIVE_CURSOR_EVENT = 'kazumi-global-cursor'
 const LIVE2D_INTERVAL_MS = 1000 / 30
 
 export function useGlobalCursorFollow(vtsActive: boolean, mode: MouseTrackingMode, onAvailability?: (available: boolean) => void) {

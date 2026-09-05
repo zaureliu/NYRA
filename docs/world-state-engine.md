@@ -23,7 +23,7 @@ atual; sua proveniência permanece disponível para diagnóstico como
 
 ## Persistência e privacidade
 
-O arquivo `%LOCALAPPDATA%\NYRA\data\world-state-v1.json` usa substituição
+O arquivo `%LOCALAPPDATA%\KAZUMI\data\world-state-v1.json` usa substituição
 atômica e guarda apenas referências úteis entre restarts: projeto, arquivos e
 artefatos recentes, tasks e monitores ativos, além de uma timeline seletiva e
 curta. Foreground, janela, browser, atividade do usuário e estado da assistente

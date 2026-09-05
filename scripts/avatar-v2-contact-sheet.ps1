@@ -6,17 +6,17 @@ Add-Type -AssemblyName System.Drawing
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $outputDirectory = Join-Path $repoRoot 'docs\screenshots\avatar-v2'
 $items = @(
-  [pscustomobject]@{ Label='IDLE'; File='nyra-avatar-v2-idle.png' },
-  [pscustomobject]@{ Label='EYES OPEN'; File='nyra-avatar-v2-idle.png' },
-  [pscustomobject]@{ Label='BLINK HALF'; File='nyra-avatar-v2-blink-half.png' },
-  [pscustomobject]@{ Label='BLINK CLOSED'; File='nyra-avatar-v2-blink-closed.png' },
-  [pscustomobject]@{ Label='MOUTH CLOSED'; File='nyra-avatar-v2-idle.png' },
-  [pscustomobject]@{ Label='MOUTH SMALL'; File='nyra-avatar-v2-speaking-small.png' },
-  [pscustomobject]@{ Label='MOUTH MEDIUM'; File='nyra-avatar-v2-speaking-medium.png' },
-  [pscustomobject]@{ Label='MOUTH OPEN'; File='nyra-avatar-v2-speaking-open.png' },
-  [pscustomobject]@{ Label='LISTENING'; File='nyra-avatar-v2-listening.png' },
-  [pscustomobject]@{ Label='THINKING'; File='nyra-avatar-v2-thinking.png' },
-  [pscustomobject]@{ Label='MOBILE 390'; File='nyra-avatar-v2-mobile.png' }
+  [pscustomobject]@{ Label='IDLE'; File='kazumi-avatar-v2-idle.png' },
+  [pscustomobject]@{ Label='EYES OPEN'; File='kazumi-avatar-v2-idle.png' },
+  [pscustomobject]@{ Label='BLINK HALF'; File='kazumi-avatar-v2-blink-half.png' },
+  [pscustomobject]@{ Label='BLINK CLOSED'; File='kazumi-avatar-v2-blink-closed.png' },
+  [pscustomobject]@{ Label='MOUTH CLOSED'; File='kazumi-avatar-v2-idle.png' },
+  [pscustomobject]@{ Label='MOUTH SMALL'; File='kazumi-avatar-v2-speaking-small.png' },
+  [pscustomobject]@{ Label='MOUTH MEDIUM'; File='kazumi-avatar-v2-speaking-medium.png' },
+  [pscustomobject]@{ Label='MOUTH OPEN'; File='kazumi-avatar-v2-speaking-open.png' },
+  [pscustomobject]@{ Label='LISTENING'; File='kazumi-avatar-v2-listening.png' },
+  [pscustomobject]@{ Label='THINKING'; File='kazumi-avatar-v2-thinking.png' },
+  [pscustomobject]@{ Label='MOBILE 390'; File='kazumi-avatar-v2-mobile.png' }
 )
 
 $columnCount = 4
@@ -51,7 +51,7 @@ try {
       $graphics.DrawImage($source, $drawX, $drawY, $drawWidth, $drawHeight)
     } finally { $source.Dispose() }
   }
-  $contactSheet = Join-Path $outputDirectory 'nyra-avatar-v2-contact-sheet.png'
+  $contactSheet = Join-Path $outputDirectory 'kazumi-avatar-v2-contact-sheet.png'
   $sheet.Save($contactSheet, [System.Drawing.Imaging.ImageFormat]::Png)
   Write-Output $contactSheet
 } finally {

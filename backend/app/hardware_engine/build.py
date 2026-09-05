@@ -24,7 +24,8 @@ class BuildEngine:
             result = await self.executor.run('build', workspace=root)
             output = str(result.get('stdout', '')) + '\n' + str(result.get('stderr', ''))
             findings = diagnostics(output)
-            binaries = [root / '.pio/build/nyra' / name for name in ('firmware.bin', 'firmware.hex', 'firmware.uf2', 'program.exe')]
+            environment = 'kazumi' if '[env:kazumi]' in (root / 'platformio.ini').read_text(encoding='utf8') else 'nyra'
+            binaries = [root / '.pio/build' / environment / name for name in ('firmware.bin', 'firmware.hex', 'firmware.uf2', 'program.exe')]
             artifacts = [p for p in binaries if p.is_file() and p.stat().st_size > 0]
             meta['build'] = {'success': bool(result.get('success') and artifacts), 'at': now(), 'attempt': attempt + 1,
                              'elapsed_ms': round((time.perf_counter()-start)*1000, 2), 'diagnostics': findings,

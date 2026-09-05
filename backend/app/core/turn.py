@@ -156,7 +156,7 @@ def is_turn_id(value: str) -> bool:
     return isinstance(value, str) and value.startswith(TURN_ID_PREFIX) and len(value) > len(TURN_ID_PREFIX)
 
 
-_current_turn_id: ContextVar[str | None] = ContextVar("nyra_turn_id", default=None)
+_current_turn_id: ContextVar[str | None] = ContextVar("kazumi_turn_id", default=None)
 #: Public ContextVar carrying the active turn id for tools/events inside one turn.
 current_turn_id: ContextVar[str | None] = _current_turn_id
 

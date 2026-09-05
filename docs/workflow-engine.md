@@ -38,7 +38,7 @@ Run states: RUNNING, SUCCEEDED, FAILED, CANCELLED, WAITING_FOR_USER.
 ## Templates reais
 
 `config/workflow_templates.json` — mínimo: Open Development Environment,
-Check NYRA Health, Check Homelab, Open Application and File, Build Project,
+Check KAZUMI Health, Check Homelab, Open Application and File, Build Project,
 Diagnose Local Service, Diagnose Remote Host. Templates usam tools
 estruturadas, nunca shell raw quando existe capability dedicada (§62).
 

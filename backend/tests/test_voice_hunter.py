@@ -15,6 +15,7 @@ from app.api.routes import router
 from app.voice_hunter.audio import analyze_audio, duplicate_hashes, normalize_candidate_audio, sha256_file
 from app.voice_hunter.models import CandidateStatus, VoiceCandidate
 from app.voice_hunter.service import VoiceHunterService
+from app.voice_hunter.catalog import curated_candidates
 
 
 def make_wav(path: Path, rate: int = 16000, frequency: float = 190.0) -> Path:
@@ -26,7 +27,7 @@ def make_wav(path: Path, rate: int = 16000, frequency: float = 190.0) -> Path:
 
 def test_metadata_validation_and_license_invariant(tmp_path: Path):
     valid = VoiceHunterService(root=tmp_path / "candidates", download_budget_bytes=1024).candidates[0]
-    assert valid.status == CandidateStatus.SAFE_FOR_NYRA_REFERENCE
+    assert valid.status == CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE
     payload = valid.model_dump(mode="json")
     payload["reference_allowed"] = False
     with pytest.raises(ValidationError):
@@ -36,17 +37,17 @@ def test_metadata_validation_and_license_invariant(tmp_path: Path):
 def test_catalog_license_classification(tmp_path: Path):
     service = VoiceHunterService(root=tmp_path / "candidates")
     by_id = {item.id: item for item in service.candidates}
-    assert by_id["omnivoice-brpt-calm-design"].status == CandidateStatus.SAFE_FOR_NYRA_REFERENCE
+    assert by_id["omnivoice-brpt-calm-design"].status == CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE
     assert by_id["kokoro-pf-dora"].status == CandidateStatus.SAFE_FOR_DIRECT_TTS
     assert by_id["common-voice-ptbr-female"].status == CandidateStatus.AUDITION_ONLY
     assert by_id["piper-ptbr-current"].status == CandidateStatus.REJECTED
-    assert by_id["qwen3-tts-voice-design"].status == CandidateStatus.SAFE_FOR_NYRA_REFERENCE
+    assert by_id["qwen3-tts-voice-design"].status == CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE
 
 
 def test_sha256_and_duplicate_detection(tmp_path: Path):
     first = tmp_path / "a.bin"; second = tmp_path / "b.bin"
-    first.write_bytes(b"nyra"); second.write_bytes(b"nyra")
-    expected = hashlib.sha256(b"nyra").hexdigest()
+    first.write_bytes(b"kazumi"); second.write_bytes(b"kazumi")
+    expected = hashlib.sha256(b"kazumi").hexdigest()
     assert sha256_file(first) == expected
     assert duplicate_hashes([first, second]) == {expected: [first, second]}
 
@@ -85,7 +86,7 @@ async def test_candidate_loading_favorites_and_cleanup_are_scoped(tmp_path: Path
     source = make_wav(tmp_path / "source.wav")
     await service.register_sample("kokoro-pf-dora", source)
     await service.set_preference("kokoro-pf-dora", favorite=True, discarded=True, rating=8)
-    official = tmp_path / "voices" / "nyra_reference.wav"
+    official = tmp_path / "voices" / "kazumi_reference.wav"
     official.write_bytes(b"official")
 
     reloaded = VoiceHunterService(root=root, download_budget_bytes=10_000_000)
@@ -115,7 +116,9 @@ async def test_manual_search_uses_mocked_sources_and_reaches_ready(monkeypatch, 
     assert service._task is not None
     await service._task
     assert service.state.phase.value == "READY"
-    assert service.state.candidate_count == 12
+    expected = {candidate.id for candidate in curated_candidates()}
+    assert {candidate.id for candidate in service.candidates} == expected
+    assert service.state.candidate_count == len(expected)
 
 
 def test_voice_hunter_api_loads_candidates(tmp_path: Path):
@@ -126,6 +129,6 @@ def test_voice_hunter_api_loads_candidates(tmp_path: Path):
     with TestClient(app) as client:
         response = client.get("/api/voice-hunter/status")
         assert response.status_code == 200
-        assert len(response.json()["candidates"]) == 12
+        assert {candidate["id"] for candidate in response.json()["candidates"]} == {candidate.id for candidate in curated_candidates()}
         blocked = client.post("/api/voice-hunter/candidates/edge-thalita-multilingual/select")
         assert blocked.status_code == 403

@@ -53,15 +53,15 @@ def test_runtime_supervisor_endpoints_expose_registered_services_only(monkeypatc
         listing = client.get("/api/runtime/services")
         assert listing.status_code == 200
         services = {item["id"]: item for item in listing.json()["services"]}
-        assert {"nyra_backend", "nyra_frontend_dev", "ollama", "utamo_sentinel", "nyra_test_service"} <= set(services)
+        assert {"kazumi_backend", "kazumi_frontend_dev", "ollama", "utamo_sentinel", "kazumi_test_service"} <= set(services)
         assert all(item["validation_error"] is None for item in services.values())
 
         assert client.get("/api/runtime/services/inexistente").status_code == 404
-        assert client.get("/api/runtime/services/nyra_backend/health").status_code == 200
-        logs = client.get("/api/runtime/services/nyra_backend/logs?lines=5")
+        assert client.get("/api/runtime/services/kazumi_backend/health").status_code == 200
+        logs = client.get("/api/runtime/services/kazumi_backend/logs?lines=5")
         assert logs.status_code == 200 and logs.json()["success"] is True
 
-        blocked = client.post("/api/runtime/services/nyra_backend/restart", json={}).json()
+        blocked = client.post("/api/runtime/services/kazumi_backend/restart", json={}).json()
         assert blocked["error_code"] == "SELF_RESTART_UNSUPPORTED"
 
         history = client.get("/api/runtime/history")

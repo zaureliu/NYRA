@@ -55,7 +55,7 @@ export function AudioSettings({ value, devices, microphoneAvailability, micropho
       <div className="settings-grid">
         <label>Microfone<select value={draft.microphone} onChange={(event) => change('microphone', event.target.value)}><option value="default">Padrão do sistema</option>{devices.filter((item) => item.kind === 'audioinput').map((item) => <option value={item.deviceId} key={item.deviceId}>{item.label || `Entrada ${item.deviceId.slice(0, 6)}`}</option>)}</select></label>
         <label>Saída de áudio<select value={draft.speaker} onChange={(event) => change('speaker', event.target.value)}><option value="default">Padrão do sistema</option>{devices.filter((item) => item.kind === 'audiooutput').map((item) => <option value={item.deviceId} key={item.deviceId}>{item.label || `Saída ${item.deviceId.slice(0, 6)}`}</option>)}</select></label>
-        <div className="setting-readonly"><span>Voz da NYRA</span><strong>{status?.tts?.primary === 'kokoro' ? 'NYRA · Feminina V2 local pt-BR' : (status?.tts?.primary ?? 'Carregando…')}</strong></div>
+        <div className="setting-readonly"><span>Voz da KAZUMI</span><strong>{status?.tts?.primary === 'kokoro' ? 'KAZUMI · Feminina V2 local pt-BR' : (status?.tts?.primary ?? 'Carregando…')}</strong></div>
         <label>Emotion Mode<select value={draft.emotion_mode} onChange={(event) => change('emotion_mode', event.target.value as AudioSettingsValue['emotion_mode'])}><option value="automatic">Automatic</option><option value="neutral_only">Neutral Only</option></select></label>
         <label>Expressiveness<select value={draft.expressiveness} onChange={(event) => change('expressiveness', event.target.value as AudioSettingsValue['expressiveness'])}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label>
         <label>Velocidade <output>{draft.speech_speed.toFixed(2)}×</output><input type="range" min=".7" max="1.3" step=".01" value={draft.speech_speed} onChange={(event) => change('speech_speed', Number(event.target.value))}/></label>
@@ -66,7 +66,7 @@ export function AudioSettings({ value, devices, microphoneAvailability, micropho
     <section className="settings-group">
       <h3>CONVERSATION</h3>
       <div className="settings-grid">
-        <label>Modo de conversa<select value={draft.conversation_mode} onChange={(event) => change('conversation_mode', event.target.value as AudioSettingsValue['conversation_mode'])}><option value="push_to_talk">Push-to-talk</option><option value="wake_word">Wake word “Nyra”</option><option value="hands_free">Hands-free</option></select></label>
+        <label>Modo de conversa<select value={draft.conversation_mode} onChange={(event) => change('conversation_mode', event.target.value as AudioSettingsValue['conversation_mode'])}><option value="push_to_talk">Push-to-talk</option><option value="wake_word">Wake word “Kazumi”</option><option value="hands_free">Hands-free</option></select></label>
         <label><input type="checkbox" checked={draft.always_listening} onChange={(event) => change('always_listening', event.target.checked)}/> Always Listening</label>
         <label><input type="checkbox" checked={draft.allow_interruption} onChange={(event) => change('allow_interruption', event.target.checked)}/> Permitir interrupção</label>
       </div>

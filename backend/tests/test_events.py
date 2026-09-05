@@ -41,7 +41,7 @@ async def test_slow_subscriber_does_not_block_publisher():
     await bus.subscribe(fast)
     started = _time.perf_counter()
     await asyncio.wait_for(
-        bus.publish(EventType.NYRA_RESPONSE, text="x"),
+        bus.publish(EventType.KAZUMI_RESPONSE, text="x"),
         timeout=1.0,
     )
     elapsed = _time.perf_counter() - started

@@ -9,7 +9,7 @@ Sources searched safely, read-only:
 
 Every candidate carries provenance and a confidence score. Exact display-name
 matches win; multiple plausible candidates are returned as AMBIGUOUS so the
-operator decides instead of NYRA guessing.
+operator decides instead of KAZUMI guessing.
 """
 
 from __future__ import annotations
@@ -304,7 +304,7 @@ class ApplicationDiscovery:
 
     @staticmethod
     def _uninstall_candidates() -> list[ApplicationCandidate]:
-        """Metadata de desinstalação (nyra-full §2.3): DisplayName + DisplayIcon/InstallLocation."""
+        """Metadata de desinstalação (kazumi-full §2.3): DisplayName + DisplayIcon/InstallLocation."""
         import winreg
 
         hive_keys = (
@@ -380,7 +380,7 @@ class ApplicationDiscovery:
 
     @classmethod
     def _common_dirs_candidates(cls) -> list[ApplicationCandidate]:
-        """Executáveis raiz em diretórios típicos (nyra-full §2.6), com limites."""
+        """Executáveis raiz em diretórios típicos (kazumi-full §2.6), com limites."""
         roots = []
         local = os.environ.get("LOCALAPPDATA", "")
         if local:
@@ -537,7 +537,7 @@ class ApplicationDiscovery:
                 "query": query,
             }
         if len(exact) > 1:
-            # nyra-full §31: mesmo executável por fontes diferentes NÃO é
+            # kazumi-full §31: mesmo executável por fontes diferentes NÃO é
             # ambiguidade real (ex.: "Microsoft Edge" lnk + App Paths msedge).
             def _final_key(item: ApplicationCandidate) -> tuple:
                 try:

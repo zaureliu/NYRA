@@ -82,7 +82,7 @@ On shutdown ConversationEngine cancels its own response tasks and closes its vol
 session; existing shutdown owners stop capture/recognition/TTS/queue. No external VTS
 process is killed. Restart creates a fresh session and player state; project/Open Loop
 persistence remains owned by the existing engines. Window X remains hide-to-tray;
-explicit quit uses the existing quit_nyra coordinator. The incompatible tray helper
+explicit quit uses the existing quit_kazumi coordinator. The incompatible tray helper
 must not be used.
 
 ## Diagnostics and validation
@@ -102,7 +102,7 @@ PyInstaller, Tauri release/NSIS and source/package fingerprint comparison passed
 No Rust source changed. Backend artifact SHA-256:
 `db1a9ba11838625d33dad1cf01daeb4f6bebaf19f06f74ee7a4030ee86f67e2b`.
 
-The corrected release was launched through the existing Desktop NYRA.lnk. The
+The corrected release was launched through the existing Desktop KAZUMI.lnk. The
 existing microphone was acquired, listening lease active, and the new session
 started with zero turns/tasks/queued speech. Ten controlled synthetic utterances
 remained in one session, including three casual turns and an interrupted response.
@@ -127,7 +127,7 @@ remaining response/end marker, with regression tests: a failed packet must never
 be acknowledged as an entirely heard sentence. Late callbacks remain idempotent.
 
 The voice request to open Notepad succeeded. Its follow-up resolved the same
-application but the existing operator could not confirm text insertion; NYRA
+application but the existing operator could not confirm text insertion; KAZUMI
 reported that failure. This complete positive two-operation E2E remains pending.
 Faster-Whisper tiny mistranscribed several technical sample words. Deepgram also
 omitted the synthetic pronunciation of `pio run`; no acoustic accuracy claim is
@@ -153,7 +153,7 @@ arbitration/failure behavior passed targeted tests, but no live proactive acoust
 test is claimed. OpenAI/ElevenLabs TTS remained NOT_CONFIGURED and were tested via
 controlled HTTP streams/failures only, not paid/cloud speech synthesis.
 
-The official quit_nyra coordinator exited successfully: backend=0, desktop=0,
+The official quit_kazumi coordinator exited successfully: backend=0, desktop=0,
 port 8000 FREE, VTube Studio still alive. Restart had already demonstrated a new
 empty session and reacquired microphone. X/hide-to-tray source was preserved;
 programmatic window-close validation was denied by the existing Tauri permission.

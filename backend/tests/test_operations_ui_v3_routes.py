@@ -29,7 +29,7 @@ def build_client(tmp_path: Path) -> TestClient:
 
 
 def test_capabilities_endpoint_contract(tmp_path, monkeypatch):
-    monkeypatch.setenv("NYRA_OLLAMA_PRELOAD", "false")
+    monkeypatch.setenv("KAZUMI_OLLAMA_PRELOAD", "false")
     client = build_client(tmp_path)
     response = client.get("/api/capabilities")
     assert response.status_code == 200

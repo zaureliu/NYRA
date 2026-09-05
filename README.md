@@ -1,6 +1,8 @@
-# NYRA 0.5.0
+# Kazumi 0.6.0
 
-NYRA é uma assistente de IA local-first para conversa, voz, operação segura do Windows e observação de homelab. A arquitetura separa identidade, modelos, memória, contexto, política, capacidades, ferramentas, execução, verificação e observabilidade. Texto livre produzido pelo LLM nunca é executado diretamente.
+Previously NYRA. See the [migration guide](docs/migration/nyra-to-kazumi.md) before upgrading existing data.
+
+KAZUMI é uma assistente de IA local-first para conversa, voz, operação segura do Windows e observação de homelab. A arquitetura separa identidade, modelos, memória, contexto, política, capacidades, ferramentas, execução, verificação e observabilidade. Texto livre produzido pelo LLM nunca é executado diretamente.
 
 ## Capacidades atuais
 
@@ -44,8 +46,8 @@ Consulte [arquitetura](docs/architecture.md), [Intelligence Platform V2](docs/in
 ## Instalação
 
 ```powershell
-git clone https://github.com/zaureliu/NYRA.git
-cd NYRA
+git clone https://github.com/zaureliu/Kazumi.git
+cd Kazumi
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 npm run dev
 ```
@@ -56,14 +58,14 @@ Para gerar a release desktop:
 
 ```powershell
 npm run build:release
-.\start-nyra.ps1
+.\start-kazumi.ps1
 ```
 
-O executável fica em `desktop/src-tauri/target/release/nyra-desktop.exe`; o sidecar PyInstaller fica em `packaging/dist/nyra-backend`. Ambos são artefatos locais e não entram no Git. Veja [instalação](docs/installation.md) e [startup](docs/STARTUP.md).
+O executável fica em `desktop/src-tauri/target/release/kazumi-desktop.exe`; o sidecar PyInstaller fica em `packaging/dist/kazumi-backend`. Ambos são artefatos locais e não entram no Git. Veja [instalação](docs/installation.md) e [startup](docs/STARTUP.md).
 
 ## Configuração local
 
-Copie `.env.example` para `.env`. Valores `NYRA_*` sobrescrevem `config/default.yaml`.
+Copie `.env.example` para `.env`. Valores `KAZUMI_*` sobrescrevem `config/default.yaml`.
 
 Registries de rede reais são privados:
 
@@ -74,9 +76,9 @@ Copy-Item config\homelab_hosts.example.yaml config\homelab_hosts.local.yaml
 
 Preencha os arquivos `.local.*` somente no seu host. Eles são ignorados pelo Git. Credenciais devem permanecer no Credential Broker; não grave tokens, senhas ou chaves nesses registries.
 
-O SelfDev usa caminhos configuráveis (`NYRA_SELFDEV_WORKSPACE`, `NYRA_SELFDEV_CANONICAL_ROOT` e `NYRA_SELFDEV_PUBLIC_SNAPSHOT`). Os defaults são relativos ao clone, não dependem de um usuário ou drive específico e a publicação automática continua opt-in.
+O SelfDev usa caminhos configuráveis (`KAZUMI_SELFDEV_WORKSPACE`, `KAZUMI_SELFDEV_CANONICAL_ROOT` e `KAZUMI_SELFDEV_PUBLIC_SNAPSHOT`). Os defaults são relativos ao clone, não dependem de um usuário ou drive específico e a publicação automática continua opt-in.
 
-Projetos gerados usam `<USER_HOME>/NYRA-Projects`, fora do source. `NYRA_PROJECTS_ROOT` permite escolher outro workspace. `NYRA_DATA_HOME` isola bancos, caches e logs de runtime. Nenhum corpus de knowledge ou projeto do operador acompanha o clone.
+Projetos gerados usam `<USER_HOME>/Kazumi-Projects`, fora do source. `KAZUMI_PROJECTS_ROOT` permite escolher outro workspace. `KAZUMI_DATA_HOME` isola bancos, caches e logs de runtime. Nenhum corpus de knowledge ou projeto do operador acompanha o clone.
 
 ## Intelligence Platform V2
 
@@ -136,7 +138,7 @@ cd ..\desktop\src-tauri
 cargo fmt --check
 ```
 
-Os resultados reais e limitações desta versão estão em [docs/releases/0.5.0.md](docs/releases/0.5.0.md). Testes simulados ou mockados não são apresentados como E2E real.
+Os resultados reais e limitações desta versão estão em [docs/releases/0.6.0.md](docs/releases/0.6.0.md). Testes simulados ou mockados não são apresentados como E2E real.
 
 ## Estrutura
 

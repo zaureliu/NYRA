@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 import pytest
 
@@ -139,18 +140,25 @@ async def test_system_shell_is_exposed_and_tool_loop_uses_real_result(tmp_path: 
 
     response = await ToolAgentLoop(ToolCallingLLM(), registry).run([
         LLMMessage(role="system", content="Use tools."),
-        LLMMessage(role="user", content="Nyra, pinga o Proxmox."),
+        LLMMessage(role="user", content="Kazumi, pinga o Proxmox."),
     ])
     assert executor.commands == ["ping 192.168.1.2 -n 1"]
     assert "1 ms" in response
 
 
-def test_central_network_alias_registry_resolves_baseline():
-    aliases = NetworkAliasRegistry()
+def test_central_network_alias_registry_resolves_baseline(tmp_path):
+    # Controlled aliases, never the operator's private runtime registry.
+    path = tmp_path / "aliases.json"
+    path.write_text(json.dumps({"hosts": [
+        {"id":"gateway","address":"192.168.1.1","aliases":["roteador","OpenWrt"],"remote_shell":{"enabled":True}},
+        {"id":"proxmox","address":"192.168.1.2","aliases":["Proxmox"],"remote_shell":{"enabled":True}},
+        {"id":"dc1","address":"192.168.1.10","aliases":["controlador de domínio"]}
+    ]}), encoding="utf8")
+    aliases = NetworkAliasRegistry(path)
     assert aliases.resolve("roteador").address == "192.168.1.1"
     assert aliases.resolve("Proxmox").address == "192.168.1.2"
     assert aliases.resolve("controlador de domínio").address == "192.168.1.10"
-    assert aliases.find_remote_in_text("Nyra, verifica o Proxmox.").id == "proxmox"
+    assert aliases.find_remote_in_text("Kazumi, verifica o Proxmox.").id == "proxmox"
     assert aliases.find_remote_in_text("O OpenWrt está saudável?").id == "gateway"
 
 

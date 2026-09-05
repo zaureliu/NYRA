@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiSend } from '../../runtime/api'
 import { usePolling } from '../hooks'
 import { ActionButton, Card, ErrorAlert, KeyValue, StatusBadge } from '../ui'

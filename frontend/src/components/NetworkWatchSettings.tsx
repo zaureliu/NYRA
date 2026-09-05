@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { nyraFetch } from '../runtime/backend'
+import { kazumiFetch } from '../runtime/backend'
 
 export interface NetworkSettingsValue {
   enabled: boolean; voice_alerts: boolean; desktop_alerts: boolean; quiet_mode: boolean; critical_voice_in_quiet: boolean
@@ -24,16 +24,16 @@ export function NetworkSettingsPanel({ initialSettings }: { initialSettings?: Ne
     if(initialSettings)return
     let active=true
     let retry:number|undefined
-    const load=()=>void nyraFetch('/api/network-watch/settings').then(async response=>{
+    const load=()=>void kazumiFetch('/api/network-watch/settings').then(async response=>{
       if(!response.ok)throw new Error(String(response.status))
       if(active){setSettings((await response.json() as {settings:NetworkSettingsValue}).settings);setNotice('')}
     }).catch(()=>{if(active){setNotice('Aguardando o backend para carregar a configuração.');retry=window.setTimeout(load,3000)}})
     load()
     return()=>{active=false;if(retry)window.clearTimeout(retry)}
   },[initialSettings])
-  const save=async(next=settings)=>{setSaving(true);try{const response=await nyraFetch('/api/network-watch/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(next)});setNotice(response.ok?'Configuração salva.':'Falha ao salvar a configuração.')}catch{setNotice('Backend indisponível durante o salvamento.')}finally{setSaving(false)}}
+  const save=async(next=settings)=>{setSaving(true);try{const response=await kazumiFetch('/api/network-watch/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(next)});setNotice(response.ok?'Configuração salva.':'Falha ao salvar a configuração.')}catch{setNotice('Backend indisponível durante o salvamento.')}finally{setSaving(false)}}
   const toggle=(key:keyof NetworkSettingsValue,value:boolean)=>{const next={...settings,[key]:value};setSettings(next);if(key==='enabled')void save(next)}
-  const inject=async(event:string)=>{try{const response=await nyraFetch('/api/network-watch/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event})});setNotice(response.ok?'Evento de teste registrado na timeline como simulação.':'Simulação indisponível.')}catch{setNotice('Simulação indisponível.')}}
+  const inject=async(event:string)=>{try{const response=await kazumiFetch('/api/network-watch/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event})});setNotice(response.ok?'Evento de teste registrado na timeline como simulação.':'Simulação indisponível.')}catch{setNotice('Simulação indisponível.')}}
   return <section className="network-settings-panel">
     <SettingsGroup title="MONITOR"><Toggle label="Enabled" checked={settings.enabled} onChange={value=>toggle('enabled',value)}/></SettingsGroup>
     <SettingsGroup title="NOTIFICATIONS"><Toggle label="Desktop alerts" checked={settings.desktop_alerts} onChange={value=>toggle('desktop_alerts',value)}/><Toggle label="Voice alerts" checked={settings.voice_alerts} onChange={value=>toggle('voice_alerts',value)}/><Toggle label="Quiet mode" checked={settings.quiet_mode} onChange={value=>toggle('quiet_mode',value)}/><Toggle label="Critical voice in quiet" checked={settings.critical_voice_in_quiet} onChange={value=>toggle('critical_voice_in_quiet',value)}/></SettingsGroup>

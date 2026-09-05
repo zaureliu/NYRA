@@ -28,19 +28,19 @@ from app.integrations.sentinel.models import SentinelState
 
 
 async def run(url: str, timeout: float) -> int:
-    token = str(os.environ.get("NYRA_SENTINEL_TEST_TOKEN", "") or "").strip()
+    token = str(os.environ.get("KAZUMI_SENTINEL_TEST_TOKEN", "") or "").strip()
     if len(token) < 32:
-        print("NYRA_SENTINEL_TEST_TOKEN must contain at least 32 characters", file=sys.stderr)
+        print("KAZUMI_SENTINEL_TEST_TOKEN must contain at least 32 characters", file=sys.stderr)
         return 2
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         print("Invalid --url", file=sys.stderr)
         return 2
-    with tempfile.TemporaryDirectory(prefix="nyra-sentinel-integration-", ignore_cleanup_errors=True) as temporary:
+    with tempfile.TemporaryDirectory(prefix="kazumi-sentinel-integration-", ignore_cleanup_errors=True) as temporary:
         root = Path(temporary)
         settings = Settings.from_sources(
             environment="test",
-            database_path=root / "nyra.db",
+            database_path=root / "kazumi.db",
             sentinel_watch_enabled=True,
             sentinel_auto_discovery=False,
             sentinel_host=parsed.hostname,
@@ -79,7 +79,7 @@ async def run(url: str, timeout: float) -> int:
             sent_at = time.perf_counter()
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.post(
-                    f"{url.rstrip('/')}/api/integrations/nyra/debug/events/warning",
+                    f"{url.rstrip('/')}/api/integrations/kazumi/debug/events/warning",
                     headers={"Authorization": f"Bearer {token}"},
                 )
             response.raise_for_status()
@@ -106,7 +106,7 @@ async def run(url: str, timeout: float) -> int:
                 "connected": True,
                 "state": SentinelState.CONNECTED.value,
                 "connect_ms": round(connected_ms, 2),
-                "event_to_nyra_ms": round(event_ms, 2),
+                "event_to_kazumi_ms": round(event_ms, 2),
                 "events_received": connector.status()["events_received"],
                 "history_rows": len(history),
                 "history_total_rows": total_history_rows,

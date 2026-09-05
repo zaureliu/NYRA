@@ -281,7 +281,7 @@ export function VoicePage() {
               <dt>Total do turno</dt><dd>{formatMs(num(lastTurn.request_total_ms))}</dd>
             </dl>
           ) : (
-            <div className="ops-empty">Nenhum turno medido ainda — fale com a NYRA ou envie uma mensagem.</div>
+            <div className="ops-empty">Nenhum turno medido ainda — fale com a KAZUMI ou envie uma mensagem.</div>
           )}
         </Card>
         <Card title="Último erro de pipeline" sub="Envelope seguro do backend">

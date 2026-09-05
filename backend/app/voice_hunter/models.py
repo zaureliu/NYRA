@@ -7,7 +7,13 @@ from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 
 class CandidateStatus(StrEnum):
-    SAFE_FOR_NYRA_REFERENCE = "SAFE_FOR_NYRA_REFERENCE"
+    @classmethod
+    def _missing_(cls, value):
+        if value == "SAFE_FOR_NYRA_REFERENCE":
+            return cls.SAFE_FOR_KAZUMI_REFERENCE
+        return None
+
+    SAFE_FOR_KAZUMI_REFERENCE = "SAFE_FOR_KAZUMI_REFERENCE"
     SAFE_FOR_DIRECT_TTS = "SAFE_FOR_DIRECT_TTS"
     AUDITION_ONLY = "AUDITION_ONLY"
     REJECTED = "REJECTED"
@@ -109,8 +115,8 @@ class VoiceCandidate(BaseModel):
 
     @model_validator(mode="after")
     def enforce_license_safety(self) -> "VoiceCandidate":
-        if self.status == CandidateStatus.SAFE_FOR_NYRA_REFERENCE and not self.reference_allowed:
-            raise ValueError("SAFE_FOR_NYRA_REFERENCE exige reference_allowed=true")
+        if self.status == CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE and not self.reference_allowed:
+            raise ValueError("SAFE_FOR_KAZUMI_REFERENCE exige reference_allowed=true")
         if self.status == CandidateStatus.REJECTED and self.top_candidate:
             raise ValueError("candidata rejeitada não pode ser top candidate")
         return self

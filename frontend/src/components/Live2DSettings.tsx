@@ -116,8 +116,8 @@ export function Live2DSettings() {
       <button disabled={busy || !c.enabled || value.authenticated} onClick={() => void call('authorize')}>AUTHORIZE</button>
       <button disabled={busy} onClick={() => void call('disconnect')}>DISCONNECT</button>
     </div>
-    {!value.authenticated && c.enabled && <small>Autorize “NYRA Avatar Bridge” uma vez no popup oficial do VTube Studio. Sem VTS disponível, nenhum personagem alternativo é renderizado.</small>}
+    {!value.authenticated && c.enabled && <small>Autorize “KAZUMI Avatar Bridge” uma vez no popup oficial do VTube Studio. Sem VTS disponível, nenhum personagem alternativo é renderizado.</small>}
     <small>Mouse: {tracking?.mode ?? c.mouse_tracking} · {tracking?.actual_hz ?? 0}/{tracking?.target_hz ?? 30} Hz · olhos {tracking?.eyes_available ? 'OK' : 'não encontrados'} · cabeça {tracking?.head_available ? 'OK' : 'não encontrada'}.</small>
-    <small>Hotkeys NYRA descobertos: {value.hotkeys?.filter((item) => item.name?.toUpperCase().startsWith('NYRA_')).map((item) => item.name).join(', ') || 'nenhum (mapeamento visual opcional)'}.</small>
+    <small>Hotkeys KAZUMI descobertos: {value.hotkeys?.filter((item) => item.name?.toUpperCase().startsWith('KAZUMI_')).map((item) => item.name).join(', ') || 'nenhum (mapeamento visual opcional)'}.</small>
   </div>
 }

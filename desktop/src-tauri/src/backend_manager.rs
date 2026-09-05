@@ -113,7 +113,7 @@ struct BackendStatePayload {
 fn emit_state(app: &AppHandle, state: &'static str, detail: impl Into<String>) {
     let detail = detail.into();
     let _ = app.emit(
-        "nyra-backend",
+        "kazumi-backend",
         BackendStatePayload {
             state,
             detail: detail.clone(),
@@ -134,14 +134,14 @@ fn probe_backend() -> Option<bool> {
     stream.write_all(request.as_bytes()).ok()?;
     let mut response = String::new();
     stream.read_to_string(&mut response).ok()?;
-    Some(response.contains("\"character\":\"NYRA\""))
+    Some(response.contains("\"character\":\"KAZUMI\""))
 }
 
 fn backend_exe_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     let resource_dir = app.path().resource_dir().ok()?;
     let candidate = resource_dir
         .join("backend-runtime")
-        .join("nyra-backend.exe");
+        .join("kazumi-backend.exe");
     candidate.is_file().then_some(candidate)
 }
 
@@ -157,10 +157,10 @@ fn spawn_backend(app: &AppHandle, token: &str) -> Result<Child, String> {
     let working_dir = exe.parent().map(std::path::Path::to_path_buf);
     let mut command = Command::new(&exe);
     command
-        .env("NYRA_FROZEN", "1")
-        .env("NYRA_BACKEND_OWNED", "1")
-        .env("NYRA_PARENT_PID", std::process::id().to_string())
-        .env("NYRA_OWNER_TOKEN", token);
+        .env("KAZUMI_FROZEN", "1")
+        .env("KAZUMI_BACKEND_OWNED", "1")
+        .env("KAZUMI_PARENT_PID", std::process::id().to_string())
+        .env("KAZUMI_OWNER_TOKEN", token);
     if let Some(dir) = working_dir {
         command.current_dir(dir);
     }
@@ -186,7 +186,7 @@ fn await_health(deadline: Instant) -> bool {
 
 pub fn spawn_supervisor(app: AppHandle) {
     std::thread::Builder::new()
-        .name("nyra-backend-supervisor".into())
+        .name("kazumi-backend-supervisor".into())
         .spawn(move || supervise(app))
         .map_err(|error| log::error!("supervisor thread falhou: {error}"))
         .ok();
@@ -316,7 +316,7 @@ fn request_graceful_shutdown(token: &str) -> GracefulShutdownRequest {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
     let request = format!(
-        "POST /internal/owned-shutdown HTTP/1.1\r\nHost: {BACKEND_HOST}:{BACKEND_PORT}\r\nX-NYRA-Owner-Token: {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        "POST /internal/owned-shutdown HTTP/1.1\r\nHost: {BACKEND_HOST}:{BACKEND_PORT}\r\nX-KAZUMI-Owner-Token: {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
     );
     if stream.write_all(request.as_bytes()).is_err() {
         return GracefulShutdownRequest::Failed;

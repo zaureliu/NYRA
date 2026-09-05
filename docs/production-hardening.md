@@ -1,6 +1,6 @@
 # Production Hardening V1
 
-Consolidação de confiabilidade da NYRA (spec `prompt10` Partes C-G, AL-AR, AW-AX, AY).
+Consolidação de confiabilidade da KAZUMI (spec `prompt10` Partes C-G, AL-AR, AW-AX, AY).
 Objetivo: as features que existem funcionam repetidamente, são mensuradas,
 recuperáveis e passam testes reais — não "muitas features".
 

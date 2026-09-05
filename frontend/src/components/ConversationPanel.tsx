@@ -15,7 +15,7 @@ const COMPOSER_MAX_HEIGHT = 144
 export const boundedComposerHeight = (scrollHeight: number) => Math.min(Math.max(scrollHeight, 0), COMPOSER_MAX_HEIGHT)
 export const shouldFollowConversation = (pinned: boolean, lastRole: ChatMessage['role'] | undefined, previousLength: number) => pinned || lastRole === 'user' || previousLength === 0
 
-const TOOL_TRACE_KEY = 'nyra-show-tool-trace'
+const TOOL_TRACE_KEY = 'kazumi-show-tool-trace'
 export const readToolTracePreference = (): boolean => localStorage.getItem(TOOL_TRACE_KEY) === 'true'
 
 /** Execução de tools fora do fluxo da conversa (closure §2): por padrão o chat
@@ -101,9 +101,9 @@ export function ConversationPanel({ messages, busy, recording, onSend, onTalkSta
     await onSend(value)
   }
 
-  return <section className="panel conversation-panel" aria-label="Conversa com NYRA">
+  return <section className="panel conversation-panel" aria-label="Conversa com KAZUMI">
     <header className="conversation-header">
-      <div><span className="eyebrow">CANAL LOCAL</span><h2>Conversa com NYRA</h2><p>Contexto privado, resposta em streaming e voz sincronizada.</p></div>
+      <div><span className="eyebrow">CANAL LOCAL</span><h2>Conversa com KAZUMI</h2><p>Contexto privado, resposta em streaming e voz sincronizada.</p></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <label className="conversation-trace-toggle" title="Mostrar execução de tools na conversa (modo técnico)">
           <input type="checkbox" checked={showToolTrace} onChange={toggleToolTrace} />
@@ -117,7 +117,7 @@ export function ConversationPanel({ messages, busy, recording, onSend, onTalkSta
       {messages.length === 0 && <div className="empty-state"><span className="node-symbol" aria-hidden="true">N</span><h3>Canal aberto</h3><p>Inicie uma conversa por texto ou mantenha pressionado para falar.</p></div>}
       <div className="message-flow">
         {messages.map((message) => <article key={message.id} className={`message ${message.role}`}>
-          <div className="message-meta"><strong>{message.role === 'assistant' ? 'NYRA' : 'VOCÊ'}</strong><time>{message.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</time></div>
+          <div className="message-meta"><strong>{message.role === 'assistant' ? 'KAZUMI' : 'VOCÊ'}</strong><time>{message.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</time></div>
           <p>{message.content}</p>
         </article>)}
         {approvals.map((activity) => <aside key={activity.id} className={`tool-activity ${activity.status}`} aria-label="Aprovação necessária">
@@ -135,7 +135,7 @@ export function ConversationPanel({ messages, busy, recording, onSend, onTalkSta
                 {group.label} · {group.items.length} tool{group.items.length === 1 ? '' : 's'} executada{group.items.length === 1 ? '' : 's'}{running ? ` · ${running} em execução` : ''}
                 <span className="tool-group-chevron" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
               </button>
-              {expanded && group.items.map((activity) => <aside key={activity.id} className={`tool-activity ${activity.status}`} aria-label="Atividade controlada da NYRA">
+              {expanded && group.items.map((activity) => <aside key={activity.id} className={`tool-activity ${activity.status}`} aria-label="Atividade controlada da KAZUMI">
                 <div><strong>{activity.tool === 'remote_shell' ? `REMOTE SHELL${activity.host ? ` · ${activity.host}` : ''}` : activity.tool === 'agent_run' ? 'AGENT RUN' : 'SYSTEM SHELL'}</strong><span>{activity.riskLevel}</span></div>
                 <code>{activity.command}</code>
                 <small>{activity.detail || (activity.status === 'running' ? (activity.tool === 'remote_shell' ? 'executando diagnóstico remoto confiável' : activity.tool === 'agent_run' ? 'investigação autônoma controlada' : 'executando diagnóstico local') : activity.tool === 'agent_run' ? (activity.success ? 'concluído' : 'interrompido') : `exit ${activity.exitCode ?? '—'} · ${Math.round(activity.durationMs ?? 0)} ms`)}</small>
@@ -153,7 +153,7 @@ export function ConversationPanel({ messages, busy, recording, onSend, onTalkSta
 
     <form className="composer" onSubmit={submit}>
       <div className="composer-field">
-        <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Escreva uma mensagem para a NYRA…" rows={1} aria-label="Mensagem para NYRA"
+        <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Escreva uma mensagem para a KAZUMI…" rows={1} aria-label="Mensagem para KAZUMI"
           onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }}/>
         <span className="composer-hint">Enter envia · Shift + Enter quebra linha</span>
       </div>

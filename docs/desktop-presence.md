@@ -2,7 +2,7 @@
 
 Desktop Presence é uma janela Tauri transparente e VTS-only. O modelo atualmente carregado no VTube Studio chega por Spout2; o projeto não contém personagem, renderer ou modelo Live2D embutidos. Sem frames válidos, a camada de personagem fica vazia.
 
-A janela preserva alpha, always-on-top, click-through, drag, escala, posição e menu existentes. O X apenas oculta para o tray. **Encerrar NYRA** para o tracker de mouse, conexão VTS, receiver Spout2, Presence, backend owned e desktop, sem encerrar VTube Studio, Ollama ou Voicemeeter.
+A janela preserva alpha, always-on-top, click-through, drag, escala, posição e menu existentes. O X apenas oculta para o tray. **Encerrar KAZUMI** para o tracker de mouse, conexão VTS, receiver Spout2, Presence, backend owned e desktop, sem encerrar VTube Studio, Ollama ou Voicemeeter.
 
 ## Mouse tracking
 

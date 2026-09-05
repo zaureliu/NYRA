@@ -24,7 +24,7 @@ from app.core.turn import (
     CrossTurnObservationError,
 )
 
-logger = logging.getLogger("nyra.grounding")
+logger = logging.getLogger("kazumi.grounding")
 
 READ_ONLY_RISKS = {"", "READ_ONLY"}
 

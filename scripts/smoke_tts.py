@@ -22,7 +22,7 @@ async def main() -> None:
     print(f"PROVIDER={provider.name}")
     print(f"HEALTH={await provider.health()}")
     output = await provider.synthesize(
-        "Nyra está online. Os serviços estão estáveis, por enquanto.", "focused"
+        "Kazumi está online. Os serviços estão estáveis, por enquanto.", "focused"
     )
     print(f"AUDIO={output}")
     print(f"BYTES={output.stat().st_size}")

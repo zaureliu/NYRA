@@ -3,9 +3,9 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nyra-backend"
-version = "0.5.0"
-description = "Backend local-first da assistente NYRA"
+name = "kazumi-backend"
+version = "0.6.0"
+description = "Backend local-first da assistente KAZUMI"
 requires-python = ">=3.11,<3.13"
 
 [tool.pytest.ini_options]

@@ -1,10 +1,10 @@
-# NYRA Runtime Supervisor V1 — registry de serviços persistentes.
+# KAZUMI Runtime Supervisor V1 — registry de serviços persistentes.
 # Tokens: {python} = executável Python do backend; {repo_root} = raiz do projeto.
 # IDs válidos existem somente aqui; tools runtime_* rejeitam qualquer outro valor.
 version: 1
 services:
-  - id: nyra_backend
-    display_name: NYRA Backend
+  - id: kazumi_backend
+    display_name: KAZUMI Backend
     type: PROCESS
     ownership: OWNED
     enabled: true
@@ -23,8 +23,8 @@ services:
     auto_recovery: {enabled: false}
     notes: "stop/restart desabilitados: self-restart do backend exige supervisor externo (limitação declarada, sem mecanismo confiável nesta etapa)."
 
-  - id: nyra_frontend_dev
-    display_name: NYRA Frontend (Vite dev)
+  - id: kazumi_frontend_dev
+    display_name: KAZUMI Frontend (Vite dev)
     type: PROCESS
     ownership: OWNED
     enabled: true
@@ -72,8 +72,8 @@ services:
     auto_recovery: {enabled: false}
     notes: "Bridge Sentinel existente é a fonte de verdade para detecção/estado; supervisor apenas observa."
 
-  - id: nyra_test_service
-    display_name: Serviço de Teste NYRA
+  - id: kazumi_test_service
+    display_name: Serviço de Teste KAZUMI
     type: PROCESS
     ownership: OWNED
     enabled: true

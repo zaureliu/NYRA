@@ -14,7 +14,7 @@ from app.listening.models import ListeningMode, ListeningSettingsUpdate, Utteran
 from app.listening.wake_word import TranscriptWakeWordProvider, WakeWordProvider
 
 
-logger = logging.getLogger("nyra.listening")
+logger = logging.getLogger("kazumi.listening")
 PLAYBACK_SAFETY_SECONDS = 60.0
 CLOSE_SESSION = re.compile(
     r"\b(pode parar de ouvir|encerra (?:a )?conversa|ate depois|pode ficar quieta agora)\b",

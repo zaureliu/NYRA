@@ -35,7 +35,7 @@ from .technical_profile import technical_profile, profile_reply
 from .replanning import PlanRevision, reconcile_target
 
 
-logger = logging.getLogger('nyra.hardware')
+logger = logging.getLogger('kazumi.hardware')
 BLOCKERS = {
     'DEVICE_NOT_FOUND': 'Não encontrei nenhum dispositivo compatível conectado agora na USB/serial. Quando ele aparecer, consigo identificar e continuar.',
     'AMBIGUOUS_DEVICE': 'Há mais de um dispositivo possível. Preciso de uma distinção física entre eles para não atuar na placa errada.',
@@ -69,11 +69,11 @@ def is_research_request(text):
 
 class HardwareEngineeringService:
     def __init__(self, services, state_root: Path, project_root=None):
-        project_root = Path(project_root) if project_root is not None else Path(
-            os.environ.get('NYRA_PROJECTS_ROOT') or (Path.home() / 'NYRA-Projects'))
         self.services, self.root = services, state_root
         self.config_path = state_root / 'settings.json'
         config = json.loads(self.config_path.read_text(encoding='utf8')) if self.config_path.exists() else {}
+        project_root = Path(project_root or os.environ.get('KAZUMI_PROJECTS_ROOT') or
+                            config.get('project_root') or (Path.home() / 'Kazumi-Projects'))
         self.full = config.get('full') is True
         self.research = WebResearchService(state_root / 'research-cache', provider=getattr(services, 'llm', None))
         self.research.catalog = [{'url': p.docs_url, 'title': p.name} for _, p in PROFILES]
@@ -130,7 +130,8 @@ class HardwareEngineeringService:
 
     def configure(self, full: bool):
         self.full = self.executor.full = full
-        self.config_path.write_text(json.dumps({'full': full, 'source': 'operator_api', 'at': now()}), encoding='utf8')
+        self.config_path.write_text(json.dumps({'full': full, 'project_root': str(self.projects.root),
+                                               'source': 'operator_api', 'at': now()}), encoding='utf8')
         return {'full': full}
 
     def persist(self):

@@ -30,7 +30,7 @@ from typing import Any
 from app.core.paths import DATA_ROOT
 from app.tools.remote_executor import RawRemoteResult
 
-logger = logging.getLogger("nyra.remote_password_ssh")
+logger = logging.getLogger("kazumi.remote_password_ssh")
 
 EXECUTABLE_LABEL = "asyncssh(password)"
 

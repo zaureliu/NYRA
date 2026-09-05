@@ -3,7 +3,7 @@
 Every mutation (focus/minimize/maximize/restore/move/resize/close) performs the
 operation through real Win32 APIs and then RE-READS the window state to confirm
 the effect before reporting success. Graceful close uses WM_CLOSE; force-kill
-is never attempted here (spec §39-§41). NYRA's own components are protected
+is never attempted here (spec §39-§41). KAZUMI's own components are protected
 against accidental termination (spec §281-§285).
 """
 
@@ -178,7 +178,7 @@ def window_still_alive(hwnd: int) -> bool:
 
 
 def is_own_process(pid: int) -> bool:
-    """True when pid belongs to a NYRA component that must not be killed."""
+    """True when pid belongs to a KAZUMI component that must not be killed."""
     import os
 
     if pid == os.getpid():
@@ -191,7 +191,7 @@ def is_own_process(pid: int) -> bool:
         exe = (process.exe() or "").casefold()
     except Exception:  # noqa: BLE001
         return False
-    if "nyra" in name or "nyra" in exe:
+    if "kazumi" in name or "kazumi" in exe:
         return True
     try:
         current_parent = psutil.Process(os.getpid()).parent()

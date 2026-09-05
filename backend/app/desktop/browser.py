@@ -1,6 +1,6 @@
 """Browser control adapter via Chrome DevTools Protocol (spec §71-§81).
 
-NYRA manages its own browser instance with a dedicated profile so the
+KAZUMI manages its own browser instance with a dedicated profile so the
 --remote-debugging-port flag reliably applies; attaching to an arbitrary
 already-running browser is not attempted (the OS reuses the existing process
 and silently drops the flag). When CDP is unavailable the tools answer
@@ -24,7 +24,7 @@ import httpx
 
 from app.desktop.control import operation_result
 
-logger = logging.getLogger("nyra.desktop.browser")
+logger = logging.getLogger("kazumi.desktop.browser")
 
 _CDP_BASE_PORT = 9333
 _CDP_PORT_RANGE = 20

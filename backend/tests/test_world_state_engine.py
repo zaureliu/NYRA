@@ -125,7 +125,7 @@ async def test_verified_artifact_update_and_unverified_rejection(tmp_path):
     clock = Clock()
     engine = await make_engine(tmp_path, clock)
     artifact = {
-        "artifact_id": "artifact_1", "path": r"E:\nyra\report.log",
+        "artifact_id": "artifact_1", "path": r"E:\kazumi\report.log",
         "display_name": "report.log", "kind": "log", "host_scope": "local",
         "exists_state": "verified",
     }
@@ -224,7 +224,7 @@ async def test_browser_navigation_and_assistant_activity_state(tmp_path):
     engine = await make_engine(tmp_path, clock)
     await engine.update_from_event(event(
         clock, EventType.COMPUTER_BROWSER_NAVIGATION,
-        browser="chrome", tab_id="tab-1", title="NYRA",
+        browser="chrome", tab_id="tab-1", title="KAZUMI",
         url="https://example.test/docs",
     ))
     await engine.update_from_event(event(clock, EventType.TTS_STARTED))
@@ -281,12 +281,12 @@ async def test_restart_persists_only_selected_references(tmp_path):
     await first.start()
     first.ingest_perception_snapshot({
         "foreground_window": {"hwnd": 1, "title": "Discord", "process": "Discord.exe"},
-        "windows": [], "recent_files": [{"path": r"E:\nyra\README.md", "mtime": 1, "size": 2}],
+        "windows": [], "recent_files": [{"path": r"E:\kazumi\README.md", "mtime": 1, "size": 2}],
     })
     first.synchronize_authorities(
         tasks=[{"task_id": "task_1", "objective": "Release", "state": "RUNNING"}],
         monitors=[{"monitor_id": "mon_1", "objective": "VM", "status": "ACTIVE"}],
-        artifacts=[{"artifact_id": "a1", "path": r"E:\nyra\report.txt", "exists_state": "verified"}],
+        artifacts=[{"artifact_id": "a1", "path": r"E:\kazumi\report.txt", "exists_state": "verified"}],
     )
     await first.stop()
 

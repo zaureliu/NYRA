@@ -30,13 +30,13 @@ Executada no ambiente descrito em `environment-report.md`, em 2026-08-19.
 
 ## Primeira conversa real
 
-Entrada: `Nyra, você está online?`
+Entrada: `Kazumi, você está online?`
 
 Ollama respondeu com HTTP 200; pergunta e resposta foram persistidas como short-term. A resposta passou pelo Kokoro e gerou WAV. O modelo emitiu um emoji nesse primeiro turno; o system prompt foi ajustado depois para evitá-los por padrão.
 
 ## STT real
 
-Um WAV pt-BR gerado pelo TTS foi enviado ao mesmo endpoint usado pelo microfone web. faster-whisper retornou texto, idioma `pt`, probabilidade 1,0 e duração de 3,73 s. O modelo `tiny` transcreveu “Nyra” como “Nira”; modelos maiores podem melhorar nomes próprios ao custo de RAM/latência. Captura física depende de o operador conceder permissão de microfone ao navegador, por isso não pode ser acionada silenciosamente pelo setup.
+Um WAV pt-BR gerado pelo TTS foi enviado ao mesmo endpoint usado pelo microfone web. faster-whisper retornou texto, idioma `pt`, probabilidade 1,0 e duração de 3,73 s. O modelo `tiny` transcreveu “Kazumi” como “Nira”; modelos maiores podem melhorar nomes próprios ao custo de RAM/latência. Captura física depende de o operador conceder permissão de microfone ao navegador, por isso não pode ser acionada silenciosamente pelo setup.
 
 ## Correção relevante
 

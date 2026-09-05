@@ -91,7 +91,7 @@ class OpenLoopEngine:
             return
         await self.apply_stale_policy()
         await self.event_bus.subscribe(self.observe_event)
-        self._runner = asyncio.create_task(self._event_loop(), name="nyra-open-loops-events")
+        self._runner = asyncio.create_task(self._event_loop(), name="kazumi-open-loops-events")
         self._started = True
         await self._publish_summary()
 
@@ -732,7 +732,7 @@ class OpenLoopEngine:
             title = str(payload.get("title") or f"SelfDev {issue_id}")[:240]
             loop, _ = await self.create(OpenLoopCreate(
                 title=title, type=OpenLoopType.BLOCKED_WORK, state=OpenLoopState.OPEN,
-                goal=title, related_task=[relation], related_project="NYRA",
+                goal=title, related_task=[relation], related_project="KAZUMI",
                 next_possible_action="Seguir o lifecycle SelfDev com validação e rollback.",
                 provenance={"source": "selfdev", "structured": True, "issue_id": issue_id},
             ), actor="selfdev")

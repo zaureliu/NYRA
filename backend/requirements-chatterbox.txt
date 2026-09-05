@@ -1,3 +1,3 @@
-# Isolated because Chatterbox pins torch/numpy versions that differ from NYRA core.
+# Isolated because Chatterbox pins torch/numpy versions that differ from KAZUMI core.
 chatterbox-tts==0.1.7
 soundfile>=0.12,<1

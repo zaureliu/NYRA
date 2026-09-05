@@ -1,4 +1,4 @@
-"""nyra-full: Universal Operator — intents, registry, dedup, janelas."""
+"""kazumi-full: Universal Operator — intents, registry, dedup, janelas."""
 from __future__ import annotations
 
 import pytest
@@ -25,7 +25,7 @@ from app.desktop.universal_registry import UniversalAppEntry, UniversalAppRegist
         ("traz o spotify para frente", UniversalAction.FOCUS_APP, "spotify"),
         ("vai pro spotify", UniversalAction.FOCUS_APP, "spotify"),
         ("foca o code", UniversalAction.FOCUS_APP, "code"),
-        ("Nyra, abre o bloco de notas", UniversalAction.OPEN_APP, "bloco de notas"),
+        ("Kazumi, abre o bloco de notas", UniversalAction.OPEN_APP, "bloco de notas"),
         ("abre a pasta downloads", UniversalAction.OPEN_FOLDER, "downloads"),
         ("abre esse arquivo", UniversalAction.OPEN_FILE, "esse arquivo"),
     ],

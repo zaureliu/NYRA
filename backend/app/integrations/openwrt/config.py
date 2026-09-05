@@ -32,12 +32,12 @@ from app.core.runtime_settings import load_runtime_settings
 from app.homelab.adapters.base import SshAdapterError
 from app.integrations.base import IntegrationError
 
-logger = logging.getLogger("nyra.openwrt_config")
+logger = logging.getLogger("kazumi.openwrt_config")
 
 CONFIG_PATH = DATA_ROOT / "openwrt-config.json"
 _PASSWORD_CREDENTIAL = "openwrt_ssh_password"
-_STALE_AFTER_SECONDS = float(os.environ.get("NYRA_OPENWRT_STATE_STALE_SECONDS", "900"))
-_TEST_TIMEOUT_SECONDS = float(os.environ.get("NYRA_OPENWRT_TEST_TIMEOUT_SECONDS", "30"))
+_STALE_AFTER_SECONDS = float(os.environ.get("KAZUMI_OPENWRT_STATE_STALE_SECONDS", "900"))
+_TEST_TIMEOUT_SECONDS = float(os.environ.get("KAZUMI_OPENWRT_TEST_TIMEOUT_SECONDS", "30"))
 
 OPENWRT_STATES = (
     "DISABLED", "UNCONFIGURED", "AUTH_FAILED", "READY",

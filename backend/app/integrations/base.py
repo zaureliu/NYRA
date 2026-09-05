@@ -52,9 +52,9 @@ def require_secure_credential_transport(base_url: str) -> str:
 
 
 class RemoteHostAdapter:
-    """Abstract remote-management surface for future NYRA Remote Node backends.
+    """Abstract remote-management surface for future KAZUMI Remote Node backends.
 
-    V1 ships SSH-based adapters only; WinRM and a dedicated NYRA Remote Node
+    V1 ships SSH-based adapters only; WinRM and a dedicated KAZUMI Remote Node
     remain explicit capability gaps that must fail honestly instead of being
     simulated.
     """

@@ -44,13 +44,13 @@ export function SettingsPageV3() {
       }
       setNotice(
         action === 'shutdown'
-          ? 'Encerramento completo solicitado. A NYRA vai desligar todos os componentes dela.'
+          ? 'Encerramento completo solicitado. A KAZUMI vai desligar todos os componentes dela.'
           : 'Reinício completo solicitado. Uma nova sessão vai iniciar após o encerramento validado.',
       )
       setPowerConfirm(null)
       setPowerApproval(null)
       if (action === 'shutdown' && '__TAURI_INTERNALS__' in window) {
-        await invoke('quit_nyra')
+        await invoke('quit_kazumi')
       }
     } catch (issue) {
       setActionError(issue instanceof Error ? issue.message : String(issue))
@@ -106,7 +106,7 @@ export function SettingsPageV3() {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = 'nyra-config-export.json'
+      anchor.download = 'kazumi-config-export.json'
       anchor.click()
       URL.revokeObjectURL(url)
       setNotice('Export gerado — segredos aparecem apenas como configured true/false.')
@@ -181,12 +181,12 @@ export function SettingsPageV3() {
       )}
 
       {activeCategory === 'general' && (
-        <Card title="Energia" sub="Encerra ou reinicia o runtime completo da NYRA — não apenas esta página">
+        <Card title="Energia" sub="Encerra ou reinicia o runtime completo da KAZUMI — não apenas esta página">
           {powerConfirm && (
             <div className="ops-alert warn" style={{ marginBottom: 10 }}>
               {powerConfirm === 'shutdown'
-                ? 'Encerrar NYRA completamente? Todos os processos dela serão finalizados e a porta 8000 liberada.'
-                : 'Reiniciar NYRA completamente? A sessão atual termina e uma nova inicia com novo session_id.'}
+                ? 'Encerrar KAZUMI completamente? Todos os processos dela serão finalizados e a porta 8000 liberada.'
+                : 'Reiniciar KAZUMI completamente? A sessão atual termina e uma nova inicia com novo session_id.'}
               {powerApproval && <div style={{ marginTop: 6 }}>Approval crítico pendente: confirme para consumir uma única vez.</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <ActionButton small variant="danger" busy={busyKey === `__power_${powerConfirm}`}
@@ -199,10 +199,10 @@ export function SettingsPageV3() {
           )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <ActionButton small variant="danger" onClick={() => setPowerConfirm('shutdown')}>
-              Encerrar NYRA completamente
+              Encerrar KAZUMI completamente
             </ActionButton>
             <ActionButton small onClick={() => setPowerConfirm('restart')}>
-              Reiniciar NYRA completamente
+              Reiniciar KAZUMI completamente
             </ActionButton>
           </div>
           <div className="ops-hint" style={{ marginTop: 8 }}>

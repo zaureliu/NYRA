@@ -12,12 +12,12 @@ from app.usb.models import UsbDeviceObservation, UsbDeviceRecord, UsbHistoryEven
 
 
 def default_usb_storage_root() -> Path:
-    override = os.environ.get("NYRA_USB_DATA_HOME")
+    override = os.environ.get("KAZUMI_USB_DATA_HOME")
     if override:
         return Path(override)
     local = os.environ.get("LOCALAPPDATA")
     base = Path(local) if local else Path.home() / "AppData" / "Local"
-    return base / "NYRA" / "usb-devices"
+    return base / "KAZUMI" / "usb-devices"
 
 
 class UsbDeviceRegistry:

@@ -290,8 +290,8 @@ class BrainManager(LLMProvider):
                 raise ValueError("Modelo não permitido no Brain Lab")
         system_prompt = (IDENTITY_ROOT / "system_prompt.md").read_text(encoding="utf-8")
         prompts = {
-            "persona": "Nyra, você está online? Responda em no máximo duas frases.",
-            "sentinel": "O Sentinel perdeu comunicação com o OpenWrt Remote Node. Responda como NYRA, sem inventar a causa.",
+            "persona": "Kazumi, você está online? Responda em no máximo duas frases.",
+            "sentinel": "O Sentinel perdeu comunicação com o OpenWrt Remote Node. Responda como KAZUMI, sem inventar a causa.",
             "network": "A latência subiu de 18 ms para 160 ms e houve 8% de perda por 40 segundos. Avalie objetivamente.",
             "personality": "DNS está funcionando normalmente hoje.",
             "technical": "Explique rapidamente como Proxmox, Docker, Nginx e Cloudflare Tunnel poderiam fazer parte da mesma infraestrutura.",

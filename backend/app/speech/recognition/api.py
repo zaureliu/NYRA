@@ -223,8 +223,8 @@ async def stream(websocket: WebSocket):
                     None, transcription=transcript, speech_end=time.perf_counter())
             await send({"type": "result", "result": result})
 
-        completion = asyncio.create_task(complete(), name="nyra-stt-complete")
-        disconnect = asyncio.create_task(websocket.receive(), name="nyra-stt-disconnect")
+        completion = asyncio.create_task(complete(), name="kazumi-stt-complete")
+        disconnect = asyncio.create_task(websocket.receive(), name="kazumi-stt-disconnect")
         done, _ = await asyncio.wait([completion, disconnect], timeout=180, return_when=asyncio.FIRST_COMPLETED)
         if completion in done:
             await completion

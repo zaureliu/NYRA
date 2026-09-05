@@ -24,7 +24,7 @@ from typing import Any, Callable
 
 from app.core.paths import DATA_ROOT, PROJECT_ROOT
 
-logger = logging.getLogger("nyra.health")
+logger = logging.getLogger("kazumi.health")
 
 STALE_AFTER_SECONDS = 180.0
 WATCHDOG_STALE_SECONDS = 30.0

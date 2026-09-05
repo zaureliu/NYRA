@@ -14,11 +14,11 @@ from app.core.turn import PipelineFailure, TurnContext, TurnError, new_turn_id
 from app.events import Event, EventBus, EventType
 from app.listening.models import ListeningMode
 from app.natural_conversation.session import ConversationSession
-from app.speech.tts_identity import NYRA_IDENTITY_ID, NYRA_VOICE_ID
+from app.speech.tts_identity import KAZUMI_IDENTITY_ID, KAZUMI_VOICE_ID
 
 
 TTSSwitcher = Callable[[str, str, float], Awaitable[dict[str, Any]]]
-logger = logging.getLogger("nyra.conversation.engine")
+logger = logging.getLogger("kazumi.conversation.engine")
 
 
 def _voice_stage_status(*, stt: str, decision: str, llm: str, tts: str, playback: str) -> dict[str, str]:
@@ -341,7 +341,7 @@ class ConversationEngine:
             finally:
                 value.ended_at = time.time()
 
-        task = asyncio.create_task(respond(), name=f"nyra-voice-{turn.turn_id}")
+        task = asyncio.create_task(respond(), name=f"kazumi-voice-{turn.turn_id}")
         self._voice_tasks.add(task)
         task.add_done_callback(self._voice_tasks.discard)
         # STT transport can now close. A slow model/tool/TTS never owns capture.
@@ -361,7 +361,7 @@ class ConversationEngine:
         updates = {
             "microphone": value.microphone,
             "speaker": value.speaker,
-            "tts_voice": NYRA_VOICE_ID,
+            "tts_voice": KAZUMI_VOICE_ID,
             "tts_voice_identity_version": "ava-v1",
             "tts_speaking_rate": value.speech_speed,
             "audio_volume": value.volume,
@@ -387,7 +387,7 @@ class ConversationEngine:
         )
         switched = None
         if self._tts_switcher:
-            switched = await self._tts_switcher(self.settings.tts_provider, NYRA_VOICE_ID, value.speech_speed)
+            switched = await self._tts_switcher(self.settings.tts_provider, KAZUMI_VOICE_ID, value.speech_speed)
         return {"settings": self.audio_settings(), "tts": switched}
 
     async def transition(self, state: ConversationState, **safe: Any) -> None:
@@ -415,7 +415,7 @@ class ConversationEngine:
                 index = int(event.payload.get("index", 0))
                 value.chunks[index] = str(event.payload.get("speech_text") or event.payload.get("display_text") or "")
                 value.emotion = str(event.payload.get("state") or value.emotion)
-            elif event.type == EventType.NYRA_RESPONSE:
+            elif event.type == EventType.KAZUMI_RESPONSE:
                 value.generated_text = str(event.payload.get("text") or value.generated_text)
             elif event.type == EventType.SPEECH_CANCELLED:
                 self.session.interrupt(value.response_id)
@@ -455,7 +455,7 @@ class ConversationEngine:
                     else "DEGRADED" if bool(getattr(self.orchestrator.tts, "last_used_fallback", False))
                     else "READY"
                 ),
-                "identity": NYRA_IDENTITY_ID,
+                "identity": KAZUMI_IDENTITY_ID,
                 "emotion_mode": self.settings.voice_emotion_mode,
                 "expressiveness": self.settings.voice_expressiveness,
                 "emotion_engine_supported": self.orchestrator.tts.capabilities().supports_emotion,

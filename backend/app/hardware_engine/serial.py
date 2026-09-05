@@ -16,6 +16,7 @@ class SerialRuntime:
         self.locks = {}
         self.closed = False
         self.last = {}
+        self.protocols = {}
 
     async def open(self, device_id, baud=115200):
         device = await self.discovery.resolve(device_id=device_id, physical=True)
@@ -49,34 +50,42 @@ class SerialRuntime:
                 chunks.append({'at': now(), 'text': line.decode('utf8', errors='replace').strip()[:512]})
         return {'source': 'serial_read', 'device_id': device_id, 'observed_at': now(), 'lines': chunks, 'bytes': size}
 
-    async def request(self, device_id, command='STATUS', *, board_id=None, timeout=3):
+    async def request(self, device_id, command='STATUS', *, board_id=None, timeout=3, _legacy=False):
         if not re.fullmatch(r'STATUS|LED ON|LED OFF|LED BLINK (?:[1-9]\d{2,4})', command):
             raise HardwareError('SERIAL_COMMAND_NOT_ALLOWED')
+        if command != 'STATUS' and device_id not in self.protocols:
+            await self.request(device_id, 'STATUS', board_id=board_id, timeout=timeout)
+        protocol = self.protocols.get(device_id, 'nyra' if _legacy else 'kazumi')
+        wire = 'NYRA1' if protocol == 'nyra' else 'KAZUMI1'
         lock = self.locks.setdefault(device_id, asyncio.Lock())
         async with lock:
             handle = await self.open(device_id)
             nonce = secrets.token_hex(8)
             await asyncio.to_thread(handle.reset_input_buffer)
-            await asyncio.to_thread(handle.write, f'NYRA1 {nonce} {command}\n'.encode('ascii'))
+            await asyncio.to_thread(handle.write, f'{wire} {nonce} {command}\n'.encode('ascii'))
             deadline = time.monotonic() + min(timeout, 10)
             size = 0
             while time.monotonic() < deadline and size < 16384 and not self.closed:
                 line = await asyncio.to_thread(handle.read_until, b'\n', 1024)
                 size += len(line)
-                prefix = f'NYRA1 {nonce} '.encode()
+                prefix = f'{wire} {nonce} '.encode()
                 if not line.startswith(prefix):
                     continue
                 try:
                     payload = json.loads(line[len(prefix):])
                 except (ValueError, UnicodeError):
                     continue
-                if (payload.get('protocol') != 'nyra/1' or payload.get('nonce') != nonce
+                if (payload.get('protocol') != protocol + '/1' or payload.get('nonce') != nonce
                         or (board_id and payload.get('board') != board_id)):
                     continue
+                self.protocols[device_id] = protocol
                 self.last = {'success': True, 'device_id': device_id, 'source': 'firmware_ack',
                              'observed_at': now(), 'simulated': bool(self.factory), 'data': payload}
                 return self.last
-            raise HardwareError('SERIAL_PROTOCOL_UNAVAILABLE')
+        # Only a read-only probe is retried, never an effectful command.
+        if command == 'STATUS' and not _legacy and device_id not in self.protocols:
+            return await self.request(device_id, command, board_id=board_id, timeout=timeout, _legacy=True)
+        raise HardwareError('SERIAL_PROTOCOL_UNAVAILABLE')
 
     async def control(self, device_id, intent, profile):
         if profile.led_pin is None or not profile.led_source:

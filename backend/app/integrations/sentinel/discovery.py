@@ -57,7 +57,7 @@ class SentinelDiscovery:
             if not await asyncio.to_thread(self._is_local_url, base_url):
                 return None
             async with httpx.AsyncClient(timeout=self.timeout_seconds, follow_redirects=False) as client:
-                response = await client.get(f"{base_url.rstrip('/')}/api/integrations/nyra/health")
+                response = await client.get(f"{base_url.rstrip('/')}/api/integrations/kazumi/health")
             if response.status_code != 200 or len(response.content) > 32 * 1024:
                 return None
             fingerprint = SentinelFingerprint.model_validate(response.json())

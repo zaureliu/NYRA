@@ -119,21 +119,21 @@ manuais dependentes do equipamento.
 ## Configuração
 
 ```env
-NYRA_OLLAMA_PRELOAD=true
-NYRA_OLLAMA_KEEP_ALIVE=1h
-NYRA_OLLAMA_WARMUP=true
-NYRA_OLLAMA_CONTEXT_SIZE=8192
-NYRA_OLLAMA_PRELOAD_TIMEOUT_SECONDS=300
-NYRA_OLLAMA_RECOVERY_INTERVAL_SECONDS=10
-NYRA_OLLAMA_UNLOAD_PREVIOUS_MODEL=true
+KAZUMI_OLLAMA_PRELOAD=true
+KAZUMI_OLLAMA_KEEP_ALIVE=1h
+KAZUMI_OLLAMA_WARMUP=true
+KAZUMI_OLLAMA_CONTEXT_SIZE=8192
+KAZUMI_OLLAMA_PRELOAD_TIMEOUT_SECONDS=300
+KAZUMI_OLLAMA_RECOVERY_INTERVAL_SECONDS=10
+KAZUMI_OLLAMA_UNLOAD_PREVIOUS_MODEL=true
 
-NYRA_CONVERSATION_ENGINE=true
-NYRA_VOICE_BARGE_IN=true
-NYRA_VOICE_STREAM_TTS=true
-NYRA_STT_BEAM_SIZE=1
-NYRA_STT_CPU_THREADS=4
-NYRA_STT_WORKERS=1
-NYRA_TTS_FALLBACK_PROVIDER=pyttsx3
+KAZUMI_CONVERSATION_ENGINE=true
+KAZUMI_VOICE_BARGE_IN=true
+KAZUMI_VOICE_STREAM_TTS=true
+KAZUMI_STT_BEAM_SIZE=1
+KAZUMI_STT_CPU_THREADS=4
+KAZUMI_STT_WORKERS=1
+KAZUMI_TTS_FALLBACK_PROVIDER=pyttsx3
 ```
 
 Preferências visíveis são persistidas pelo backend em `data/settings-v33.json`.
@@ -143,7 +143,7 @@ Segredos não fazem parte do schema de áudio.
 ## Troubleshooting
 
 - `OLLAMA_OFFLINE`: confirme o servidor em `/api/tags`; o manager tentará recuperar.
-- `OLLAMA_ERROR`: consulte `nyra.ollama_warm`; readiness não foi inferida do HTTP apenas.
+- `OLLAMA_ERROR`: consulte `kazumi.ollama_warm`; readiness não foi inferida do HTTP apenas.
 - STT `Loading`: o backend continua online enquanto o modelo é preparado.
 - `PRIMARY_TTS_FAILED`: verifique os arquivos Kokoro; o log indicará se SAPI foi usado.
 - Microfone removido: a UI volta a `default`, persiste o fallback e informa o operador.

@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart'
 import { usePresenceSettings } from './presenceSettings'
 import { useAudioLipSync } from '../hooks/useAudioLipSync'
-import { useNyraSocket, type NyraEvent } from '../hooks/useNyraSocket'
+import { useKazumiSocket, type KazumiEvent } from '../hooks/useKazumiSocket'
 import { usePushToTalk } from '../hooks/usePushToTalk'
 import type { STTResult } from '../runtime/stt'
 import { useAlwaysListening } from '../hooks/useAlwaysListening'
@@ -74,13 +74,13 @@ export function DesktopApp() {
   const turnFilter = useRef(new TurnFilter())
   const pendingTurnRequests = useRef(0)
 
-  const onEvent = useCallback((event: NyraEvent) => {
+  const onEvent = useCallback((event: KazumiEvent) => {
     const eventTurnId = extractTurnId(event.payload)
     if (adoptInputTurn(turnFilter.current, event.type, eventTurnId)) {
       pendingTurnRequests.current = Math.max(0, pendingTurnRequests.current - 1)
     }
     // Turn isolation: bubble/áudio ignoram eventos tardios de turnos encerrados.
-    if (event.type === 'NYRA_RESPONSE' && !turnFilter.current.accept(eventTurnId)) return
+    if (event.type === 'KAZUMI_RESPONSE' && !turnFilter.current.accept(eventTurnId)) return
     if (event.type === 'TTS_CHUNK_FINISHED' && !turnFilter.current.accept(eventTurnId)) return
     if (event.type === 'TTS_PCM_CHUNK') {
       if (!turnFilter.current.accept(eventTurnId)) return
@@ -89,7 +89,7 @@ export function DesktopApp() {
         sentenceIndex: Number(event.payload.index), final: Boolean(event.payload.final)})
     }
     if (event.type === 'TTS_FINISHED' && event.payload.audio_url && event.payload.source !== 'proactive_presence' && !turnFilter.current.accept(eventTurnId)) return
-    if (event.type === 'NYRA_RESPONSE' && visual.speechBubble) {
+    if (event.type === 'KAZUMI_RESPONSE' && visual.speechBubble) {
       const value = String(event.payload.display_text ?? event.payload.text ?? '')
       setBubble(value.length > 220 ? `${value.slice(0, 217)}…` : value)
     }
@@ -141,7 +141,7 @@ export function DesktopApp() {
     }
   }, [play, playbackGuard, stopPlayback, streaming, visual.speechBubble])
 
-  useNyraSocket({
+  useKazumiSocket({
     setStatus: useCallback(setStatus, []),
     setState: useCallback(setState, []),
     setConnected: useCallback(setConnected, []),
@@ -296,7 +296,7 @@ export function DesktopApp() {
 
   useEffect(() => {
     let unlisten = () => {}
-    void listen<string>('nyra-desktop', (event) => {
+    void listen<string>('kazumi-desktop', (event) => {
       if (event.payload === 'talk-menu') setMenu(true)
       if (event.payload === 'settings') { setMenu(false); setSettingsOpen(true) }
       if (event.payload === 'talk-start') void startTalking()
@@ -343,12 +343,12 @@ export function DesktopApp() {
   } as CSSProperties : undefined
 
   return <main className={`desktop-presence state-${state} status-${status.toLowerCase()}`} data-transparent="true" data-live2d={live2dExternal} data-global-cursor={globalCursorAvailable ? 'available' : 'unavailable'}>
-    {bubble && visual.speechBubble && <aside className="speech-bubble"><strong>NYRA</strong>{bubble}</aside>}
-    <button className="drag-region" aria-label="Arrastar NYRA" onPointerDown={() => void getCurrentWindow().startDragging()} />
-    <button className="avatar-button" aria-label="Abrir conversa com NYRA" onClick={() => { setSettingsOpen(false); setMenu((value) => !value) }} />
+    {bubble && visual.speechBubble && <aside className="speech-bubble"><strong>KAZUMI</strong>{bubble}</aside>}
+    <button className="drag-region" aria-label="Arrastar KAZUMI" onPointerDown={() => void getCurrentWindow().startDragging()} />
+    <button className="avatar-button" aria-label="Abrir conversa com KAZUMI" onClick={() => { setSettingsOpen(false); setMenu((value) => !value) }} />
     {(!connected || showOnline) && <div className={`presence-status ${connected ? 'online' : 'offline'}`}><i/>{connected ? 'ONLINE' : 'OFFLINE'}</div>}
     {(always.config?.privacy_indicator ?? true) && <div className={`mic-indicator ${always.status?.muted || !always.micActive ? 'off' : always.processing ? 'processing' : always.listening ? 'listening' : 'on'}`}><i/>MIC {always.status?.muted ? 'MUTED' : always.micActive ? (always.processing ? 'PROCESSING' : always.listening ? 'LISTENING' : 'ON') : microphoneStatusLabel(always.microphoneAvailability, false)}</div>}
-    {menu && <section className="context-card"><textarea autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} placeholder="Digite para a NYRA..."/><div><button onClick={() => void send()}>ENVIAR</button><button onClick={() => void invoke('open_dashboard')}>PAINEL</button><button onClick={() => void getCurrentWindow().hide()}>OCULTAR</button></div></section>}
+    {menu && <section className="context-card"><textarea autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} placeholder="Digite para a KAZUMI..."/><div><button onClick={() => void send()}>ENVIAR</button><button onClick={() => void invoke('open_dashboard')}>PAINEL</button><button onClick={() => void getCurrentWindow().hide()}>OCULTAR</button></div></section>}
     {settingsOpen && <section ref={settingsRef} className="context-card desktop-settings" style={settingsStyle} data-horizontal={settingsLayout?.horizontal ?? 'start'} data-vertical={settingsLayout?.vertical ?? 'end'}><strong>DESKTOP PRESENCE · VTUBE STUDIO</strong>
       <label>Escala<select value={visual.overlayScale} onChange={(e) => setVisual({ ...visual, overlayScale: Number(e.target.value) })}>{[.5,.75,1,1.25,1.5].map((value) => <option key={value} value={value}>{Math.round(value*100)}%</option>)}</select></label>
       <label>Modelo<select value="current" disabled><option value="current">Modelo atual do VTube Studio</option></select></label>

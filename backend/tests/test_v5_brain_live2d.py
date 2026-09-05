@@ -18,12 +18,12 @@ from app.llm.ollama import OllamaProvider
 def test_vts_protocol_and_parameter_discovery_do_not_invent_ids():
     message=request("APIStateRequest")
     assert message["apiName"]=="VTubeStudioPublicAPI" and len(message["requestID"])<=64
-    available=discover_ids({"defaultParameters":[{"name":"FaceAngleX"},{"name":"MouthOpen"}],"customParameters":[{"name":"NyraThinking"}]})
+    available=discover_ids({"defaultParameters":[{"name":"FaceAngleX"},{"name":"MouthOpen"}],"customParameters":[{"name":"KazumiThinking"}]})
     mapping=resolve_mapping(available)
     assert mapping["head_x"]==["FaceAngleX"] and mapping["mouth_open"]==["MouthOpen"]
     assert "ParamAngleX" not in mapping["head_x"]
     values=parameter_values(AvatarState(head_x=.5,mouth_open=.4,neural_link="thinking"),mapping)
-    assert {item["id"] for item in values}=={"FaceAngleX","MouthOpen","NyraThinking"}
+    assert {item["id"] for item in values}=={"FaceAngleX","MouthOpen","KazumiThinking"}
 
 
 def test_vts_discovers_standard_eye_and_head_cursor_parameters():
@@ -63,7 +63,7 @@ def test_presence_defaults_to_vts_only_with_tracking_and_migrates_legacy_config(
 
 def test_vts_state_hotkeys_are_optional_and_presence_health_is_recorded():
     provider = VTubeStudioAvatarProvider(VTubeStudioConfig(state_hotkeys={"thinking": "FOCUS"}))
-    provider.hotkeys = [{"hotkeyID": "h1", "name": "FOCUS"}, {"hotkeyID": "h2", "name": "NYRA_ALERT"}]
+    provider.hotkeys = [{"hotkeyID": "h1", "name": "FOCUS"}, {"hotkeyID": "h2", "name": "KAZUMI_ALERT"}]
     assert provider._resolve_hotkey("thinking") == "h1"
     assert provider._resolve_hotkey("alert") == "h2"
     assert provider._resolve_hotkey("speaking") is None
@@ -137,7 +137,7 @@ async def test_vts_stale_token_is_renewed_once_during_automatic_startup(monkeypa
         async def connect(self): pass
         async def close(self): self.socket=None
         async def call(self,kind,data=None):
-            if kind=="CurrentModelRequest": return {"data":{"modelLoaded":True,"modelName":"NYRA Live2D","modelID":"model-1"}}
+            if kind=="CurrentModelRequest": return {"data":{"modelLoaded":True,"modelName":"KAZUMI Live2D","modelID":"model-1"}}
             if kind=="InputParameterListRequest": return {"data":{"defaultParameters":[{"name":"MouthOpen"}]}}
             if kind=="HotkeysInCurrentModelRequest": return {"data":{"availableHotkeys":[]}}
             return {"data":{}}
@@ -161,9 +161,13 @@ async def test_vts_stale_token_is_renewed_once_during_automatic_startup(monkeypa
     assert provider._authorization_requested is False
 
 
-def test_vts_presence_logs_initial_active_unavailable_and_recovery(caplog):
+def test_vts_presence_logs_initial_active_unavailable_and_recovery(caplog, monkeypatch):
     provider=VTubeStudioAvatarProvider(VTubeStudioConfig())
-    caplog.set_level(logging.INFO,logger="nyra")
+    monkeypatch.setattr(logging.getLogger("kazumi"), "disabled", False)
+    # Production logging intentionally disables root propagation. Isolate this
+    # capture assertion from previous tests that initialized runtime logging.
+    monkeypatch.setattr(logging.getLogger("kazumi"), "propagate", True)
+    caplog.set_level(logging.INFO,logger="kazumi")
 
     provider.record_presence({"state":"VTS_CONNECTING","alpha":"UNKNOWN","vts_active":False,"sender":"VTubeStudioSpout"})
     provider.record_presence({"state":"VTS_ACTIVE","alpha":"VALID","vts_active":True,"sender":"VTubeStudioSpout"})

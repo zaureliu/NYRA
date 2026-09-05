@@ -1,7 +1,7 @@
 {
   "version": 5,
   "rules": [
-    {"canonical":"NYRA","aliases":["Nyra"],"category":"ai","spoken_form":"Naira"},
+    {"canonical":"Kazumi","aliases":["KAZUMI"],"category":"ai","spoken_form":"Kazumi"},
     {"canonical":"Utamo Sentinel","category":"infrastructure","priority":10,"spoken_form":"Utâmo Sentinél"},
     {"canonical":"Sentinel","category":"infrastructure","spoken_form":"Sentinél"},
     {"canonical":"GitHub","aliases":["github"],"category":"development","spoken_form":"GitHub"},

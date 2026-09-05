@@ -41,7 +41,7 @@ _NEXT_ACTION = re.compile(
     re.IGNORECASE,
 )
 _LEADING_CONVERSATION = re.compile(
-    r"^(?:nyra|ei\s+nyra|oi\s+nyra)\s*[,!:.]?\s*", re.IGNORECASE,
+    r"^(?:kazumi|ei\s+kazumi|oi\s+kazumi)\s*[,!:.]?\s*", re.IGNORECASE,
 )
 _TRAILING_CONTEXT = re.compile(
     r"\s+(?:nele|nela|nisso|ali|no\s+canal\s+aberto|na\s+janela\s+aberta|"

@@ -30,7 +30,7 @@ from app.tools.shell_executor import decode_output
 from app.tools.shell_models import RiskAssessment, ShellRiskLevel
 
 
-logger = logging.getLogger("nyra.remote_shell")
+logger = logging.getLogger("kazumi.remote_shell")
 
 
 class RemoteShellService:
@@ -360,7 +360,7 @@ class RemoteShellService:
         limit = self.settings.ssh_max_output_chars
         if len(value) <= limit:
             return value, False
-        marker = "\n...[OUTPUT TRUNCATED BY NYRA]...\n"
+        marker = "\n...[OUTPUT TRUNCATED BY KAZUMI]...\n"
         available = max(2, limit - len(marker))
         head = available * 3 // 5
         return value[:head] + marker + value[-(available - head):], True

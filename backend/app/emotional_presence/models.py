@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.persona_runtime.models import NyraEmotion
+from app.persona_runtime.models import KazumiEmotion
 
 
 def utc_now() -> datetime:
@@ -22,8 +22,8 @@ class VoiceEmotionSupport(StrEnum):
 
 
 class EmotionTransition(BaseModel):
-    previous: NyraEmotion
-    emotion: NyraEmotion
+    previous: KazumiEmotion
+    emotion: KazumiEmotion
     intensity: float = Field(ge=0.0, le=0.65)
     transition_ms: int = Field(ge=0, le=5000)
     ease: str = Field(pattern=r"^(linear|ease|ease-in|ease-out|ease-in-out)$")
@@ -33,7 +33,7 @@ class EmotionTransition(BaseModel):
 
 
 class VoiceStylePresentation(BaseModel):
-    emotion: NyraEmotion
+    emotion: KazumiEmotion
     intensity: float = Field(ge=0.0, le=0.65)
     provider: str
     voice_identity: str
@@ -50,7 +50,7 @@ class VoiceStylePresentation(BaseModel):
 
 
 class AvatarEmotionPresentation(BaseModel):
-    emotion: NyraEmotion
+    emotion: KazumiEmotion
     intensity: float = Field(ge=0.0, le=0.65)
     state_expression: str
     vts_kind: Literal["hotkey", "expression", "parameter", "neutral", "offline", "disabled"]
@@ -79,7 +79,7 @@ class EmotionalPresenceSettingsUpdate(BaseModel):
 class EmotionalPresentationSnapshot(BaseModel):
     state: str = "READY"
     source: str = "persona_runtime"
-    emotion: NyraEmotion
+    emotion: KazumiEmotion
     intensity: float = Field(ge=0.0, le=0.65)
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str

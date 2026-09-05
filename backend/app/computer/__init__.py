@@ -1,4 +1,4 @@
-"""NYRA Computer Autonomy V1 (nyra-7c) — camadas 1..7 como UM pipeline.
+"""KAZUMI Computer Autonomy V1 (kazumi-7c) — camadas 1..7 como UM pipeline.
 
 Módulos:
   perception   → ComputerPerceptionService  (camada 1)

@@ -138,7 +138,7 @@ class PersistentJobManager:
                  max_jobs: int = 40) -> None:
         self.event_bus = event_bus
         self.max_jobs = max_jobs
-        self.database_path = database_path or (DATA_ROOT / "nyra.db")
+        self.database_path = database_path or (DATA_ROOT / "kazumi.db")
         self.log_dir = LOG_ROOT / "jobs"
         self._processes: dict[str, subprocess.Popen] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -153,7 +153,7 @@ class PersistentJobManager:
 
     def start_monitor(self) -> None:
         if self._monitor_task is None or self._monitor_task.done():
-            self._monitor_task = asyncio.create_task(self._monitor_loop(), name="nyra-job-monitor")
+            self._monitor_task = asyncio.create_task(self._monitor_loop(), name="kazumi-job-monitor")
 
     async def shutdown(self) -> None:
         if self._monitor_task and not self._monitor_task.done():

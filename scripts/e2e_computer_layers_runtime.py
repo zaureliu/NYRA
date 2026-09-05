@@ -1,4 +1,4 @@
-"""nyra-7c FASE H — E2E cross-layer no runtime REAL (janela + /api/chat).
+"""kazumi-7c FASE H — E2E cross-layer no runtime REAL (janela + /api/chat).
 
 Cenários §86 percepção, §87 contexto, §89 multi-step, §90/§91 usage,
 §92 candidate, §93 execução de skill, §94 falha controlada,
@@ -45,7 +45,7 @@ def wins(proc_hint, title_hint=""):
 results = []
 run_id = str(int(time.time()))
 desktop_dir = Path.home() / "Desktop"
-fixture = desktop_dir / f"nyra-autonomia-7c-{run_id}.txt"
+fixture = desktop_dir / f"kazumi-autonomia-7c-{run_id}.txt"
 initial_hwnds: dict[str, set[int]] = {}
 cleanup_done = False
 
@@ -112,12 +112,12 @@ gone = not wins("notepad")
 record("§87 fecha ele", gone, r)
 
 # ---------------- §89 multi-step PLAN
-r = chat("abre o bloco de notas, escreve 'NYRA teste de autonomia' "
+r = chat("abre o bloco de notas, escreve 'KAZUMI teste de autonomia' "
          f"e salva como {fixture.name} e fecha")
 deadline = time.time() + 25
 ok_file = False
 while time.time() < deadline and not ok_file:
-    ok_file = fixture.exists() and "NYRA teste de autonomia" in \
+    ok_file = fixture.exists() and "KAZUMI teste de autonomia" in \
         fixture.read_text(encoding="utf-8", errors="ignore")
     time.sleep(0.6)
 closed_after_plan = not wins("notepad")
@@ -160,15 +160,15 @@ chat("fecha o code"); time.sleep(2)
 
 # ---------------- §93 skill explícita → execução natural
 skill = http("POST", "/api/computer/skills/explicit", {
-    "name_hint": f"modo nyra trabalho {run_id}",
-    "aliases": [f"modo nyra trabalho {run_id}"],
+    "name_hint": f"modo kazumi trabalho {run_id}",
+    "aliases": [f"modo kazumi trabalho {run_id}"],
     "steps": [
         {"capability": "open_folder", "target": "downloads"},
         {"capability": "focus_app", "target": "explorador de arquivos"},
     ],
 })
 promoted = http("POST", f"/api/computer/skills/{skill['skill_id']}/promote", {})
-r = chat(f"modo nyra trabalho {run_id}")
+r = chat(f"modo kazumi trabalho {run_id}")
 time.sleep(2)
 explorer_open = bool(wins("explorer", ""))
 record("§93 skill aprendida executada por trigger natural",
@@ -227,7 +227,7 @@ for name, status, ev in results:
     print(safe)
 fails = [r for r in results if r[1] == "FAIL"]
 print(f"\nTOTAL: {len(results)} | FAIL: {len(fails)}")
-report_path = REPORT_ROOT / "nyra-7c-runtime-e2e.json"
+report_path = REPORT_ROOT / "kazumi-7c-runtime-e2e.json"
 report_path.parent.mkdir(parents=True, exist_ok=True)
 report_path.write_text(json.dumps({
     "run_id": run_id,

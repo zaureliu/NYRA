@@ -1,9 +1,9 @@
 """Smoke REAL do Desktop Application Control V1.
 
-Aceite prioritário: "Nyra, abre o bloco de notas" deve terminar com a janela
+Aceite prioritário: "Kazumi, abre o bloco de notas" deve terminar com a janela
 efetivamente VISÍVEL no desktop e VERIFICADA por enumeração Win32 real,
 com checagem cruzada independente (tasklist). Encerramos apenas o PID que a
-NYRA lançou — instâncias pré-existentes do operador não são tocadas.
+KAZUMI lançou — instâncias pré-existentes do operador não são tocadas.
 """
 
 import os
@@ -12,8 +12,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-os.environ.setdefault("NYRA_OLLAMA_PRELOAD", "false")
-os.environ.setdefault("NYRA_CONVERSATION_ENGINE", "false")
+os.environ.setdefault("KAZUMI_OLLAMA_PRELOAD", "false")
+os.environ.setdefault("KAZUMI_CONVERSATION_ENGINE", "false")
 
 import json
 

@@ -115,6 +115,16 @@ def _broker(tmp_path):
     return CredentialBroker(approvals=None)
 
 
+@pytest.fixture(autouse=True)
+def isolated_os_credential_store(monkeypatch):
+    """No unit test may read/write the operator's Windows Credential Manager."""
+    from app.operator import credentials as module
+    entries = {}
+    monkeypatch.setattr(module, '_cred_read', entries.get)
+    monkeypatch.setattr(module, '_cred_write', lambda key, value, *args: entries.__setitem__(key, value))
+    monkeypatch.setattr(module, '_cred_delete', lambda key: entries.pop(key, None) is not None)
+
+
 def test_credential_create_requires_explicit_interaction(tmp_path, monkeypatch):
     from app.operator import credentials as creds_mod
 
@@ -166,7 +176,7 @@ def test_credential_delete_without_gate_fails_closed(tmp_path, monkeypatch):
 
     monkeypatch.setattr(creds_mod, "_VAULT_FILE", tmp_path / "vault.bin")
     broker = _broker(tmp_path)
-    broker.create("proxmox", "root@pam!nyra=xxx", operator_direct=True)
+    broker.create("proxmox", "root@pam!kazumi=xxx", operator_direct=True)
     deleted = broker.delete("proxmox")
     assert deleted["success"] is False
     assert deleted["error_code"] == "APPROVAL_REQUIRED"  # §91

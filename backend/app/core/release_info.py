@@ -22,15 +22,15 @@ from typing import Any
 
 from app.core.paths import DATA_ROOT, LOG_ROOT, PROJECT_ROOT, RUNTIME_ROOT
 
-logger = logging.getLogger("nyra.release_info")
+logger = logging.getLogger("kazumi.release_info")
 
 DAILY_CHECK_HISTORY = DATA_ROOT / "daily-check-history.jsonl"
 RELEASE_GATE_REPORT = RUNTIME_ROOT / "reports" / "release-health.json"
 GATE_PROGRESS = RUNTIME_ROOT / "reports" / "release-gate-progress.json"
 
 # Versão oficial unificada do produto.
-APP_VERSION = "0.5.0"
-APP_NAME = "NYRA"
+APP_VERSION = "0.6.0"
+APP_NAME = "Kazumi"
 
 # Artefatos mais antigos que isso não representam o build atual (closure §20):
 # viram STALE e nunca produzem RED por si sós.

@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class NyraWindowCapture {
+public static class KazumiWindowCapture {
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
   public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
@@ -15,17 +15,17 @@ public static class NyraWindowCapture {
 }
 '@
 Add-Type -AssemblyName System.Drawing
-$process = Get-Process -Name 'nyra-desktop' -ErrorAction Stop | Sort-Object StartTime -Descending | Select-Object -First 1
-if (-not $process) { throw 'Janela nyra-desktop não encontrada.' }
-if ($Show) { [void][NyraWindowCapture]::ShowWindow($process.MainWindowHandle, 5); Start-Sleep -Milliseconds 250 }
+$process = Get-Process -Name 'kazumi-desktop' -ErrorAction Stop | Sort-Object StartTime -Descending | Select-Object -First 1
+if (-not $process) { throw 'Janela kazumi-desktop não encontrada.' }
+if ($Show) { [void][KazumiWindowCapture]::ShowWindow($process.MainWindowHandle, 5); Start-Sleep -Milliseconds 250 }
 $windows = New-Object System.Collections.Generic.List[object]
-$callback = [NyraWindowCapture+EnumWindowsProc]{
+$callback = [KazumiWindowCapture+EnumWindowsProc]{
   param([IntPtr]$handle, [IntPtr]$unused)
   [uint32]$owner = 0
-  [void][NyraWindowCapture]::GetWindowThreadProcessId($handle, [ref]$owner)
-  if ($owner -eq $process.Id -and [NyraWindowCapture]::IsWindowVisible($handle)) {
-    $candidate = New-Object NyraWindowCapture+Rect
-    if ([NyraWindowCapture]::GetWindowRect($handle, [ref]$candidate)) {
+  [void][KazumiWindowCapture]::GetWindowThreadProcessId($handle, [ref]$owner)
+  if ($owner -eq $process.Id -and [KazumiWindowCapture]::IsWindowVisible($handle)) {
+    $candidate = New-Object KazumiWindowCapture+Rect
+    if ([KazumiWindowCapture]::GetWindowRect($handle, [ref]$candidate)) {
       $area = ($candidate.Right - $candidate.Left) * ($candidate.Bottom - $candidate.Top)
       $windows.Add([pscustomobject]@{
         Handle=$handle
@@ -38,13 +38,13 @@ $callback = [NyraWindowCapture+EnumWindowsProc]{
   }
   return $true
 }
-[void][NyraWindowCapture]::EnumWindows($callback, [IntPtr]::Zero)
+[void][KazumiWindowCapture]::EnumWindows($callback, [IntPtr]::Zero)
 $selected = $windows |
   Where-Object { $_.Width -le 700 -and $_.Height -le 800 -and $_.Area -gt 10000 } |
   Sort-Object Area -Descending |
   Select-Object -First 1
 if (-not $selected) { $selected = $windows | Sort-Object Area -Descending | Select-Object -First 1 }
-if (-not $selected) { throw 'Nenhuma janela visível da NYRA encontrada.' }
+if (-not $selected) { throw 'Nenhuma janela visível da KAZUMI encontrada.' }
 $rect = $selected.Rect
 $width = $rect.Right - $rect.Left
 $height = $rect.Bottom - $rect.Top

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NYRA External Watchdog (spec Parte L §212-§231).
+"""KAZUMI External Watchdog (spec Parte L §212-§231).
 
 Independent from the main backend: pure stdlib, NO LLM/Ollama dependency
 (§215), deliberately simple (§216). Survives backend death and brings it back.
@@ -12,7 +12,7 @@ Health checks (§218):
 
 Recovery policy (§219/§226): after N consecutive failures, restart the
 component (backend restart is built-in; other components are opt-in via
-NYRA_WATCHDOG_<NAME>_CMD), then verify health again.
+KAZUMI_WATCHDOG_<NAME>_CMD), then verify health again.
 
 Restart limit (§220/§221): max RESTART_LIMIT restarts per RESTART_WINDOW
 seconds per component -> CRASH_LOOP_PROTECTED (no infinite retries).
@@ -44,17 +44,17 @@ HEARTBEAT_PATH = DATA_DIR / "watchdog-heartbeat.json"
 REQUESTS_DIR = DATA_DIR / "watchdog-requests"
 WATCHDOG_LOG = LOG_DIR / "watchdog.log"
 
-BACKEND_URL = os.environ.get("NYRA_WATCHDOG_BACKEND_URL", "http://127.0.0.1:8000/api/health")
-FRONTEND_HOST = os.environ.get("NYRA_WATCHDOG_FRONTEND_HOST", "127.0.0.1")
-FRONTEND_PORT = int(os.environ.get("NYRA_WATCHDOG_FRONTEND_PORT", "5173"))
-OLLAMA_URL = os.environ.get("NYRA_WATCHDOG_OLLAMA_URL", "http://127.0.0.1:11434/api/tags")
-DESKTOP_PROCESS = os.environ.get("NYRA_WATCHDOG_DESKTOP_PROCESS", "nyra-desktop.exe")
-INTERVAL = float(os.environ.get("NYRA_WATCHDOG_INTERVAL", "10"))
-FAILURE_THRESHOLD = int(os.environ.get("NYRA_WATCHDOG_FAILURE_THRESHOLD", "3"))
-RESTART_LIMIT = int(os.environ.get("NYRA_WATCHDOG_RESTART_LIMIT", "3"))
-RESTART_WINDOW = float(os.environ.get("NYRA_WATCHDOG_RESTART_WINDOW", "600"))
-FRONTEND_RESTART_CMD = os.environ.get("NYRA_WATCHDOG_FRONTEND_CMD", "")
-DESKTOP_RESTART_CMD = os.environ.get("NYRA_WATCHDOG_DESKTOP_CMD", "")
+BACKEND_URL = os.environ.get("KAZUMI_WATCHDOG_BACKEND_URL", "http://127.0.0.1:8000/api/health")
+FRONTEND_HOST = os.environ.get("KAZUMI_WATCHDOG_FRONTEND_HOST", "127.0.0.1")
+FRONTEND_PORT = int(os.environ.get("KAZUMI_WATCHDOG_FRONTEND_PORT", "5173"))
+OLLAMA_URL = os.environ.get("KAZUMI_WATCHDOG_OLLAMA_URL", "http://127.0.0.1:11434/api/tags")
+DESKTOP_PROCESS = os.environ.get("KAZUMI_WATCHDOG_DESKTOP_PROCESS", "kazumi-desktop.exe")
+INTERVAL = float(os.environ.get("KAZUMI_WATCHDOG_INTERVAL", "10"))
+FAILURE_THRESHOLD = int(os.environ.get("KAZUMI_WATCHDOG_FAILURE_THRESHOLD", "3"))
+RESTART_LIMIT = int(os.environ.get("KAZUMI_WATCHDOG_RESTART_LIMIT", "3"))
+RESTART_WINDOW = float(os.environ.get("KAZUMI_WATCHDOG_RESTART_WINDOW", "600"))
+FRONTEND_RESTART_CMD = os.environ.get("KAZUMI_WATCHDOG_FRONTEND_CMD", "")
+DESKTOP_RESTART_CMD = os.environ.get("KAZUMI_WATCHDOG_DESKTOP_CMD", "")
 
 
 def log(message: str) -> None:
@@ -157,7 +157,7 @@ def restart_backend() -> bool:
         return False
     ok = _detached(
         [str(python), "-m", "uvicorn", "app.main:app",
-         "--host", "127.0.0.1", "--port", os.environ.get("NYRA_WATCHDOG_BACKEND_PORT", "8000")],
+         "--host", "127.0.0.1", "--port", os.environ.get("KAZUMI_WATCHDOG_BACKEND_PORT", "8000")],
         cwd=REPO_ROOT / "backend",
         log_name="watchdog-backend-restart.log",
     )

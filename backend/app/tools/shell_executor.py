@@ -99,14 +99,14 @@ class ShellExecutor:
         if shell == "cmd":
             return [executable, "/D", "/S", "/C", command]
         wrapper = (
-            "$__nyra_oem = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage); "
-            "[Console]::OutputEncoding = $__nyra_oem; $OutputEncoding = $__nyra_oem; "
-            f"$__nyra_output = & {{ {command} }}; "
-            "$__nyra_ok = $?; $__nyra_native_exit = $LASTEXITCODE; "
+            "$__kazumi_oem = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage); "
+            "[Console]::OutputEncoding = $__kazumi_oem; $OutputEncoding = $__kazumi_oem; "
+            f"$__kazumi_output = & {{ {command} }}; "
+            "$__kazumi_ok = $?; $__kazumi_native_exit = $LASTEXITCODE; "
             "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
-            "$__nyra_output | Out-String -Stream; "
-            "$__nyra_exit = if ($null -ne $__nyra_native_exit) { $__nyra_native_exit } elseif ($__nyra_ok) { 0 } else { 1 }; "
-            "$host.SetShouldExit([int]$__nyra_exit)"
+            "$__kazumi_output | Out-String -Stream; "
+            "$__kazumi_exit = if ($null -ne $__kazumi_native_exit) { $__kazumi_native_exit } elseif ($__kazumi_ok) { 0 } else { 1 }; "
+            "$host.SetShouldExit([int]$__kazumi_exit)"
         )
         return [executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", wrapper]
 

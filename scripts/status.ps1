@@ -2,7 +2,7 @@
 param()
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'runtime-paths.ps1')
-$statePath = (Get-NyraRuntimePaths).ProcessState
+$statePath = (Get-KazumiRuntimePaths).ProcessState
 if (Test-Path -LiteralPath $statePath) {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     foreach ($entry in @(@('backend',$state.backend),@('frontend',$state.frontend),@('tauri',$state.tauri),@('desktop',$state.desktop))) {
@@ -11,7 +11,7 @@ if (Test-Path -LiteralPath $statePath) {
         $running = [bool]($candidate -and (($candidate.ExecutablePath -and $candidate.ExecutablePath.StartsWith($repoRoot, [StringComparison]::OrdinalIgnoreCase)) -or ($candidate.CommandLine -and $candidate.CommandLine.IndexOf($repoRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0)))
         Write-Host ($entry[0] + ': ' + $(if ($running) {'RUNNING'} else {'STOPPED'}) + ' (PID ' + $entry[1] + ')')
     }
-} else { Write-Host 'NYRA: STOPPED' }
+} else { Write-Host 'KAZUMI: STOPPED' }
 $repoProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.IndexOf($repoRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
 })

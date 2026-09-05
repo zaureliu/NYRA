@@ -1,4 +1,4 @@
-"""FASE D — Pipeline unificado (nyra-7c §75) sobre as 7 camadas.
+"""FASE D — Pipeline unificado (kazumi-7c §75) sobre as 7 camadas.
 
 User Input → Normalize/Intent → Skill Memory check → Universal Operator
 → Effect Verification → Computer State update → Usage Learning →
@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-logger = logging.getLogger("nyra.computer.pipeline")
+logger = logging.getLogger("kazumi.computer.pipeline")
 
 
 @dataclass
@@ -586,7 +586,7 @@ class ComputerAutonomyService:
                             EventType.USAGE_PATTERN_DETECTED,
                             workflow_id=candidate.workflow_id,
                             confidence=candidate.confidence),
-                            name="nyra-usage-pattern-event")
+                            name="kazumi-usage-pattern-event")
                         task.add_done_callback(
                             lambda done: None if done.cancelled() else done.exception())
                     except Exception:  # noqa: BLE001

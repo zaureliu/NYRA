@@ -5,9 +5,14 @@ PARAMETER_CANDIDATES = {
  "eye_x":["EyeBallX","ParamEyeBallX","EyeLeftX","EyeRightX"], "eye_y":["EyeBallY","ParamEyeBallY","EyeLeftY","EyeRightY"],
  "mouth_open":["MouthOpen","VoiceVolumePlusMouthOpen","ParamMouthOpenY"], "mouth_form":["MouthSmile","ParamMouthForm"],
  "body_x":["BodyAngleX","ParamBodyAngleX"], "breathing":["ParamBreath"],
- "neural_link":["NyraNeuralLink","ParamNyraNeuralLink"], "attention":["NyraAttention","ParamNyraAttention"],
- "thinking":["NyraThinking","ParamNyraThinking"], "concern":["NyraConcern","ParamNyraConcern"], "amused":["NyraAmused","ParamNyraAmused"],
+ "neural_link":["KazumiNeuralLink","ParamKazumiNeuralLink"], "attention":["KazumiAttention","ParamKazumiAttention"],
+ "thinking":["KazumiThinking","ParamKazumiThinking"], "concern":["KazumiConcern","ParamKazumiConcern"], "amused":["KazumiAmused","ParamKazumiAmused"],
 }
+
+# Existing model rigs must not be renamed. Legacy custom parameters remain
+# discoverable, after the preferred Kazumi names, for one migration release.
+for _candidates in PARAMETER_CANDIDATES.values():
+    _candidates.extend(item.replace('Kazumi', 'Nyra') for item in list(_candidates) if 'Kazumi' in item)
 
 
 def discover_ids(data: dict) -> set[str]:
@@ -55,7 +60,7 @@ def mouse_parameter_values(frame, mapping: dict[str, list[str]]) -> list[dict]:
 
 
 def emotion_parameter_values(emotion: str, intensity: float, mapping: dict[str, list[str]]) -> list[dict]:
-    """Only inject explicitly NYRA-owned custom emotion parameters.
+    """Only inject explicitly KAZUMI-owned custom emotion parameters.
 
     Generic face and mouth tracking parameters remain owned by VTube Studio and
     lip sync. Unsupported emotions therefore produce no parameter request.

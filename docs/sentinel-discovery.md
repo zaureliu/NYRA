@@ -1,6 +1,6 @@
 # Sentinel Discovery
 
-O discovery é HTTP leve e valida `GET /api/integrations/nyra/health`. Uma porta aberta não basta: `service=utamo-sentinel`, `integration=nyra`, versão do protocolo, `instance_id` e capabilities precisam validar pelo schema local.
+O discovery é HTTP leve e valida `GET /api/integrations/kazumi/health`. Uma porta aberta não basta: `service=utamo-sentinel`, `integration=kazumi`, versão do protocolo, `instance_id` e capabilities precisam validar pelo schema local.
 
 Ordem:
 

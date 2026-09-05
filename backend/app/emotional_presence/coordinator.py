@@ -16,29 +16,29 @@ from app.emotional_presence.models import (
 from app.emotional_presence.settings import load_settings, save_settings
 from app.emotional_presence.voice import VoicePresentationAdapter, VoiceStyleBuild
 from app.events import Event, EventBus, EventType
-from app.persona_runtime.models import EmotionalState, NyraEmotion
+from app.persona_runtime.models import EmotionalState, KazumiEmotion
 from app.persona_runtime.policy import EmotionSignal
 from app.speech.profile import load_voice_profile
 
 
-_TRANSITIONS: dict[NyraEmotion, tuple[int, str, int, int]] = {
-    NyraEmotion.NEUTRAL: (420, "ease-out", 300, 180),
-    NyraEmotion.FRIENDLY: (480, "ease-out", 700, 250),
-    NyraEmotion.FOCUSED: (360, "ease-in-out", 900, 250),
-    NyraEmotion.CONFIDENT: (420, "ease-out", 900, 300),
-    NyraEmotion.POSITIVE: (500, "ease-out", 800, 300),
-    NyraEmotion.HAPPY: (620, "ease-out", 1000, 350),
-    NyraEmotion.RELIEVED: (620, "ease-out", 900, 350),
-    NyraEmotion.CONCERNED: (480, "ease-in-out", 1000, 300),
-    NyraEmotion.WARNING: (260, "ease-out", 1200, 180),
-    NyraEmotion.SERIOUS: (300, "ease-out", 1200, 220),
-    NyraEmotion.EMPATHETIC: (560, "ease-out", 1000, 320),
-    NyraEmotion.CURIOUS: (460, "ease-in-out", 700, 260),
-    NyraEmotion.SURPRISED: (280, "ease-out", 500, 220),
-    NyraEmotion.AMUSED: (500, "ease-out", 800, 300),
-    NyraEmotion.APOLOGETIC: (460, "ease-in-out", 900, 280),
-    NyraEmotion.UNCERTAIN: (440, "ease-in-out", 800, 280),
-    NyraEmotion.CALM: (650, "ease-out", 900, 350),
+_TRANSITIONS: dict[KazumiEmotion, tuple[int, str, int, int]] = {
+    KazumiEmotion.NEUTRAL: (420, "ease-out", 300, 180),
+    KazumiEmotion.FRIENDLY: (480, "ease-out", 700, 250),
+    KazumiEmotion.FOCUSED: (360, "ease-in-out", 900, 250),
+    KazumiEmotion.CONFIDENT: (420, "ease-out", 900, 300),
+    KazumiEmotion.POSITIVE: (500, "ease-out", 800, 300),
+    KazumiEmotion.HAPPY: (620, "ease-out", 1000, 350),
+    KazumiEmotion.RELIEVED: (620, "ease-out", 900, 350),
+    KazumiEmotion.CONCERNED: (480, "ease-in-out", 1000, 300),
+    KazumiEmotion.WARNING: (260, "ease-out", 1200, 180),
+    KazumiEmotion.SERIOUS: (300, "ease-out", 1200, 220),
+    KazumiEmotion.EMPATHETIC: (560, "ease-out", 1000, 320),
+    KazumiEmotion.CURIOUS: (460, "ease-in-out", 700, 260),
+    KazumiEmotion.SURPRISED: (280, "ease-out", 500, 220),
+    KazumiEmotion.AMUSED: (500, "ease-out", 800, 300),
+    KazumiEmotion.APOLOGETIC: (460, "ease-in-out", 900, 280),
+    KazumiEmotion.UNCERTAIN: (440, "ease-in-out", 800, 280),
+    KazumiEmotion.CALM: (650, "ease-out", 900, 350),
 }
 
 
@@ -83,10 +83,10 @@ class EmotionPresentationCoordinator:
         self._started = False
 
     async def handle_event(self, event: Event) -> None:
-        if event.type == EventType.NYRA_EMOTION_CHANGED:
+        if event.type == EventType.KAZUMI_EMOTION_CHANGED:
             try:
                 state = EmotionalState(
-                    primary=NyraEmotion(str(event.payload.get("emotion") or "neutral")),
+                    primary=KazumiEmotion(str(event.payload.get("emotion") or "neutral")),
                     intensity=float(event.payload.get("intensity") or 0.0),
                     confidence=float(event.payload.get("confidence") or 1.0),
                     reason=str(event.payload.get("reason") or "persona_runtime")[:180],
@@ -140,7 +140,7 @@ class EmotionPresentationCoordinator:
             self._sync_count += 1
         self._record_duration(started)
         await self.event_bus.publish(
-            EventType.NYRA_EMOTIONAL_PRESENCE_SYNCED,
+            EventType.KAZUMI_EMOTIONAL_PRESENCE_SYNCED,
             emotion=state.primary.value,
             intensity=state.intensity,
             transition=transition.model_dump(mode="json"),
@@ -152,7 +152,7 @@ class EmotionPresentationCoordinator:
     def build_voice_style(
         self,
         *,
-        emotion: NyraEmotion | str | None = None,
+        emotion: KazumiEmotion | str | None = None,
         intensity: float | None = None,
         context: dict[str, Any] | None = None,
     ) -> VoiceStyleBuild:
@@ -165,7 +165,7 @@ class EmotionPresentationCoordinator:
             presentation = build.presentation.model_copy(update={
                 "acoustic_emotion": "neutral",
                 "native_controls": [],
-                "degraded": build.presentation.emotion != NyraEmotion.NEUTRAL,
+                "degraded": build.presentation.emotion != KazumiEmotion.NEUTRAL,
                 "degradation_reason": "voice_expression_disabled",
             })
             build = VoiceStyleBuild(
@@ -180,8 +180,8 @@ class EmotionPresentationCoordinator:
             self.current = self.current.model_copy(update={"voice": build.presentation})
         return build
 
-    async def controlled_transition(self, emotion: NyraEmotion | str, intensity: float) -> EmotionalState:
-        selected = NyraEmotion(str(getattr(emotion, "value", emotion)).casefold())
+    async def controlled_transition(self, emotion: KazumiEmotion | str, intensity: float) -> EmotionalState:
+        selected = KazumiEmotion(str(getattr(emotion, "value", emotion)).casefold())
         return await self.persona_runtime.apply_signal(EmotionSignal(
             selected, intensity, 1.0, 100, "controlled_presentation_test", 900, 3600,
         ))

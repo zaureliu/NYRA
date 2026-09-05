@@ -20,7 +20,7 @@ from app.tools.shell_approval import ShellApprovalGate
 
 
 PAGE_HTML = """<!doctype html>
-<html><head><title>NYRA Browser V2 Fixture</title></head>
+<html><head><title>KAZUMI Browser V2 Fixture</title></head>
 <body>
   <h1 id="titulo">pagina de teste</h1>
   <input id="campo" name="q" type="text" value=""/>
@@ -37,7 +37,7 @@ def _make_handler(download_bytes: bytes):
             if self.path.startswith("/download"):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain")
-                self.send_header("Content-Disposition", "attachment; filename=nyra-e2e-download.txt")
+                self.send_header("Content-Disposition", "attachment; filename=kazumi-e2e-download.txt")
                 self.send_header("Content-Length", str(len(download_bytes)))
                 self.end_headers()
                 self.wfile.write(download_bytes)
@@ -97,7 +97,7 @@ async def test_navigate_dom_inspect_masks_passwords(local_site, controller):
     del navigated
     document = await controller.dom_inspect(max_nodes=60)
     assert document["success"] is True
-    assert "NYRA Browser V2" in document["title"]
+    assert "KAZUMI Browser V2" in document["title"]
     texts = json_dumps(document["nodes"])
     assert "pagina de teste" in texts
 
@@ -128,9 +128,9 @@ async def test_find_click_type_select_check_wait(local_site, controller):
     found = await controller.find_element(text="clique", limit=5)
     assert found["success"] is True and found["count"] >= 1  # §62
 
-    typed = await _approved_call(controller.type_text, "busca da nyra", selector="#campo")
+    typed = await _approved_call(controller.type_text, "busca da kazumi", selector="#campo")
     assert typed["success"] is True
-    assert typed.get("stored_preview") == "busca da nyra"  # read-back verificado (§64)
+    assert typed.get("stored_preview") == "busca da kazumi"  # read-back verificado (§64)
 
     secret_typed = await _approved_call(
         controller.type_text, "segredo-123", selector="#campo", secret=True,
@@ -261,7 +261,7 @@ async def test_browser_submit_binds_text_tab_and_full_url(monkeypatch):
         del timeout
         if expression == "location.href":
             return True, current_url["value"]
-        if "snapshot: nyraSnapshot" in expression:
+        if "snapshot: kazumiSnapshot" in expression:
             return True, json_dumps({
                 "snapshot": '{"tag":"input","id":"decision"}', "x": 10, "y": 10,
             })
@@ -304,7 +304,7 @@ async def test_browser_submit_binds_text_tab_and_full_url(monkeypatch):
     assert exact["submitted"] is True and exact["approval_used"] is True
     assert len(executed) == 1
     assert "location.href !== approvedUrl" in executed[0]
-    assert "nyraSnapshot(el)" in executed[0]
+    assert "kazumiSnapshot(el)" in executed[0]
     assert "requestSubmit" in executed[0]
 
     race_gate = ShellApprovalGate()

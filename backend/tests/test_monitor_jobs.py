@@ -79,7 +79,7 @@ async def test_monitor_runs_without_new_user_message_and_notifies_condition(tmp_
     state_path.write_text('{"value": 350}', encoding="utf-8")
     bus = EventBus(history_size=200)
     manager = MonitorJobManager(
-        _registry(state_path), bus, database_path=tmp_path / "nyra.db",
+        _registry(state_path), bus, database_path=tmp_path / "kazumi.db",
     )
     await manager.initialize()
     manager.start()
@@ -115,7 +115,7 @@ async def test_monitor_runs_without_new_user_message_and_notifies_condition(tmp_
 async def test_active_monitor_is_recovered_after_manager_restart(tmp_path):
     state_path = tmp_path / "reading.json"
     state_path.write_text('{"value": 10}', encoding="utf-8")
-    database = tmp_path / "nyra.db"
+    database = tmp_path / "kazumi.db"
     registry = _registry(state_path)
 
     first = MonitorJobManager(registry, EventBus(), database_path=database)
@@ -149,7 +149,7 @@ async def test_monitor_deduplicates_small_changes_reports_error_and_can_cancel_n
     state_path.write_text('{"value": 10}', encoding="utf-8")
     bus = EventBus(history_size=300)
     manager = MonitorJobManager(
-        _registry(state_path), bus, database_path=tmp_path / "nyra.db",
+        _registry(state_path), bus, database_path=tmp_path / "kazumi.db",
     )
     await manager.initialize()
     manager.start()
@@ -201,7 +201,7 @@ async def test_monitor_rejects_non_read_only_probe_and_promises_fail_closed(tmp_
         "unsafe_probe", "Not a valid monitor probe.",
         RiskLevel.LOW_RISK, EmptyInput, mutate,
     ))
-    manager = MonitorJobManager(registry, EventBus(), database_path=tmp_path / "nyra.db")
+    manager = MonitorJobManager(registry, EventBus(), database_path=tmp_path / "kazumi.db")
     await manager.initialize()
     unsafe = _request().model_copy(update={"probe_tool": "unsafe_probe"})
     with pytest.raises(MonitorJobError) as failure:
@@ -219,7 +219,7 @@ async def test_flat_llm_tool_schema_creates_the_structured_monitor(tmp_path):
     state_path = tmp_path / "reading.json"
     state_path.write_text('{"value": 42}', encoding="utf-8")
     registry = _registry(state_path)
-    manager = MonitorJobManager(registry, EventBus(), database_path=tmp_path / "nyra.db")
+    manager = MonitorJobManager(registry, EventBus(), database_path=tmp_path / "kazumi.db")
     await manager.initialize()
     _register_monitor_tools(registry, SimpleNamespace(monitor_jobs=manager))
 

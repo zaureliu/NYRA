@@ -1,13 +1,13 @@
 # Self-Development Engine V1
 
-O Self-Development Engine da NYRA transforma evidência local recorrente em melhorias pequenas, isoladas, testadas e reversíveis. Ele não é um executor de texto do LLM e não amplia as permissões do operador.
+O Self-Development Engine da KAZUMI transforma evidência local recorrente em melhorias pequenas, isoladas, testadas e reversíveis. Ele não é um executor de texto do LLM e não amplia as permissões do operador.
 
 ## Diretórios e dados
 
 - raiz do repositório: código operacional canônico.
-- `NYRA_SELFDEV_WORKSPACE`: workspace externo para índice, locks, relatórios e worktrees de candidatos.
-- `NYRA_SELFDEV_PUBLIC_SNAPSHOT`: snapshot público sanitizado e separado do runtime.
-- `%LOCALAPPDATA%\NYRA\selfdev`: métricas, fila, notificações, relatórios e estado de restart.
+- `KAZUMI_SELFDEV_WORKSPACE`: workspace externo para índice, locks, relatórios e worktrees de candidatos.
+- `KAZUMI_SELFDEV_PUBLIC_SNAPSHOT`: snapshot público sanitizado e separado do runtime.
+- `%LOCALAPPDATA%\KAZUMI\selfdev`: métricas, fila, notificações, relatórios e estado de restart.
 
 O índice incremental guarda caminho relativo, linguagem, símbolos, imports, rotas, referências, tamanho, mtime e SHA-256. Conteúdo do código, conversas, áudio, memória, IPs, MACs, credenciais e chain-of-thought não são persistidos no índice.
 
@@ -26,7 +26,7 @@ Mudanças de approval, credenciais, redaction, shell, SSH/host key, política de
 
 ## Modos e configuração
 
-As opções ficam em `config/default.yaml`, variáveis `NYRA_*` e `Settings > Self-Dev`:
+As opções ficam em `config/default.yaml`, variáveis `KAZUMI_*` e `Settings > Self-Dev`:
 
 - `OFF`: serviço inativo.
 - `OBSERVE_ONLY`: observa e mantém evidência/fila, sem implementar.

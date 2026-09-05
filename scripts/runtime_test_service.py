@@ -15,7 +15,7 @@ PORT = 18765
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - stdlib naming
-        payload = {"status": "online", "service": "nyra_test_service"}
+        payload = {"status": "online", "service": "kazumi_test_service"}
         body = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

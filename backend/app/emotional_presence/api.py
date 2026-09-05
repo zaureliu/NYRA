@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.emotional_presence.models import EmotionalPresenceSettingsUpdate
-from app.persona_runtime.models import NyraEmotion
+from app.persona_runtime.models import KazumiEmotion
 
 
 router = APIRouter(prefix="/emotional-presence", tags=["emotional-presence"])
@@ -36,7 +36,7 @@ async def settings(payload: EmotionalPresenceSettingsUpdate, request: Request):
 @router.post("/test/{emotion}")
 async def controlled_emotion(emotion: str, payload: ControlledEmotionRequest, request: Request):
     try:
-        selected = NyraEmotion(emotion.casefold())
+        selected = KazumiEmotion(emotion.casefold())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Emoção inválida") from exc
     await service(request).controlled_transition(selected, payload.intensity)

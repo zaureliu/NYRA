@@ -21,7 +21,7 @@ async def test_watchdog_bridge_writes_request_and_cooldowns(tmp_path):
     from app.events import Event, EventType
 
     event = Event(type=EventType.RUNTIME_FAILED,
-                  payload={"service_id": "nyra_backend", "reason": "health failed 3x"})
+                  payload={"service_id": "kazumi_backend", "reason": "health failed 3x"})
     await bridge.handle_event(event)
     files = list((tmp_path / "requests").glob("*.json"))
     assert len(files) == 1  # §227 canal de request one-shot
@@ -39,7 +39,7 @@ def test_watchdog_component_guard_crash_loop():
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "nyra_watchdog_mod", Path(__file__).resolve().parents[2] / "watchdog" / "nyra_watchdog.py",
+        "kazumi_watchdog_mod", Path(__file__).resolve().parents[2] / "watchdog" / "kazumi_watchdog.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -100,7 +100,7 @@ async def test_elevated_execute_blocks_destructive_without_own_approval():
     session.started_at = _time.time()
     session.expires_at = _time.time() + 60
     session.capabilities = ["shell:powershell"]
-    session.pipe_name = "nyra-elevated-fake"
+    session.pipe_name = "kazumi-elevated-fake"
     session.token = "x"
     session.host_pid = None
     manager._sessions[session.session_id] = session
@@ -144,7 +144,7 @@ async def test_elevated_destructive_approval_binds_full_command_shell_and_timeou
     session = ElevatedSession(
         session_id="esess_binding001", user="tester", started_at=now,
         expires_at=now + 60, capabilities=["shell:powershell"],
-        pipe_name="nyra-elevated-binding", token="x", host_pid=None,
+        pipe_name="kazumi-elevated-binding", token="x", host_pid=None,
     )
     manager._sessions[session.session_id] = session
     manager._send_request = lambda *_args, **_kwargs: {

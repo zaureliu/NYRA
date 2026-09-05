@@ -8,4 +8,4 @@ Controles aceitos pelo Edge são `edge_rate` (`-25%` a `+15%` na UI), `edge_pitc
 
 O áudio MP3 recebido é convertido uma única vez para WAV PCM usando PyAV, preservando a análise de duração/lip sync já existente. Streaming não foi ativado: a versão atual gera o arquivo completo para manter ordem, playback e lip sync estáveis.
 
-A voz oficial não muda automaticamente. Use `Definir como voz oficial da NYRA` depois de ouvir e comparar as candidatas.
+A voz oficial não muda automaticamente. Use `Definir como voz oficial da KAZUMI` depois de ouvir e comparar as candidatas.

@@ -15,7 +15,7 @@ from collections.abc import Callable
 import psutil
 
 
-logger = logging.getLogger("nyra.lifecycle")
+logger = logging.getLogger("kazumi.lifecycle")
 
 
 class ParentProcessWatch:
@@ -52,7 +52,7 @@ class ParentProcessWatch:
         self._stop.clear()
         self._thread = threading.Thread(
             target=self._run,
-            name="nyra-parent-watch",
+            name="kazumi-parent-watch",
             daemon=True,
         )
         self._thread.start()
@@ -73,10 +73,10 @@ class ParentProcessWatch:
 
 
 def owned_parent_pid() -> int | None:
-    if os.environ.get("NYRA_BACKEND_OWNED") != "1":
+    if os.environ.get("KAZUMI_BACKEND_OWNED") != "1":
         return None
     try:
-        value = int(os.environ.get("NYRA_PARENT_PID", ""))
+        value = int(os.environ.get("KAZUMI_PARENT_PID", ""))
         return value if value > 0 and value != os.getpid() else None
     except ValueError:
         return None

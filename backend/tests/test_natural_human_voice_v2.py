@@ -6,7 +6,7 @@ import pytest
 
 from app.character.state import EmotionalState
 from app.api.routes import SAFE_AUDIO
-from app.speech.emotion import EmotionPlan, EmotionPlanner, NYRA_VOICE, VALID_EMOTIONS
+from app.speech.emotion import EmotionPlan, EmotionPlanner, KAZUMI_VOICE, VALID_EMOTIONS
 from app.speech.profile import VoiceSynthesisOptions, load_voice_profile
 from app.speech.prosody import SpeechTextNormalizer
 from app.speech.queue import SpeechQueue
@@ -27,9 +27,9 @@ EXPECTED_EMOTIONS = {
 
 def test_voice_identity_and_emotion_allowlist_are_stable() -> None:
     assert VALID_EMOTIONS == EXPECTED_EMOTIONS
-    assert NYRA_VOICE.identity_id == "NYRA_VOICE_AVA_V1"
-    assert NYRA_VOICE.language == "pt-BR"
-    assert NYRA_VOICE.presentation == "adult_young_feminine"
+    assert KAZUMI_VOICE.identity_id == "KAZUMI_VOICE_AVA_V1"
+    assert KAZUMI_VOICE.language == "pt-BR"
+    assert KAZUMI_VOICE.presentation == "adult_young_feminine"
     assert EXPECTED_EMOTIONS <= {state.value for state in EmotionalState}
 
 
@@ -50,7 +50,7 @@ def test_invalid_emotion_is_neutral_and_intensity_is_bounded() -> None:
         ("O serviço falhou novamente.", {"outcome": "failed"}, {"concerned"}),
         ("Essa operação vai desligar a máquina virtual.", {"destructive": True}, {"warning"}),
         ("Ué... ele voltou sozinho.", {"unexpected": True}, {"surprised"}),
-        ("Desculpa. Eu interpretei esse comando errado.", {"nyra_error": True}, {"apologetic"}),
+        ("Desculpa. Eu interpretei esse comando errado.", {"kazumi_error": True}, {"apologetic"}),
     ],
 )
 def test_auto_emotion_selection_uses_semantics_and_structured_context(
@@ -97,11 +97,11 @@ def test_emotion_metadata_markdown_json_and_internal_trace_are_never_spoken() ->
 
 def test_ptbr_technical_normalization_covers_units_time_addresses_and_lexicon() -> None:
     prepared = SpeechTextNormalizer().prepare(
-        "NYRA viu Proxmark3 na VM 120 com 32 GB, RX 7600, às 20:45. "
+        "KAZUMI viu Proxmark3 na VM 120 com 32 GB, RX 7600, às 20:45. "
         "O endereço é 192.168.1.2 e retornou HTTP 422."
     )
     speech = prepared.speech_text
-    assert "Naira" in speech
+    assert "Kazumi" in speech and "Naira" not in speech
     assert "Próxmark três" in speech
     assert "trinta e dois gigabytes" in speech
     assert "vinte horas e quarenta e cinco minutos" in speech
@@ -111,7 +111,7 @@ def test_ptbr_technical_normalization_covers_units_time_addresses_and_lexicon() 
 
 def test_voice_profile_has_every_emotion_and_no_pitch_solution() -> None:
     raw, options = load_voice_profile()
-    assert raw["profile_id"] == "NYRA_VOICE_AVA_V1"
+    assert raw["profile_id"] == "KAZUMI_VOICE_AVA_V1"
     assert options.voice == "en-US-AvaMultilingualNeural"
     assert raw["selection"]["pitch_shift"] is False
     assert raw["selection"]["native_emotion_support"] is False
@@ -150,7 +150,7 @@ def test_kokoro_reports_capabilities_honestly(tmp_path: Path) -> None:
 
 def test_kokoro_fallback_never_mixes_speaker_embeddings(tmp_path: Path) -> None:
     provider = KokoroTTSProvider(tmp_path / "model", tmp_path / "voices")
-    assert provider._resolve_voice(object(), "nyra_voice_v2") == "pf_dora"
+    assert provider._resolve_voice(object(), "kazumi_voice_v2") == "pf_dora"
     assert provider.default_voice == "pf_dora"
     assert provider.describe()["custom_style"] is False
 

@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 
 PHRASES = {
-    "casual": "Oi... eu sou a Nyra. Acho que finalmente encontrei uma voz que combina comigo.",
+    "casual": "Oi... eu sou a Kazumi. Acho que finalmente encontrei uma voz que combina comigo.",
     "normal": "Eu estava olhando a rede. Por enquanto, tá tudo tranquilo.",
     "tecnica": "O Proxmox está online. Nenhuma máquina virtual apresentou falha.",
     "curiosa": "Hmm... apareceu um dispositivo diferente aqui. Quer que eu veja o que é?",

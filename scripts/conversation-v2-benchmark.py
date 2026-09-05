@@ -1,4 +1,4 @@
-"""Reproducible NYRA cold/warm and perceived-feedback benchmark.
+"""Reproducible KAZUMI cold/warm and perceived-feedback benchmark.
 
 No prompt/response/audio content is stored.  `--unload-first` intentionally
 removes only the selected Ollama model from residency before the measurement.
@@ -57,7 +57,7 @@ async def ollama_request(base_url: str, model: str, prompt: str, keep_alive: str
     }
 
 
-async def nyra_turn(base_url: str, prompt: str) -> dict:
+async def kazumi_turn(base_url: str, prompt: str) -> dict:
     ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://") + "/api/ws"
     request_sent = datetime.now(timezone.utc).isoformat()
     started = time.perf_counter()
@@ -89,7 +89,7 @@ async def nyra_turn(base_url: str, prompt: str) -> dict:
                 elif kind == "TTS_CHUNK_FINISHED":
                     marks.setdefault("first_tts_audio_ms", elapsed)
                     first_audio_url = first_audio_url or payload.get("audio_url")
-                elif kind == "NYRA_RESPONSE":
+                elif kind == "KAZUMI_RESPONSE":
                     marks.setdefault("response_event_ms", elapsed)
                 if request.done() and "response_event_ms" in marks:
                     break
@@ -119,7 +119,7 @@ async def nyra_turn(base_url: str, prompt: str) -> dict:
 
 async def main(args) -> dict:
     ollama = args.ollama_url.rstrip("/")
-    nyra = args.nyra_url.rstrip("/")
+    kazumi = args.kazumi_url.rstrip("/")
     async with httpx.AsyncClient(timeout=360) as client:
         if args.unload_first:
             await client.post(ollama + "/api/generate", json={
@@ -128,28 +128,28 @@ async def main(args) -> dict:
         preload = None
         if args.preload:
             started = time.perf_counter()
-            response = await client.post(nyra + "/api/ollama/preload")
+            response = await client.post(kazumi + "/api/ollama/preload")
             response.raise_for_status()
             preload = {**response.json(), "client_ms": round((time.perf_counter() - started) * 1000, 1)}
     direct = await ollama_request(ollama, args.model, args.text, args.keep_alive)
-    turn = await nyra_turn(nyra, args.text)
+    turn = await kazumi_turn(kazumi, args.text)
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model": args.model,
         "unloaded_first": args.unload_first,
         "preload": preload,
         "direct_ollama": direct,
-        "nyra_turn": turn,
+        "kazumi_turn": turn,
     }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--nyra-url", default="http://127.0.0.1:8000")
+    parser.add_argument("--kazumi-url", default="http://127.0.0.1:8000")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--model", default="qwen3:8b")
     parser.add_argument("--keep-alive", default="1h")
-    parser.add_argument("--text", default="Nyra, bom dia. Responda em uma frase curta.")
+    parser.add_argument("--text", default="Kazumi, bom dia. Responda em uma frase curta.")
     parser.add_argument("--unload-first", action="store_true")
     parser.add_argument("--preload", action="store_true")
     print(json.dumps(asyncio.run(main(parser.parse_args())), ensure_ascii=False, indent=2))

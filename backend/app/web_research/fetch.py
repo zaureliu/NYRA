@@ -91,7 +91,7 @@ class PublicFetcher:
                 record('tls_verified', url=url, tls_state='PASS')
                 self._connections.add(connection)
                 connection.request('GET', urlunsplit(('', '', parts.path or '/', parts.query, '')),
-                                   headers={'User-Agent': 'NYRA-Technical-Research/1.0', 'Accept-Encoding': 'identity'})
+                                   headers={'User-Agent': 'KAZUMI-Technical-Research/1.0', 'Accept-Encoding': 'identity'})
                 response = connection.getresponse()
                 record('http_response', url=url, http_status=response.status,
                        content_encoding=response.getheader('Content-Encoding', 'identity'))

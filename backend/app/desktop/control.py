@@ -51,7 +51,7 @@ from app.desktop.windows import (
 )
 from app.events import EventBus, EventType
 
-logger = logging.getLogger("nyra.desktop")
+logger = logging.getLogger("kazumi.desktop")
 
 _BACKGROUND_HINTS = {"steam", "discord", "onedrive", "dropbox"}
 
@@ -74,14 +74,14 @@ def redact_query(query: str) -> str:
 
 
 def _is_protected_window(window: WindowInfo) -> bool:
-    """NYRA components are never close/minimize targets (spec §281-285)."""
+    """KAZUMI components are never close/minimize targets (spec §281-285)."""
     from app.desktop.window_manager import is_own_process
 
     if window.pid and is_own_process(window.pid):
         return True
     title = (window.title or "").casefold()
     process_name = (window.process_name or "").casefold()
-    protected_markers = ("nyra-desktop", "nyra backend", "nyra presence", "tauri")
+    protected_markers = ("kazumi-desktop", "kazumi backend", "kazumi presence", "tauri")
     return any(marker in title or marker in process_name for marker in protected_markers)
 
 
@@ -182,7 +182,7 @@ class DesktopController:
         self.registry = DesktopAppsRegistry()
         self._launched_pids: dict[str, set[int]] = {}
         self.discovery = ApplicationDiscovery(enabled=dynamic_discovery)
-        # Universal Application Registry (nyra-full §2/§3): índice persistente +
+        # Universal Application Registry (kazumi-full §2/§3): índice persistente +
         # aprendizado de aliases verificados.
         from app.desktop.universal_registry import UniversalAppRegistry
 
@@ -416,10 +416,10 @@ class DesktopController:
                 verification_status="NOT_EXECUTED",
                 detail={"options": options},
             )
-        # Fast path do Universal Registry (nyra-full §41): alias aprendido/exato
+        # Fast path do Universal Registry (kazumi-full §41): alias aprendido/exato
         # resolve sem busca fuzzy completa. Resolução roda FORA do event loop:
         # cache expirado dispara reindex completo (Start Menu/PowerShell) e
-        # travaria o backend inteiro inline (nyra-full §2 divergência real).
+        # travaria o backend inteiro inline (kazumi-full §2 divergência real).
         fast_candidates = (
             await asyncio.to_thread(self.universal.resolve_launch_candidates, clean)
             if self.universal is not None else []
@@ -831,7 +831,7 @@ class DesktopController:
                                 "verification": "PID",
                             },
                         )
-                    # nyra-full §11: app single-instance já aberto não é falha —
+                    # kazumi-full §11: app single-instance já aberto não é falha —
                     # se as janelas pré-existentes seguem vivas, foca e reporta.
                     still_open = [
                         window for window in annotate_process_names(list_visible_windows())
@@ -853,7 +853,7 @@ class DesktopController:
                     terminated = self._terminate_own_process(process)
                     return done(success=False, error_code=LaunchErrorCode.WINDOW_NOT_CONFIRMED.value,
                                 message="Processo iniciado, mas nenhuma janela visível foi confirmada dentro do timeout."
-                                        + (" Processo encerrado por ser da própria NYRA." if terminated else ""),
+                                        + (" Processo encerrado por ser da própria KAZUMI." if terminated else ""),
                                 execution_success=True, effect_verified=False, verification_status="VERIFICATION_FAILED",
                                 detail={"candidate": candidate.public_dict(), "pid": process.pid})
                 await self._publish_verified(candidate, confirmed[0].pid)
@@ -1398,7 +1398,7 @@ class DesktopController:
 
     @staticmethod
     def _terminate_own_process(process: subprocess.Popen) -> bool:
-        """Encerra processo filho da própria NYRA quando a verificação de janela falha."""
+        """Encerra processo filho da própria KAZUMI quando a verificação de janela falha."""
         try:
             process.terminate()
             process.wait(timeout=3)
@@ -1537,7 +1537,7 @@ class DesktopController:
                 return done(
                     success=False, error_code=LaunchErrorCode.WINDOW_NOT_CONFIRMED.value,
                     message="Processo iniciado, mas nenhuma janela visível correspondente foi confirmada no desktop dentro do timeout."
-                            + (" Processo encerrado pela NYRA por ser de sua própria autoria." if terminated else ""),
+                            + (" Processo encerrado pela KAZUMI por ser de sua própria autoria." if terminated else ""),
                     execution_success=True, effect_verified=False, verification_status="VERIFICATION_FAILED",
                     detail={"pid": process.pid, "timeout_seconds": spec.startup_timeout_seconds,
                             "cleaned_up": terminated},
@@ -1569,7 +1569,7 @@ class DesktopController:
         return {"refreshed": True, "sources": sources, **self.universal_status()}
 
     async def handle_universal(self, intent, *, turn_id: str | None = None) -> tuple[bool, str]:
-        """Executa uma UniversalIntent SEM LLM (nyra-full §25/§41).
+        """Executa uma UniversalIntent SEM LLM (kazumi-full §25/§41).
 
         Retorna (handled, reply). Dedup por turno garante 1 pedido →
         1 execução física mesmo se chamado duas vezes.
@@ -1626,7 +1626,7 @@ class DesktopController:
         return handled, reply
 
     async def _universal_open_folder(self, name_query: str) -> tuple[bool, str]:
-        """OPEN_FOLDER determinístico (nyra-full §6): resolve pasta conhecida,
+        """OPEN_FOLDER determinístico (kazumi-full §6): resolve pasta conhecida,
         abre via Explorer/ShellExecute e verifica a janela. NUNCA usa
         filesystem_list_files nem Agent Loop."""
         from app.desktop.intents import FOLDER_SHELL_URIS
@@ -1732,7 +1732,7 @@ class DesktopController:
         return None
 
     def _find_file_by_name(self, raw_name: str) -> Path | None:
-        """Resolve arquivo por nome em locais padrão (nyra-full §7/§29)."""
+        """Resolve arquivo por nome em locais padrão (kazumi-full §7/§29)."""
         clean = raw_name.strip().strip('"')
         if not clean:
             return None
@@ -1760,7 +1760,7 @@ class DesktopController:
         return None
 
     async def _universal_open_file(self, raw_name: str, *, contextual: bool = False) -> tuple[bool, str]:
-        """OPEN_FILE determinístico (nyra-full §7): resolve → app associado →
+        """OPEN_FILE determinístico (kazumi-full §7): resolve → app associado →
         abrir → verificar janela/arquivo quando possível."""
         from app.desktop import window_manager as wm
 
@@ -1882,7 +1882,7 @@ class DesktopController:
 
     def _resolve_window_targets(self, query: str, hints: dict[str, list[str]] | None = None) -> list[WindowInfo]:
         """Janelas visíveis do alvo consultado (registry + universal + título +
-        dicas de contexto para pronomes como 'ele'/'ela' — nyra-full §8/§18)."""
+        dicas de contexto para pronomes como 'ele'/'ela' — kazumi-full §8/§18)."""
         candidates: list[str] = []          # nomes de processo sem .exe
         title_tokens: list[str] = []
 

@@ -1,4 +1,4 @@
-"""nyra-7c FASE H - paridade critica no backend PyInstaller congelado.
+"""kazumi-7c FASE H - paridade critica no backend PyInstaller congelado.
 
 O processo congelado deve estar escutando em 127.0.0.1:8000. O harness usa
 apenas a API publica, observa efeitos Win32 a partir do runner e nunca encerra
@@ -21,7 +21,7 @@ from app.core.paths import DATA_ROOT
 
 BASE = "http://127.0.0.1:8000"
 ensure_script_directories()
-REPORT = REPORT_ROOT / "nyra-7c-frozen-e2e.json"
+REPORT = REPORT_ROOT / "kazumi-7c-frozen-e2e.json"
 
 
 def http(method: str, path: str, payload=None, timeout: float = 150):
@@ -64,7 +64,7 @@ skill_alias = f"paridade congelado {run_id}"
 # O resolvedor de OPEN_FOLDER também procura no DATA_ROOT. Uma subpasta única
 # no runtime isolado testa resolução por nome sem escrever em Documents nem
 # reutilizar/fechar uma janela preexistente do operador.
-fixture_folder = DATA_ROOT / f"nyra7cfrozen{run_id}"
+fixture_folder = DATA_ROOT / f"kazumi7cfrozen{run_id}"
 fixture_folder.mkdir()
 initial_explorer = {item[0] for item in windows("explorer")}
 listening_before: bool | None = None

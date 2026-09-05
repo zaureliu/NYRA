@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { reconnectDelay } from './useNyraSocket'
+import { reconnectDelay } from './useKazumiSocket'
 
 describe('reconnectDelay', () => {
   it('uses bounded exponential backoff', () => {
@@ -9,9 +9,9 @@ describe('reconnectDelay', () => {
 })
 
 describe('persona presence bridge', () => {
-  it('applies the provider-neutral NYRA emotion event to desktop presence', () => {
-    const source = readFileSync(new URL('./useNyraSocket.ts', import.meta.url), 'utf-8')
-    expect(source).toContain("event.type === 'NYRA_EMOTION_CHANGED'")
+  it('applies the provider-neutral KAZUMI emotion event to desktop presence', () => {
+    const source = readFileSync(new URL('./useKazumiSocket.ts', import.meta.url), 'utf-8')
+    expect(source).toContain("event.type === 'KAZUMI_EMOTION_CHANGED'")
     expect(source).toContain('event.payload.emotion as EmotionalState')
   })
 })

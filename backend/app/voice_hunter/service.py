@@ -28,7 +28,7 @@ from .models import (
 )
 
 BENCHMARK_PHRASES = {
-    "casual": "Oi... eu sou a Nyra. Acho que agora estamos chegando mais perto da minha voz.",
+    "casual": "Oi... eu sou a Kazumi. Acho que agora estamos chegando mais perto da minha voz.",
     "natural": "Eu estava olhando a rede enquanto você trabalhava. Por enquanto, tá tudo tranquilo.",
     "curiosa": "Hmm... apareceu alguma coisa diferente aqui. Quer que eu veja o que é?",
     "humor_seco": "DNS funcionando normalmente. Quase suspeito.",
@@ -79,6 +79,8 @@ class VoiceHunterService:
             try:
                 cached = [VoiceCandidate.model_validate(item) for item in json.loads(self.index_path.read_text(encoding="utf-8"))]
                 for previous in cached:
+                    if previous.id == "kokoro-nyra-voice-v2":
+                        previous.id = "kokoro-kazumi-voice-v2"
                     if previous.id not in fresh:
                         continue
                     current = fresh[previous.id]
@@ -90,6 +92,8 @@ class VoiceHunterService:
                 pass
         for candidate in fresh.values():
             sample = self.root / candidate.id / "sample.wav"
+            if not sample.exists() and candidate.id == "kokoro-kazumi-voice-v2":
+                sample = self.root / "kokoro-nyra-voice-v2" / "sample.wav"
             if sample.is_file():
                 try:
                     stored_sample = sample.relative_to(DATA_ROOT)
@@ -166,7 +170,7 @@ class VoiceHunterService:
         if self._task and not self._task.done():
             return self.state
         self._cancel = asyncio.Event()
-        self._task = asyncio.create_task(self._run_search(), name="nyra-voice-hunter")
+        self._task = asyncio.create_task(self._run_search(), name="kazumi-voice-hunter")
         await asyncio.sleep(0)
         return self.state
 
@@ -312,7 +316,7 @@ class VoiceHunterService:
         if len(requested) > 4000:
             raise ValueError("texto excede 4000 caracteres")
         provider = next((item for item in self.tts_catalog if item.name == candidate.provider), None)
-        if candidate.status == CandidateStatus.SAFE_FOR_NYRA_REFERENCE:
+        if candidate.status == CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE:
             provider = next((item for item in self.tts_catalog if item.name == "chatterbox_multilingual_v3"), None)
         if provider is None or not await provider.health():
             path = self.sample_path(candidate_id)
@@ -320,7 +324,7 @@ class VoiceHunterService:
         prepared = ProsodyProcessor().prepare(requested, provider=provider.name)
         options = VoiceSynthesisOptions(provider=provider.name, voice=candidate.provider_voice or "default")
         started = time.perf_counter()
-        if candidate.status == CandidateStatus.SAFE_FOR_NYRA_REFERENCE and hasattr(provider, "synthesize_with_reference"):
+        if candidate.status == CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE and hasattr(provider, "synthesize_with_reference"):
             output = await provider.synthesize_with_reference(prepared.speech_text, self.sample_path(candidate_id), "neutral", options)
         else:
             output = await provider.synthesize(prepared.speech_text, "neutral", options)
@@ -354,7 +358,7 @@ class VoiceHunterService:
 
     async def select_official(self, candidate_id: str) -> dict[str, Any]:
         candidate = self.get_candidate(candidate_id)
-        if candidate.status not in {CandidateStatus.SAFE_FOR_NYRA_REFERENCE, CandidateStatus.SAFE_FOR_DIRECT_TTS}:
+        if candidate.status not in {CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE, CandidateStatus.SAFE_FOR_DIRECT_TTS}:
             raise PermissionError(f"{candidate.status.value} não pode ser voz oficial")
         profile_path = IDENTITY_ROOT / "voice_profile.json"
         profile = json.loads(profile_path.read_text(encoding="utf-8"))
@@ -362,17 +366,17 @@ class VoiceHunterService:
         backup_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         (backup_dir / f"voice-profile-{stamp}.json").write_text(json.dumps(profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        if candidate.status == CandidateStatus.SAFE_FOR_NYRA_REFERENCE:
+        if candidate.status == CandidateStatus.SAFE_FOR_KAZUMI_REFERENCE:
             source = self.sample_path(candidate_id)
             REFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, REFERENCE_PATH)
-            profile.update({"provider": "chatterbox_multilingual_v3", "voice": "nyra_reference", "reference_file": "data/voices/nyra_reference.wav"})
+            profile.update({"provider": "chatterbox_multilingual_v3", "voice": "kazumi_reference", "reference_file": "data/voices/kazumi_reference.wav"})
         else:
             provider = next((item for item in self.tts_catalog if item.name == candidate.provider), None)
             if provider is None or not await provider.health():
                 raise RuntimeError("provider direto não está disponível neste host")
             profile.update({"provider": candidate.provider, "voice": candidate.provider_voice or "default"})
-        profile["profile_id"] = "NYRA_VOICE"
+        profile["profile_id"] = "KAZUMI_VOICE"
         profile["selected_by_user_at"] = utc_now()
         profile["voice_hunter_candidate_id"] = candidate.id
         profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

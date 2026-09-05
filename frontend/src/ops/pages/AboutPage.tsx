@@ -58,7 +58,7 @@ export function AboutPage() {
       <ErrorAlert message={revalidateError} />
 
       <div className="ops-grid-2">
-        <Card title={`NYRA ${about.data?.version ?? '…'}`} sub="Local-first · sem nuvem obrigatória">
+        <Card title={`KAZUMI ${about.data?.version ?? '…'}`} sub="Local-first · sem nuvem obrigatória">
           <dl className="ops-kv">
             <dt>Versão</dt><dd>{about.data?.version ?? '—'}</dd>
             {Object.entries(about.data?.components ?? {}).map(([key, value]) => (

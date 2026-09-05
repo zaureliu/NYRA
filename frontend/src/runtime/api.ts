@@ -1,4 +1,4 @@
-import { nyraFetch } from './backend'
+import { kazumiFetch } from './backend'
 
 export interface ApiErrorEnvelope {
   error_code: string
@@ -32,7 +32,7 @@ export async function apiGet<T>(path: string, timeoutMs = 12000, cache: RequestC
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await nyraFetch(path, { signal: controller.signal, cache })
+    const response = await kazumiFetch(path, { signal: controller.signal, cache })
     if (!response.ok) {
       let detail: unknown = undefined
       try { detail = (await response.json()).detail } catch { /* corpo vazio */ }
@@ -53,7 +53,7 @@ export async function apiSend<T>(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await nyraFetch(path, {
+    const response = await kazumiFetch(path, {
       method,
       headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,

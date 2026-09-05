@@ -39,7 +39,7 @@ class Expressiveness(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class VoiceIdentity:
-    identity_id: str = "NYRA_VOICE_AVA_V1"
+    identity_id: str = "KAZUMI_VOICE_AVA_V1"
     language: str = "pt-BR"
     presentation: str = "adult_young_feminine"
     register: str = "medium_feminine"
@@ -47,7 +47,7 @@ class VoiceIdentity:
     synthetic_identity: bool = True
 
 
-NYRA_VOICE = VoiceIdentity()
+KAZUMI_VOICE = VoiceIdentity()
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,8 +249,8 @@ class EmotionPlanner:
         source = str(data.get("error_source") or "").casefold()
         message_type = str(data.get("message_type") or "").casefold()
         destructive = bool(data.get("destructive")) or bool(self._RISK.search(combined))
-        if source == "nyra" or bool(data.get("nyra_error")) or self._SELF_ERROR.search(response):
-            return _Candidate(VoiceEmotion.APOLOGETIC, 0.38, 0.94, 100, "nyra_error")
+        if source == "kazumi" or bool(data.get("kazumi_error")) or self._SELF_ERROR.search(response):
+            return _Candidate(VoiceEmotion.APOLOGETIC, 0.38, 0.94, 100, "kazumi_error")
         if destructive or message_type == "confirmation_required":
             return _Candidate(VoiceEmotion.WARNING, 0.55, 0.95, 95, "destructive_or_risk")
         if severity in {"critical", "high"}:

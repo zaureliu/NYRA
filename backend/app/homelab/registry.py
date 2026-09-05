@@ -1,7 +1,7 @@
 """Unified Host Registry.
 
 Single source of truth for homelab hosts. Loaded from an ignored local registry
-(path overridable via NYRA_HOMELAB_REGISTRY_PATH).
+(path overridable via KAZUMI_HOMELAB_REGISTRY_PATH).
 The registry stores no credentials: hosts point to a credentials_profile that
 is resolved against settings or the Trusted Host Registry at execution time.
 """
@@ -22,7 +22,7 @@ from app.homelab.models import (
 )
 
 
-logger = logging.getLogger("nyra.homelab")
+logger = logging.getLogger("kazumi.homelab")
 
 # A public clone must not guess or disclose an operator's topology. Real hosts
 # are loaded only from the ignored local registry or an explicit override.

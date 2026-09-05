@@ -36,7 +36,7 @@ export function TopStatusBar() {
 
   const health = healthStatus.data
   const backendState = health ? 'ONLINE' : healthStatus.loading && !healthStatus.error ? 'STARTING' : 'OFFLINE'
-  const nyraState = health ? normalizeKnownState(health.status) : backendState
+  const kazumiState = health ? normalizeKnownState(health.status) : backendState
   const ollama = readiness.data ?? health?.ollama
   const ollamaState = resolveOllamaState(ollama, readiness.loading, readiness.error, Boolean(health))
   const activeModel = ollamaState === 'READY' ? String(ollama?.model ?? '').trim() : ''
@@ -55,11 +55,11 @@ export function TopStatusBar() {
   return (
     <header className="ops-topbar">
       <div className="ops-brand">
-        <strong>NYRA</strong>
+        <strong>KAZUMI</strong>
         <span>OPS V3</span>
       </div>
       <div className="ops-topbar-chips" aria-label="Estado do sistema">
-        <Chip tone={toneOf(nyraState)} label="NYRA" value={nyraState} />
+        <Chip tone={toneOf(kazumiState)} label="KAZUMI" value={kazumiState} />
         <Chip tone={toneOf(ollamaState)} label="Ollama" value={ollamaValue} title={ollamaDetail} />
         <Chip tone={toneOf(voiceState)} label="Voz" value={voiceState} />
         <Chip tone={toneOf(backendState)} label="Backend" value={backendState} />

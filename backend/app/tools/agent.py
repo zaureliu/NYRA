@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from app.agent.models import AgentLoopRuntime
 
 
-logger = logging.getLogger("nyra.grounding.loop")
+logger = logging.getLogger("kazumi.grounding.loop")
 
 
 class ToolAgentLoop:
@@ -216,7 +216,7 @@ class ToolAgentLoop:
                     and no_tool_nudges < 2
                     and len(content) > 30
                 ):
-                    # nyra-full §26: tarefa multi-step exige tools nativas; prosa
+                    # kazumi-full §26: tarefa multi-step exige tools nativas; prosa
                     # sem nenhuma observação ainda = lembrete determinístico.
                     no_tool_nudges += 1
                     working.append(LLMMessage(
@@ -356,7 +356,7 @@ class ToolAgentLoop:
                 if runtime and runtime.required_local_backend and name == "remote_shell":
                     result = self._blocked(
                         name, RiskLevel.ELEVATED, "REMOTE_OUT_OF_SCOPE",
-                        "O objetivo atual está vinculado ao backend local da NYRA; SSH remoto exige nova evidência local que justifique o alvo.",
+                        "O objetivo atual está vinculado ao backend local da KAZUMI; SSH remoto exige nova evidência local que justifique o alvo.",
                     )
                 elif (
                     runtime and runtime.required_local_backend and name == "system_shell"

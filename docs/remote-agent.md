@@ -24,7 +24,7 @@ O mesmo `ShellRiskClassifier` analisa comandos remotos com regras Linux/OpenWrt/
 
 Um approval é associado por SHA-256 a comando, host-alvo, cwd, timeout e `agent_run_id`, expira e só pode ser consumido uma vez. Auto-remediation exige simultaneamente:
 
-1. `NYRA_AGENT_AUTO_REMEDIATION=true`;
+1. `KAZUMI_AGENT_AUTO_REMEDIATION=true`;
 2. action ID na allowlist global;
 3. action ID na allowlist do host;
 4. recurso exato no `managed_resources` do host.
@@ -45,7 +45,7 @@ Proteções:
 - lock por recurso durante mutação e verificação;
 - verificação READ_ONLY obrigatória após mudança;
 - cancelamento por voz/chat e API, com encerramento de subprocesso SSH/local controlado quando possível;
-- `NYRA_AGENT_READ_ONLY=true` bloqueia mutações dentro do loop.
+- `KAZUMI_AGENT_READ_ONLY=true` bloqueia mutações dentro do loop.
 
 ## API e observabilidade
 

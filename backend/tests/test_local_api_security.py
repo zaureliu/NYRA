@@ -22,7 +22,7 @@ def _app() -> FastAPI:
 
 
 def test_rejects_host_origin_and_cross_site_fetch(monkeypatch):
-    monkeypatch.setenv("NYRA_TESTING", "true")
+    monkeypatch.setenv("KAZUMI_TESTING", "true")
     with TestClient(_app()) as client:
         assert client.post("/mutate", headers={"host": "evil.example:8000"}).status_code == 403
         assert client.post("/mutate", headers={"origin": "http://evil.example"}).status_code == 403
@@ -30,7 +30,7 @@ def test_rejects_host_origin_and_cross_site_fetch(monkeypatch):
 
 
 def test_allows_native_no_origin_and_trusted_ui(monkeypatch):
-    monkeypatch.setenv("NYRA_TESTING", "true")
+    monkeypatch.setenv("KAZUMI_TESTING", "true")
     with TestClient(_app()) as client:
         assert client.post("/mutate").json() == {"ok": True}
         response = client.post("/mutate", headers={"origin": "http://127.0.0.1:5173"})
@@ -38,7 +38,7 @@ def test_allows_native_no_origin_and_trusted_ui(monkeypatch):
 
 
 def test_websocket_rejects_hostile_origin(monkeypatch):
-    monkeypatch.setenv("NYRA_TESTING", "true")
+    monkeypatch.setenv("KAZUMI_TESTING", "true")
     with TestClient(_app()) as client:
         with pytest.raises(Exception):
             with client.websocket_connect("/ws", headers={"origin": "http://evil.example"}):

@@ -122,7 +122,7 @@ async def test_build_repair_uses_same_project_and_real_artifact_hash(tmp_path):
         calls.append(workspace)
         if len(calls) == 1:
             return {'success': False, 'stdout': 'src/main.cpp:3:1: error: expected ; before } token'}
-        artifact = workspace / '.pio/build/nyra/firmware.hex'
+        artifact = workspace / '.pio/build/kazumi/firmware.hex'
         artifact.parent.mkdir(parents=True)
         artifact.write_text('CONTROLLED SIMULATED FIRMWARE')
         return {'success': True}

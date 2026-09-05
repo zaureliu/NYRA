@@ -24,7 +24,7 @@ from app.usb.models import (
 )
 from app.usb.registry import UsbDeviceRegistry
 
-logger = logging.getLogger("nyra.usb.service")
+logger = logging.getLogger("kazumi.usb.service")
 
 
 def _plain(value: str) -> str:
@@ -102,8 +102,8 @@ class UsbDeviceService:
                 self.last_error = str(getattr(self.notification_source, "last_error", None)
                                       or "PNP_NOTIFICATION_UNAVAILABLE")
                 await self._monitor_failure(self.last_error)
-            self._spawn(self._event_worker(), "nyra-usb-events")
-            self._spawn(self._fallback_loop(), "nyra-usb-reconciliation")
+            self._spawn(self._event_worker(), "kazumi-usb-events")
+            self._spawn(self._fallback_loop(), "kazumi-usb-reconciliation")
             await self.event_bus.publish(
                 EventType.USB_MONITOR_STARTED,
                 state=self.state.value,
@@ -115,12 +115,12 @@ class UsbDeviceService:
                 ],
             )
             await self._sync_computer_state()
-        except Exception as error:  # noqa: BLE001 - optional monitor must not stop NYRA
+        except Exception as error:  # noqa: BLE001 - optional monitor must not stop KAZUMI
             self.state = UsbMonitorState.DEGRADED
             self.last_error = f"{type(error).__name__}: {error}"[:240]
             logger.exception("usb_monitor_start_failed")
             await self._monitor_failure(self.last_error)
-            self._spawn(self._fallback_loop(), "nyra-usb-reconciliation")
+            self._spawn(self._fallback_loop(), "kazumi-usb-reconciliation")
             await self._sync_computer_state()
 
     async def stop(self) -> None:

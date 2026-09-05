@@ -1,6 +1,6 @@
 // Playback reference in the WebView that owns the existing microphone.
 // Browser AEC remains primary; spectral matches reject residual self-voice.
-export const BARGE_IN_EVENT = 'nyra:local-barge-in'
+export const BARGE_IN_EVENT = 'kazumi:local-barge-in'
 let playing = false
 const references: Array<{ at: number; bands: number[] }> = []
 export const outputIsPlaying = () => playing

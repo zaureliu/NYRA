@@ -1,6 +1,6 @@
-# NYRA Live2D Art Specification
+# KAZUMI Live2D Art Specification
 
-Esta especificação é apenas orientação para um modelo externo administrado no VTube Studio. Nenhuma arte ou modelo resultante é embutido no runtime NYRA.
+Esta especificação é apenas orientação para um modelo externo administrado no VTube Studio. Nenhuma arte ou modelo resultante é embutido no runtime KAZUMI.
 
 Canvas recomendado: 4096×4096, bust/portrait, margem segura ao redor do cabelo e ombros. Preserve rosto, cabelo violeta/ameixa escuro, mecha teal discreta, olhos teal, roupa grafite e Neural Link ciano.
 

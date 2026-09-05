@@ -76,8 +76,8 @@ logs/*.log
 *.pt
 *.pth
 *.ckpt
-.nyra-processes.json
-.nyra-runtime.json
+.kazumi-processes.json
+.kazumi-runtime.json
 .tmp/
 .test-temp/
 selfdev-workspace/
@@ -90,7 +90,7 @@ support-bundles/
 *.supportbundle
 knowledge/
 knowledge-data/
-NYRA-Knowledge/
+KAZUMI-Knowledge/
 model-cache/
 voice-cache/
 recordings/
@@ -129,10 +129,20 @@ tokens*
 *.vtube.json
 tmp/
 temp/
-NYRA-Projects/
+KAZUMI-Projects/
 node_modules/
 target/
 dist/
 build/
 .mypy_cache/
 coverage/
+
+# Private migration roots, including legacy names
+Kazumi-Knowledge/
+NYRA-Knowledge/
+Kazumi-Projects/
+NYRA-Projects/
+Kazumi-Auto-Code/
+Nyra-Auto-Code/
+.nyra-runtime.json
+.nyra-processes.json

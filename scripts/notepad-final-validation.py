@@ -1,4 +1,4 @@
-"""Closure Parte 18 — Notepad E2E REAL contra o runtime da NYRA (:8000).
+"""Closure Parte 18 — Notepad E2E REAL contra o runtime da KAZUMI (:8000).
 
 Fluxo obrigatório (§18.1):
     launch → verify PID/HWND/title → type → read back →
@@ -20,7 +20,7 @@ import httpx
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASE = "http://127.0.0.1:8000"
-TARGET_TEXT = "NYRA final validation"
+TARGET_TEXT = "KAZUMI final validation"
 SAVE_PATH = REPO_ROOT / ".test-temp" / "notepad-final-validation.txt"
 
 results: dict[str, object] = {"case": "notepad_final_validation"}

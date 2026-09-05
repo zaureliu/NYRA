@@ -23,7 +23,7 @@ from app.tools import create_tool_registry
 
 def fingerprint(**updates):
     value = {
-        "service": "utamo-sentinel", "integration": "nyra", "status": "online",
+        "service": "utamo-sentinel", "integration": "kazumi", "status": "online",
         "api_version": "1", "sentinel_version": "2.2.1", "instance_id": "instance-test",
         "capabilities": ["events", "recent_alerts", "health"], "authentication_required": True,
     }
@@ -107,7 +107,7 @@ def test_secret_store_does_not_expose_or_version_token(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_event_validation_deduplication_history_and_event_bus(tmp_path: Path):
     settings = Settings.from_sources(
-        environment="test", database_path=tmp_path / "nyra.db", sentinel_watch_enabled=False,
+        environment="test", database_path=tmp_path / "kazumi.db", sentinel_watch_enabled=False,
         sentinel_store_event_history=True,
     )
     bus = EventBus()
@@ -132,7 +132,7 @@ async def test_event_validation_deduplication_history_and_event_bus(tmp_path: Pa
 @pytest.mark.asyncio
 async def test_connector_off_stops_all_io_and_persists_toggle(tmp_path: Path):
     settings = Settings.from_sources(
-        environment="test", database_path=tmp_path / "nyra.db", sentinel_watch_enabled=False,
+        environment="test", database_path=tmp_path / "kazumi.db", sentinel_watch_enabled=False,
     )
     connector = SentinelConnector(settings, EventBus())
     connector.secrets = SentinelSecretStore(tmp_path / "token.txt")
@@ -145,7 +145,7 @@ async def test_connector_off_stops_all_io_and_persists_toggle(tmp_path: Path):
 
 
 def test_all_sentinel_tools_are_read_only(tmp_path: Path):
-    settings = Settings.from_sources(environment="test", database_path=tmp_path / "nyra.db")
+    settings = Settings.from_sources(environment="test", database_path=tmp_path / "kazumi.db")
     connector = SentinelConnector(settings, EventBus())
     registry = create_tool_registry()
     register_sentinel_tools(registry, connector)
@@ -161,7 +161,7 @@ def test_all_sentinel_tools_are_read_only(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_proactive_alerts_aggregate_voice_burst_but_keep_history(tmp_path: Path):
     settings = Settings.from_sources(
-        environment="test", database_path=tmp_path / "nyra.db",
+        environment="test", database_path=tmp_path / "kazumi.db",
         sentinel_voice_alerts=True, sentinel_critical_only=False,
         sentinel_alert_cooldown_seconds=300,
     )

@@ -29,12 +29,12 @@ from app.speech.queue import SpeechPriority
 from app.tools.redaction import redact_secrets
 
 
-logger = logging.getLogger("nyra.proactive_presence")
+logger = logging.getLogger("kazumi.proactive_presence")
 
 
 _RELEASE_EVENTS = {
     EventType.TTS_FINISHED, EventType.TTS_FAILED, EventType.SPEECH_CANCELLED,
-    EventType.NYRA_RESPONSE, EventType.SHELL_EXECUTION_FINISHED,
+    EventType.KAZUMI_RESPONSE, EventType.SHELL_EXECUTION_FINISHED,
     EventType.REMOTE_SHELL_EXECUTION_FINISHED, EventType.AGENT_RUN_FINISHED,
     EventType.USER_RETURNED, EventType.HANDS_FREE_ENDED,
 }
@@ -112,7 +112,7 @@ class ProactivePresenceService:
         if self._started:
             return
         await self.event_bus.subscribe(self.handle_event)
-        self._runner = asyncio.create_task(self._event_loop(), name="nyra-proactive-presence")
+        self._runner = asyncio.create_task(self._event_loop(), name="kazumi-proactive-presence")
         self._started = True
         self._schedule_deferred_flush(delay=.2)
 
@@ -343,7 +343,7 @@ class ProactivePresenceService:
             emotion=emotion,
         )
         if record.decision == ProactiveDecision.VOICE_AND_CHAT:
-            task = asyncio.create_task(self._speak(notification), name="nyra-proactive-voice")
+            task = asyncio.create_task(self._speak(notification), name="kazumi-proactive-voice")
             self._voice_tasks.add(task)
             task.add_done_callback(self._voice_tasks.discard)
 
@@ -487,7 +487,7 @@ class ProactivePresenceService:
             await asyncio.sleep(delay)
             await self.flush_deferred()
 
-        self._flush_task = asyncio.create_task(run(), name="nyra-proactive-deferred")
+        self._flush_task = asyncio.create_task(run(), name="kazumi-proactive-deferred")
 
     async def flush_deferred(self) -> int:
         snapshot = self.world_state.get_snapshot() if self.world_state is not None else {}

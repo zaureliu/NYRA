@@ -14,7 +14,7 @@ TTS_CREDENTIAL_IDS = {
 
 
 class TtsCredentialBroker:
-    """Narrow, provider-bound access to NYRA's official Credential Broker."""
+    """Narrow, provider-bound access to KAZUMI's official Credential Broker."""
 
     def __init__(self, broker: CredentialBroker | None) -> None:
         self._broker = broker
@@ -35,7 +35,9 @@ class TtsCredentialBroker:
     def has_credential(self, provider_id: str) -> bool:
         if self._broker is None:
             return False
-        return bool(self._broker.status(self.credential_id(provider_id)).get("success"))
+        # The protected vault survives restart; the metadata index does not.
+        # Resolve only this authorized provider ID, returning existence only.
+        return bool(self._broker.resolve(self.credential_id(provider_id)))
 
     def save_credential(self, provider_id: str, secret: str) -> dict:
         if self._broker is None:

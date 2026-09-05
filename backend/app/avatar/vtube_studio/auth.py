@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from app.avatar.vtube_studio.client import VTubeStudioClient
 
-PLUGIN_NAME = "NYRA Avatar Bridge"
-PLUGIN_DEVELOPER = "NYRA Local"
+PLUGIN_NAME = "KAZUMI Avatar Bridge"
+PLUGIN_DEVELOPER = "KAZUMI Local"
 
 
 class VTSAuth:
@@ -35,5 +35,14 @@ class VTSAuth:
     async def authenticate(self, token: str | None=None) -> bool:
         value=token or self.load_token()
         if not value: return False
-        response=await self.client.call("AuthenticationRequest", {"pluginName":PLUGIN_NAME, "pluginDeveloper":PLUGIN_DEVELOPER, "authenticationToken":value})
-        return bool(response.get("data", {}).get("authenticated"))
+        # VTS binds a token to plugin identity. Retain secure authentication to
+        # the legacy plugin without deleting/re-exporting an operator token.
+        from .protocol import VTSProtocolError
+        for name, developer in ((PLUGIN_NAME, PLUGIN_DEVELOPER), ("NYRA Avatar Bridge", "NYRA Local")):
+            try:
+                response=await self.client.call("AuthenticationRequest", {"pluginName":name, "pluginDeveloper":developer, "authenticationToken":value})
+            except VTSProtocolError:
+                continue
+            if response.get("data", {}).get("authenticated"):
+                return True
+        return False

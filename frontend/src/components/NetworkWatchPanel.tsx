@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { nyraFetch } from '../runtime/backend'
+import { kazumiFetch } from '../runtime/backend'
 
 export interface NetworkTarget {
   kind: string
@@ -231,8 +231,8 @@ export function NetworkWatchPanel() {
       try {
         const since = latestTimestamp.current ? `&since=${encodeURIComponent(latestTimestamp.current)}` : ''
         const [statusResponse, metricsResponse] = await Promise.all([
-          nyraFetch('/api/network-watch/status'),
-          nyraFetch(`/api/network-watch/metrics?minutes=${minutes}${since}`),
+          kazumiFetch('/api/network-watch/status'),
+          kazumiFetch(`/api/network-watch/metrics?minutes=${minutes}${since}`),
         ])
         if (!statusResponse.ok || !metricsResponse.ok) throw new Error(`HTTP ${statusResponse.status}/${metricsResponse.status}`)
         const nextStatus = await statusResponse.json() as NetworkStatus
@@ -258,7 +258,7 @@ export function NetworkWatchPanel() {
     let active = true
     const loadEvents = async () => {
       try {
-        const response = await nyraFetch('/api/network-watch/events?hours=24&limit=30')
+        const response = await kazumiFetch('/api/network-watch/events?hours=24&limit=30')
         if (response.ok && active) setEvents((await response.json() as { events: NetworkEventItem[] }).events)
       } catch { /* status polling owns the visible transport error */ }
     }

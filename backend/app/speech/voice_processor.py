@@ -50,7 +50,7 @@ class VoiceProcessor:
     async def process(self, source: Path, state: str = "neutral") -> Path:
         if not self.config.enabled:
             return source
-        output = self.output_dir / f"nyra-processed-{uuid4().hex}.wav"
+        output = self.output_dir / f"kazumi-processed-{uuid4().hex}.wav"
         await asyncio.to_thread(self._process_sync, source, output, state)
         return output
 

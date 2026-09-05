@@ -114,10 +114,10 @@ class SelfDevelopmentService:
 
     def _settings_from_runtime(self) -> SelfDevSettings:
         workspace = Path(getattr(self.runtime_settings, "selfdev_workspace", "") or _preferred_path(
-            "NYRA_SELFDEV_WORKSPACE", PROJECT_ROOT.parent / "Nyra-Auto-Code", RUNTIME_ROOT / "selfdev-workspace"
+            "KAZUMI_SELFDEV_WORKSPACE", PROJECT_ROOT.parent / "Kazumi-Auto-Code", RUNTIME_ROOT / "selfdev-workspace"
         ))
         public = Path(getattr(self.runtime_settings, "selfdev_public_snapshot", "") or _preferred_path(
-            "NYRA_PUBLIC_SNAPSHOT", PROJECT_ROOT.parent / "NYRA-GitHub-Public", PROJECT_ROOT.parent / "NYRA-GitHub-Public"
+            "KAZUMI_PUBLIC_SNAPSHOT", PROJECT_ROOT.parent / "KAZUMI-GitHub-Public", PROJECT_ROOT.parent / "KAZUMI-GitHub-Public"
         ))
         canonical = Path(getattr(self.runtime_settings, "selfdev_canonical_root", "") or PROJECT_ROOT)
         return SelfDevSettings(

@@ -1,4 +1,4 @@
-"""Clipboard local estruturado para o Universal Operator (nyra-7c §39/§96).
+"""Clipboard local estruturado para o Universal Operator (kazumi-7c §39/§96).
 
 A percepção lê somente metadados. Esta capability separada permite status,
 escrita e limpeza explícitas. Conteúdo nunca é lido nem devolvido ao LLM,

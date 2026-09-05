@@ -21,13 +21,13 @@ recipe. SSH/UAC/security policies are unchanged. Revocation disables new recipes
 
 ## Projects and toolchains
 
-Projects default to `<USER_HOME>/NYRA-Projects`, outside the repository, or the
-operator-selected `NYRA_PROJECTS_ROOT` environment override.
-`.nyra-project.json` records target, evidence, sources, source hashes, build/flash
+Projects default to `<USER_HOME>/KAZUMI-Projects`, outside the repository, or the
+operator-selected `KAZUMI_PROJECTS_ROOT` environment override.
+`.kazumi-project.json` records target, evidence, sources, source hashes, build/flash
 state and history; it contains no credentials. A local index resumes the same
 workspace across restart. Source, config and README are filesystem writes.
 The existing Desktop Operator opens a generated VS Code workspace and verifies
-the visible window. VS Code is operator-owned and not killed at NYRA shutdown.
+the visible window. VS Code is operator-owned and not killed at KAZUMI shutdown.
 
 PlatformIO Core 6.1.18 and esptool 5.0.2 install in one managed Python venv using
 PyPI, with a post-install version probe. Board definitions are checked against
@@ -60,7 +60,7 @@ checks and model code review are explicitly not physical effect verification.
 ## Serial, flash and verification
 
 Serial uses pySerial with bounded line/byte capture, timeouts, per-device locks,
-fresh enumeration, handle cleanup and a nonce-bound `nyra/1` protocol. Compatible
+fresh enumeration, handle cleanup and a nonce-bound `kazumi/1` protocol. Compatible
 firmware takes the direct LED control path without rebuilding. State readback is
 electrical/serial evidence, not an optical observation. A stale line, open port,
 generic success, build or upload does not prove an LED's state. Test transports
@@ -115,7 +115,7 @@ Firmware SHA-256: `5609697723b29649c19c27e70fe582b2613c34b8166535fb2a8764ce83203
 The project identity/workspace also survived reopening the project store.
 The targeted backend suite passed 147 tests (one existing framework deprecation).
 
-The final PyInstaller/Tauri release was opened through the Desktop `NYRA.lnk`.
+The final PyInstaller/Tauri release was opened through the Desktop `KAZUMI.lnk`.
 Fresh native discovery returned five USB devices, zero COM ports and no ESP32.
 The canonical chat rejected the ESP32/LED user claim and device-info request with
 the factual no-device response. Natural `pio run` research answered from
@@ -123,5 +123,5 @@ the factual no-device response. Natural `pio run` research answered from
 endpoint explicitly returned REFERENCE/connected=false and retained unknown fields.
 An initial research request was interrupted by concurrent voice input (HTTP 409);
 the subsequent uninterrupted request passed without modifying voice settings.
-The official `quit_nyra` handler returned successfully; readback confirmed backend=0,
+The official `quit_kazumi` handler returned successfully; readback confirmed backend=0,
 desktop=0 and port 8000 FREE. No visual tray automation was used.

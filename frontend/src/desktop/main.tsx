@@ -1,3 +1,4 @@
+import '../runtime/brandMigration'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DesktopApp } from './DesktopApp'

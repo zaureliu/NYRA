@@ -2,7 +2,7 @@
 watchdog for a restart via one-shot request files. When the backend is dead,
 the watchdog's own health checks handle recovery without any help.
 
-Subscribed to RUNTIME_FAILED / RUNTIME_CRASH_LOOP events about nyra_backend
+Subscribed to RUNTIME_FAILED / RUNTIME_CRASH_LOOP events about kazumi_backend
 and writes data/watchdog-requests/<id>.json with cooldown protection.
 """
 
@@ -33,7 +33,7 @@ class WatchdogBridge:
             return
         payload = getattr(event, "payload", {}) or {}
         service_id = str(payload.get("service_id") or "")
-        if service_id and service_id != "nyra_backend":
+        if service_id and service_id != "kazumi_backend":
             return
         await self.request_backend_restart(
             reason=str(payload.get("reason") or payload.get("error_code") or event_type)[:120]

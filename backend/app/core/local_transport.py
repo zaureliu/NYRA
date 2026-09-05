@@ -1,4 +1,4 @@
-"""Trusted local HTTP/WebSocket boundary for NYRA's loopback API."""
+"""Trusted local HTTP/WebSocket boundary for KAZUMI's loopback API."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class LocalRequestSecurityMiddleware:
     def __init__(self, app, *, frontend_port: int, backend_port: int) -> None:
         self.app = app
         self.allowed_hosts = set(_LOOPBACK_HOSTS)
-        if _truthy(os.getenv("NYRA_TESTING")):
+        if _truthy(os.getenv("KAZUMI_TESTING")):
             self.allowed_hosts.add("testserver")
         self.allowed_origins = frozenset({
             f"http://127.0.0.1:{frontend_port}",

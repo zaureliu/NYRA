@@ -25,7 +25,7 @@ from app.tools.remote_models import RemoteShellExecuteInput
 from app.core.turn import get_current_turn_id
 
 
-logger = logging.getLogger("nyra.tools")
+logger = logging.getLogger("kazumi.tools")
 ToolCallable = Callable[..., Awaitable[dict[str, Any]]]
 PreflightCallable = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -263,7 +263,7 @@ class ToolRegistry:
         # conhecida (ex.: "rode os testes", "abre o zumbi runner") — o domínio
         # ambíguo cai no subset GENERIC em vez de conversa sem tools.
         imperative = re.match(
-            r"^\s*(?:nyra[, ]+)?(?:abre|abra|abrir|feche|fecha|fechar|executa|execute|rode|roda|rodar|"
+            r"^\s*(?:kazumi[, ]+)?(?:abre|abra|abrir|feche|fecha|fechar|executa|execute|rode|roda|rodar|"
             r"inicia|inicie|minimize|minimiza|restaura|maximize|foca|liste|lista|verifica|reinicia|reinicie)\b",
             value,
         )

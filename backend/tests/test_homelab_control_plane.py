@@ -51,13 +51,13 @@ def make_settings(tmp_path: Path) -> Settings:
         homelab_registry_path=tmp_path / "registry.yaml",
         homelab_default_timeout_seconds=2.0,
         homelab_overview_cache_seconds=0,
-        database_path=tmp_path / "nyra-test.db",
+        database_path=tmp_path / "kazumi-test.db",
         home_assistant_enabled=True,
         home_assistant_url="https://192.168.1.200",
-        home_assistant_token="test-token-nyra",
+        home_assistant_token="test-token-kazumi",
         proxmox_enabled=True,
         proxmox_url="https://192.168.1.2:8006",
-        proxmox_token_id="nyra@pve!test",
+        proxmox_token_id="kazumi@pve!test",
         proxmox_token_secret="secret-value",
         event_cooldown_seconds=30,
     )
@@ -450,7 +450,7 @@ def proxmox_factory(monkeypatch):
             return pristine_async_client(transport=transport, timeout=kwargs.pop("timeout", 5))
 
         monkeypatch.setattr(pmod.httpx, "AsyncClient", factory)
-        return ProxmoxReadOnlyClient("https://192.168.1.2:8006", "nyra@pve!t", "sec-value")
+        return ProxmoxReadOnlyClient("https://192.168.1.2:8006", "kazumi@pve!t", "sec-value")
 
     return make
 
@@ -542,7 +542,7 @@ def ha_factory(monkeypatch):
 
     pristine_async_client = httpx.AsyncClient
 
-    def make(handler, token: str = "token-nyra"):
+    def make(handler, token: str = "token-kazumi"):
         transport = httpx.MockTransport(handler)
 
         def factory(*args, **kwargs):
@@ -581,11 +581,11 @@ class TestHomeAssistantClient:
     @pytest.mark.asyncio
     async def test_entity_state(self, ha_factory):
         def handler(request: httpx.Request) -> httpx.Response:
-            assert request.url.path.endswith("/api/states/input_boolean.nyra_test")
-            assert request.headers["Authorization"] == "Bearer token-nyra"
-            return httpx.Response(200, json={"entity_id": "input_boolean.nyra_test", "state": "on", "attributes": {}})
+            assert request.url.path.endswith("/api/states/input_boolean.kazumi_test")
+            assert request.headers["Authorization"] == "Bearer token-kazumi"
+            return httpx.Response(200, json={"entity_id": "input_boolean.kazumi_test", "state": "on", "attributes": {}})
         client = ha_factory(handler)
-        entity = await client.state("input_boolean.nyra_test")
+        entity = await client.state("input_boolean.kazumi_test")
         assert entity["state"] == "on"
 
     @pytest.mark.asyncio
@@ -629,10 +629,10 @@ class TestHomeAssistantClient:
     @pytest.mark.asyncio
     async def test_effect_verification(self, ha_factory):
         def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={"entity_id": "input_boolean.nyra_test", "state": "off"})
+            return httpx.Response(200, json={"entity_id": "input_boolean.kazumi_test", "state": "off"})
         client = ha_factory(handler)
-        assert await client.verify_effect("input_boolean.nyra_test", "off") is True
-        assert await client.verify_effect("input_boolean.nyra_test", "on") is False
+        assert await client.verify_effect("input_boolean.kazumi_test", "off") is True
+        assert await client.verify_effect("input_boolean.kazumi_test", "on") is False
 
     @pytest.mark.asyncio
     async def test_invalid_json_rejected(self, ha_factory):
@@ -658,7 +658,7 @@ class TestPolicies:
     @pytest.mark.asyncio
     async def test_proxmox_refuses_token_when_tls_verification_is_disabled(self):
         client = ProxmoxReadOnlyClient(
-            "https://192.168.1.2:8006", "user@pve!nyra", "secret", verify_ssl=False,
+            "https://192.168.1.2:8006", "user@pve!kazumi", "secret", verify_ssl=False,
         )
         with pytest.raises(IntegrationError) as excinfo:
             await client.nodes()
@@ -710,7 +710,7 @@ class TestControllerActions:
         recorder = RecordingHA()
         plane.home_assistant = recorder
         target = {"entity_id": ["notify.phone"], "device_id": "device-a"}
-        service_data = {"message": "hello", "title": "NYRA", "_expected_state": "sent"}
+        service_data = {"message": "hello", "title": "KAZUMI", "_expected_state": "sent"}
         pending = await plane.ha_call_service(
             "notify", "mobile_app", target=target, service_data=service_data,
         )
@@ -732,7 +732,7 @@ class TestControllerActions:
         )
         assert exact["success"] is True
         assert recorder.calls == [
-            ("notify", "mobile_app", target, {"message": "hello", "title": "NYRA"})
+            ("notify", "mobile_app", target, {"message": "hello", "title": "KAZUMI"})
         ]
         assert service_data["_expected_state"] == "sent"
 
@@ -799,9 +799,12 @@ class TestControllerActions:
         assert granted["error_code"] in {"PROXMOX_TASK_FAILED", "APPROVAL_REJECTED"} or granted["success"] is True
 
     @pytest.mark.asyncio
-    async def test_overview_aggregates_hosts(self, tmp_path: Path):
+    async def test_overview_aggregates_hosts(self, tmp_path: Path, monkeypatch):
         settings = make_settings(tmp_path)
         plane = build_plane(settings)
+        async def offline_probe(host, *args, **kwargs):
+            return [ProbeResult(kind="http", success=True, detail="controlled fixture")]
+        monkeypatch.setattr(plane.probes, "probe_host", offline_probe)
         overview = await plane.overview(force=True)
         assert isinstance(overview, HomelabOverview)
         states = {item.host_id: item.overall_state for item in overview.hosts}
@@ -887,7 +890,7 @@ class TestHomelabTools:
         registry = ToolRegistry()
         register_homelab_tools(registry, plane)
         assert registry.should_route_to_agent("Quais VMs estão ligadas?")
-        assert registry.should_route_to_agent("Nyra, verifica meu homelab.")
+        assert registry.should_route_to_agent("Kazumi, verifica meu homelab.")
         assert registry.should_route_to_agent("Verifica o OpenWrt")
         assert not registry.should_route_to_agent("oi")
         assert not registry.should_route_to_agent("que horas são?")

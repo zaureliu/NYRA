@@ -24,7 +24,7 @@ from app.speech.synthesis_config import validate_endpoint
 MAX_AUDIO_BYTES = 48000 * 2 * 180
 MAX_MESSAGE_BYTES = 1024 * 1024
 # Never let third-party debug logging dump handshake authorization headers.
-WIRE_LOGGER = logging.Logger("nyra.tts.private_wire", level=logging.CRITICAL + 1)
+WIRE_LOGGER = logging.Logger("kazumi.tts.private_wire", level=logging.CRITICAL + 1)
 
 
 class NoRedirectConnect(connect):
@@ -155,7 +155,7 @@ class StreamingTtsProvider(OnlineTtsProvider):
         if not data:
             raise TtsProviderError(TtsProviderStatus.ERROR, "Provider não retornou áudio.")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        output = self.output_dir / f"nyra-{self.provider_id}-{uuid4().hex}.wav"
+        output = self.output_dir / f"kazumi-{self.provider_id}-{uuid4().hex}.wav"
         with wave.open(str(output), "wb") as target:
             target.setnchannels(1)
             target.setsampwidth(2)

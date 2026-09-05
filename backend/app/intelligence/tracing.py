@@ -103,7 +103,7 @@ class RuntimeTraceObserver:
     async def start(self) -> None:
         await self.event_bus.subscribe(self.observe)
         if self._worker is None or self._worker.done():
-            self._worker = asyncio.create_task(self._run(), name="nyra-runtime-traces")
+            self._worker = asyncio.create_task(self._run(), name="kazumi-runtime-traces")
 
     async def stop(self) -> None:
         await self.event_bus.unsubscribe(self.observe)
@@ -173,6 +173,6 @@ class RuntimeTraceObserver:
             return TraceStage.VERIFICATION
         if name in {"AGENT_RUN_FINISHED", "AGENT_RUN_CANCELLED"} or name.endswith("FAILED"):
             return TraceStage.FINAL_DECISION
-        if name == "NYRA_RESPONSE":
+        if name == "KAZUMI_RESPONSE":
             return TraceStage.RESPONSE
         return None

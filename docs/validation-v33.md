@@ -5,7 +5,7 @@
 - Backend: `37 passed`.
 - Frontend: `7 passed` em 5 arquivos.
 - TypeScript + Vite: aprovado.
-- Tauri release + NSIS: aprovado; `nyra-desktop.exe` recompilado.
+- Tauri release + NSIS: aprovado; `kazumi-desktop.exe` recompilado.
 - `cargo fmt --check`: aprovado.
 - `git diff --check`: aprovado (somente avisos de conversão LF/CRLF do Git para Windows).
 

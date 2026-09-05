@@ -15,13 +15,13 @@ import httpx
 from app.integrations.base import IntegrationError, require_secure_credential_transport
 
 
-logger = logging.getLogger("nyra.homelab.ha")
+logger = logging.getLogger("kazumi.homelab.ha")
 
 _ERROR_PREFIX = "HA"
 _MAX_STATES = 500
-_USER_AGENT = "NYRA-Homelab/1.0"
+_USER_AGENT = "KAZUMI-Homelab/1.0"
 
-# Endpoints que o Home Assistant protege por autenticação. A NYRA NUNCA deve
+# Endpoints que o Home Assistant protege por autenticação. A KAZUMI NUNCA deve
 # contatá-los sem Bearer: além do 401, cada tentativa registra um evento de
 # "invalid authentication" no log do Home Assistant (regressão prompt11_1 §4-§9).
 _AUTHENTICATED_PREFIXES = ("/api/", "/api/config", "/api/states", "/api/services/")

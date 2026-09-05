@@ -1,11 +1,11 @@
-"""NYRA Persona & Emotional Runtime V1."""
+"""KAZUMI Persona & Emotional Runtime V1."""
 
 from app.persona_runtime.models import (
     DialogueMode,
     DialoguePolicy,
     EmotionalState,
-    NyraEmotion,
-    NyraIdentity,
+    KazumiEmotion,
+    KazumiIdentity,
     PersonalityProfile,
     RelationshipState,
     VoiceEmotionInterface,
@@ -13,7 +13,7 @@ from app.persona_runtime.models import (
 from app.persona_runtime.service import PersonaRuntime
 
 __all__ = [
-    "DialogueMode", "DialoguePolicy", "EmotionalState", "NyraEmotion",
-    "NyraIdentity", "PersonalityProfile", "PersonaRuntime",
+    "DialogueMode", "DialoguePolicy", "EmotionalState", "KazumiEmotion",
+    "KazumiIdentity", "PersonalityProfile", "PersonaRuntime",
     "RelationshipState", "VoiceEmotionInterface",
 ]

@@ -13,7 +13,7 @@ PHRASES = [
     "Pô, essa porra travou de novo, mano. Espera aí... agora foi.",
     "Três ponto três volts, porta oito mil, cento e quinze mil duzentos baud.",
 ]
-TERMS = ["NYRA", "ESP32", "ESP32-S3", "Proxmox", "OpenWrt", "LILYGO", "PlatformIO", "GPIO", "Home Assistant", "SX1262"]
+TERMS = ["KAZUMI", "ESP32", "ESP32-S3", "Proxmox", "OpenWrt", "LILYGO", "PlatformIO", "GPIO", "Home Assistant", "SX1262"]
 
 
 def normalized(text: str) -> str:

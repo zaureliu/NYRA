@@ -1,4 +1,4 @@
-"""Persistent, event-driven and grounded operational state for NYRA.
+"""Persistent, event-driven and grounded operational state for KAZUMI.
 
 The engine owns no discovery mechanism.  It consumes already verified local
 authorities and exposes a small stable API to Context/Operator/UI consumers.
@@ -45,7 +45,7 @@ _SLOT_NAMES = (
     "active_goal", "open_loop_count", "waiting_loop_count", "most_relevant_open_loop",
     "connected_usb", "network_state", "conversation_state", "current_focus",
     "hardware_activity", "recent_hardware_events",
-    "user_activity_state", "assistant_state", "nyra_emotion", "dialogue_policy",
+    "user_activity_state", "assistant_state", "kazumi_emotion", "dialogue_policy",
 )
 _INTEGRATIONS = ("proxmox", "openwrt", "home_assistant", "sentinel")
 _PERSISTED_SLOTS = {
@@ -270,12 +270,12 @@ class WorldStateEngine:
             if state:
                 self._put("conversation_state", state, source="conversation_engine", confidence=1.0,
                           ttl_seconds=120, stale_after_seconds=600, observed_at=observed_at)
-        elif event.type == EventType.NYRA_EMOTION_CHANGED:
+        elif event.type == EventType.KAZUMI_EMOTION_CHANGED:
             emotion = str(payload.get("emotion") or "").strip().casefold()
             policy = str(payload.get("dialogue_policy") or "").strip().casefold()
             if emotion:
                 self._put(
-                    "nyra_emotion",
+                    "kazumi_emotion",
                     {"emotion": emotion, "intensity": float(payload.get("intensity") or 0.0)},
                     source="event:persona_runtime", confidence=1.0,
                     ttl_seconds=21600, stale_after_seconds=3600, observed_at=observed_at,
@@ -659,7 +659,7 @@ class WorldStateEngine:
         elif event_type in {EventType.TTS_STARTED, EventType.PLAYBACK_STARTED}:
             state = "speaking"
         elif event_type in {EventType.TTS_FINISHED, EventType.TTS_FAILED, EventType.SPEECH_CANCELLED,
-                            EventType.USER_INTERRUPTED, EventType.NYRA_RESPONSE,
+                            EventType.USER_INTERRUPTED, EventType.KAZUMI_RESPONSE,
                             EventType.HANDS_FREE_ENDED, EventType.SHELL_EXECUTION_FINISHED,
                             EventType.REMOTE_SHELL_EXECUTION_FINISHED,
                             EventType.COMPUTER_EFFECT_VERIFIED}:

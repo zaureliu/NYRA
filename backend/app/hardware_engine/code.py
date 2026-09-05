@@ -44,28 +44,28 @@ def generate(profile, intent):
     # Original small protocol implementation, not copied from online examples.
     # No secrets/network stack, arbitrary GPIO writes or external script hooks.
     return '''#include <Arduino.h>
-const uint8_t NYRA_LED = @PIN@;
-const bool NYRA_ACTIVE_HIGH = @HIGH@;
+const uint8_t KAZUMI_LED = @PIN@;
+const bool KAZUMI_ACTIVE_HIGH = @HIGH@;
 unsigned long intervalMs = @INTERVAL@, lastTick = 0;
 int mode = @MODE@;
 bool ledState = false;
 String commandLine;
-void setLed(bool on) { ledState = on; digitalWrite(NYRA_LED, on == NYRA_ACTIVE_HIGH ? HIGH : LOW); }
+void setLed(bool on) { ledState = on; digitalWrite(KAZUMI_LED, on == KAZUMI_ACTIVE_HIGH ? HIGH : LOW); }
 void setup() {
-  pinMode(NYRA_LED, OUTPUT);
+  pinMode(KAZUMI_LED, OUTPUT);
   setLed(mode != 0);
   Serial.begin(115200);
   commandLine.reserve(160);
 }
 void reply(const String &nonce) {
-  Serial.print("NYRA1 "); Serial.print(nonce); Serial.print(" {\\"protocol\\":\\"nyra/1\\",\\"nonce\\":\\"");
-  Serial.print(nonce); Serial.print("\\",\\"board\\":\\"@BOARD@\\",\\"pin\\":"); Serial.print(NYRA_LED);
-  Serial.print(",\\"value\\":"); Serial.print(digitalRead(NYRA_LED) == HIGH ? "true" : "false");
+  Serial.print("KAZUMI1 "); Serial.print(nonce); Serial.print(" {\\"protocol\\":\\"kazumi/1\\",\\"nonce\\":\\"");
+  Serial.print(nonce); Serial.print("\\",\\"board\\":\\"@BOARD@\\",\\"pin\\":"); Serial.print(KAZUMI_LED);
+  Serial.print(",\\"value\\":"); Serial.print(digitalRead(KAZUMI_LED) == HIGH ? "true" : "false");
   Serial.print(",\\"mode\\":"); Serial.print(mode);
   Serial.println(",\\"source\\":\\"gpio_readback\\",\\"capabilities\\":[\\"LED ON\\",\\"LED OFF\\",\\"LED BLINK\\"]}");
 }
 void handleLine(String line) {
-  if (!line.startsWith("NYRA1 ")) return;
+  if (!line.startsWith("KAZUMI1 ")) return;
   int split = line.indexOf(' ', 6);
   if (split < 0) return;
   String nonce = line.substring(6, split), action = line.substring(split + 1);

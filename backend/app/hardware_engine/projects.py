@@ -37,11 +37,17 @@ class ProjectStore:
         return path
 
     def read(self, project_id):
-        path = self.path(project_id) / '.nyra-project.json'
-        return json.loads(path.read_text(encoding='utf8'))
+        path = self.path(project_id) / '.kazumi-project.json'
+        if not path.exists():
+            legacy = path.with_name('.nyra-project.json')
+            if legacy.is_file():
+                # Keep the legacy metadata as rollback; never regenerate a project.
+                path.write_bytes(legacy.read_bytes())
+        from app.brand_compat import preferences
+        return preferences(json.loads(path.read_text(encoding='utf8')))
 
     def save(self, meta):
-        path = self.path(meta['project_id']) / '.nyra-project.json'
+        path = self.path(meta['project_id']) / '.kazumi-project.json'
         encoded = json.dumps(meta, ensure_ascii=False, indent=2)
         if redact_secrets(encoded) != encoded:
             raise HardwareError('PROJECT_SECRET_REJECTED')
@@ -56,7 +62,7 @@ class ProjectStore:
         path = self.root / name
         path.mkdir(exist_ok=False)
         (path / 'src').mkdir()
-        (path / '.nyra-history').mkdir()
+        (path / '.kazumi-history').mkdir()
         self.index[project_id] = name
         self.active = project_id
         meta = {'project_id': project_id, 'name': name, 'created_at': now(),
@@ -64,9 +70,9 @@ class ProjectStore:
                 'device_identity': {k: (device or {}).get(k) for k in ('device_instance_id', 'serial', 'vid', 'pid')},
                 'toolchain': 'platformio', 'framework': profile.framework, 'serial_port': (device or {}).get('com_port'),
                 'sources': profile.sources, 'build': {}, 'flash': {}, 'history': [], 'source_hashes': {}, 'notes': []}
-        config = f'[env:nyra]\nplatform = {profile.platform}\nboard = {profile.board_id}\nframework = {profile.framework}\nmonitor_speed = 115200\n'
+        config = f'[env:kazumi]\nplatform = {profile.platform}\nboard = {profile.board_id}\nframework = {profile.framework}\nmonitor_speed = 115200\n'
         self.write(project_id, 'platformio.ini', config)
-        self.write(project_id, 'README.md', f'# {profile.name}\n\nGenerated locally by NYRA.\n\nDocumentation: {profile.docs_url}\n\nBuild/flash are not proof of physical LED illumination.\n')
+        self.write(project_id, 'README.md', f'# {profile.name}\n\nGenerated locally by KAZUMI.\n\nDocumentation: {profile.docs_url}\n\nBuild/flash are not proof of physical LED illumination.\n')
         self.save(meta)
         return meta
 
@@ -89,7 +95,7 @@ class ProjectStore:
 
     @staticmethod
     def allowed_file(relative):
-        return relative in ('platformio.ini', 'README.md', 'nyra.code-workspace') or bool(
+        return relative in ('platformio.ini', 'README.md', 'kazumi.code-workspace') or bool(
             re.fullmatch(r'(?:src|include)/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.(?:c|cpp|h|hpp)', relative)
             or re.fullmatch(r'src/[a-z][a-z0-9_]{1,40}/LICENSE\.txt', relative))
 
@@ -122,7 +128,11 @@ class ProjectStore:
         root = self.path(meta['project_id'])
         state = self.source_hash(meta['project_id'])
         key = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
-        history = root / '.nyra-history' / key
+        history_root = root / '.kazumi-history'
+        legacy = root / '.nyra-history'
+        if not history_root.exists() and legacy.is_dir():
+            history_root = legacy  # existing firmware/hash references remain valid
+        history = history_root / key
         history.mkdir(exist_ok=True)
         for relative in state:
             archived = history / relative
@@ -143,8 +153,10 @@ class ProjectStore:
         trusted = next((p for _, p in PROFILES if p.board_id == profile['board_id']), None)
         if trusted is None or any(profile.get(key) != getattr(trusted, key) for key in ('chip', 'platform', 'framework')):
             raise HardwareError('UNTRUSTED_BUILD_TARGET')
-        expected_config = f"[env:nyra]\nplatform = {profile['platform']}\nboard = {profile['board_id']}\nframework = {profile['framework']}\nmonitor_speed = 115200\n"
-        if (root / 'platformio.ini').read_text(encoding='utf8') != expected_config:
+        expected_config = f"[env:kazumi]\nplatform = {profile['platform']}\nboard = {profile['board_id']}\nframework = {profile['framework']}\nmonitor_speed = 115200\n"
+        actual_config = (root / 'platformio.ini').read_text(encoding='utf8')
+        # Preserve reviewed legacy build environments and their artifact paths.
+        if actual_config not in (expected_config, expected_config.replace('[env:kazumi]', '[env:nyra]')):
             raise HardwareError('UNREVIEWED_BUILD_CONFIGURATION')
         # PlatformIO automatically executes extra scripts and builds local libs.
         # V1 generated projects cannot introduce unreviewed build extensions.

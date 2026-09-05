@@ -1,4 +1,4 @@
-"""NYRA Runtime Supervisor V1 - normalized models for persistent service management."""
+"""KAZUMI Runtime Supervisor V1 - normalized models for persistent service management."""
 
 from __future__ import annotations
 
@@ -48,8 +48,14 @@ class HealthKind(StrEnum):
 
 
 class StartupPolicy(StrEnum):
+    @classmethod
+    def _missing_(cls, value):
+        if value == "ON_NYRA_START":
+            return cls.ON_KAZUMI_START
+        return None
+
     MANUAL = "MANUAL"
-    ON_NYRA_START = "ON_NYRA_START"
+    ON_KAZUMI_START = "ON_KAZUMI_START"
     MONITOR_ONLY = "MONITOR_ONLY"
 
 

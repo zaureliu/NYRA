@@ -35,12 +35,12 @@ from app.core.paths import DATA_ROOT
 from app.core.runtime_settings import load_runtime_settings
 from app.integrations.base import IntegrationError
 
-logger = logging.getLogger("nyra.proxmox_config")
+logger = logging.getLogger("kazumi.proxmox_config")
 
 CONFIG_PATH = DATA_ROOT / "proxmox-config.json"
 _TOKEN_ID_CREDENTIAL = "proxmox_api_token_id"
 _TOKEN_SECRET_CREDENTIAL = "proxmox_api_token_secret"
-_STALE_AFTER_SECONDS = float(os.environ.get("NYRA_PROXMOX_STATE_STALE_SECONDS", "900"))
+_STALE_AFTER_SECONDS = float(os.environ.get("KAZUMI_PROXMOX_STATE_STALE_SECONDS", "900"))
 
 PROXMOX_STATES = (
     "DISABLED", "UNCONFIGURED", "AUTH_FAILED", "READY",
@@ -172,7 +172,7 @@ def save_config(payload: dict[str, Any]) -> dict[str, Any]:
     if "verify_ssl" in payload:
         if not bool(payload.get("verify_ssl")):
             raise ValueError(
-                "verify_ssl não pode ser desativado; instale a CA local do Proxmox no host NYRA"
+                "verify_ssl não pode ser desativado; instale a CA local do Proxmox no host KAZUMI"
             )
         updates["verify_ssl"] = True
     if "preferred_node" in payload:

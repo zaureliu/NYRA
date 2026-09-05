@@ -20,7 +20,7 @@ from app.speech.style import VoiceStylePlan
 from app.speech.tts import TTSProvider, TtsCapabilities
 
 
-logger = logging.getLogger("nyra.voice.providers")
+logger = logging.getLogger("kazumi.voice.providers")
 
 
 class OnlineTtsProvider(TTSProvider):
@@ -311,7 +311,7 @@ class OpenAITtsProvider(OnlineTtsProvider):
                 headers={"Authorization": f"Bearer {secret}", "Content-Type": "application/json"},
                 json=payload,
             )
-            destination = self.output_dir / f"nyra-openai-{uuid4().hex}.wav"
+            destination = self.output_dir / f"kazumi-openai-{uuid4().hex}.wav"
             output = await asyncio.to_thread(write_wav_response, response.content, destination)
             self.last_request_id = response.headers.get("x-request-id")
             self.last_latency_ms = round((time.perf_counter() - started) * 1000, 1)
@@ -481,7 +481,7 @@ class ElevenLabsTtsProvider(OnlineTtsProvider):
                 json=payload,
                 params={"output_format": "mp3_44100_128"},
             )
-            destination = self.output_dir / f"nyra-elevenlabs-{uuid4().hex}.wav"
+            destination = self.output_dir / f"kazumi-elevenlabs-{uuid4().hex}.wav"
             output = await asyncio.to_thread(decode_audio_response_to_wav, response.content, destination)
             self.last_request_id = response.headers.get("request-id") or response.headers.get("x-request-id")
             self.last_latency_ms = round((time.perf_counter() - started) * 1000, 1)

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }))
 
-vi.mock('./backend', () => ({ nyraFetch: mocks.fetch }))
+vi.mock('./backend', () => ({ kazumiFetch: mocks.fetch }))
 
 import { sendChat } from './conversation'
 

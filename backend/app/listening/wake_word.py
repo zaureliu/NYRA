@@ -36,7 +36,7 @@ class TranscriptWakeWordProvider(WakeWordProvider):
         folded_text = _fold(text)
         folded_wake = _fold(wake_word)
         aliases = {folded_wake}
-        if folded_wake == "nyra":
+        if folded_wake == "kazumi":
             # Common pt-BR Whisper spellings, intentionally narrow to reduce false wakes.
             aliases.update({"nira", "naira"})
         pattern = re.compile(rf"(?:^|\b)(?:{'|'.join(map(re.escape, sorted(aliases, key=len, reverse=True)))})\b", re.IGNORECASE)

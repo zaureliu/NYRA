@@ -1,6 +1,6 @@
-# NYRA — Production Hardening V1 — Relatório Final
+# KAZUMI — Production Hardening V1 — Relatório Final
 
-Data: 2025-08-23 · Branch `feature/nyra-avatar-v2` · Modelo oficial: **qwen3:8b** (inalterado)
+Data: 2025-08-23 · Branch `feature/kazumi-avatar-v2` · Modelo oficial: **qwen3:8b** (inalterado)
 Veredito de release: **YELLOW** — nenhum gate obrigatório falhou; 1 warning honesto.
 
 ## 1. Estado inicial e preservação

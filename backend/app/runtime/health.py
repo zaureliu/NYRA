@@ -122,7 +122,7 @@ async def _check_command(command: list[str], timeout_seconds: float) -> HealthRe
 async def _check_hook(hooks: dict[str, object], key: str) -> HealthResult:
     hook = hooks.get(key)
     if hook is None:
-        return HealthResult(healthy=False, detail=f"hook '{key}' indisponível neste processo NYRA")
+        return HealthResult(healthy=False, detail=f"hook '{key}' indisponível neste processo KAZUMI")
     getter = getattr(hook, "status", None) if not callable(hook) else hook
     try:
         value = getter() if asyncio.iscoroutinefunction(getter) is False else await getter()

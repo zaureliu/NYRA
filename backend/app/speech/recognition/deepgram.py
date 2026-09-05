@@ -18,7 +18,7 @@ from .models import (AudioFormat, CanonicalTranscript, EventSink, RecognitionEve
 
 # websockets DEBUG logs include handshake headers. This private logger must
 # never propagate, even when the operator enables global diagnostic logging.
-_transport_logger = logging.Logger("nyra.deepgram.private", level=logging.CRITICAL + 1)
+_transport_logger = logging.Logger("kazumi.deepgram.private", level=logging.CRITICAL + 1)
 _transport_logger.addHandler(logging.NullHandler())
 _transport_logger.propagate = False
 
@@ -104,8 +104,8 @@ class DeepgramSTTProvider(RealtimeSTTProvider):
         finally:
             secret = None
         self.state = STTState.STREAMING
-        self.receiver = asyncio.create_task(self._receive(), name="nyra-stt-deepgram-receiver")
-        self.keepalive = asyncio.create_task(self._keepalive(), name="nyra-stt-deepgram-keepalive")
+        self.receiver = asyncio.create_task(self._receive(), name="kazumi-stt-deepgram-receiver")
+        self.keepalive = asyncio.create_task(self._keepalive(), name="kazumi-stt-deepgram-keepalive")
 
     async def _send(self, data: bytes | str) -> None:
         if self.failure:

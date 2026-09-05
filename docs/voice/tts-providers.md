@@ -143,7 +143,7 @@ remain untested until an operator configures a valid Broker key and voice ID.
 Shutdown uses the existing coordinator: SpeechQueue stops, provider close hooks
 release sockets, receiver/sender work is cancelled, and external VTube Studio
 is not terminated. Restart loads settings/Broker references, not audio buffers
-or sockets. X remains hide-to-tray; `quit_nyra` is the explicit full-exit path.
+or sockets. X remains hide-to-tray; `quit_kazumi` is the explicit full-exit path.
 
 ### Local validation run, 2026-09-05
 

@@ -24,7 +24,7 @@ from app.tools.remote_models import RemoteShellErrorCode
 from app.tools.remote_shell import RemoteShellService
 from app.tools.shell_approval import ShellApprovalGate
 
-SECRET = "s3cret-NYRA-openwrt-PW"
+SECRET = "s3cret-KAZUMI-openwrt-PW"
 
 
 class FakePasswordExecutor(AsyncSSHPasswordExecutor):
@@ -58,7 +58,7 @@ def registry_file(tmp_path: Path, private_key: Path | None = None) -> Path:
     known_hosts = tmp_path / "known_hosts"
     known_hosts.write_text("", encoding="utf-8")
     keyed = {
-        "enabled": True, "port": 22, "username": "nyra", "platform": "openwrt",
+        "enabled": True, "port": 22, "username": "kazumi", "platform": "openwrt",
         "capabilities": ["diagnostics", "network"],
         "known_hosts_path": str(known_hosts), "use_ssh_agent": False,
     }
@@ -69,7 +69,7 @@ def registry_file(tmp_path: Path, private_key: Path | None = None) -> Path:
         {
             "id": "gateway", "address": "192.168.1.1", "aliases": ["openwrt", "gateway"],
             "remote_shell": {
-                "enabled": True, "port": 22, "username": "nyra", "platform": "openwrt",
+                "enabled": True, "port": 22, "username": "kazumi", "platform": "openwrt",
                 "capabilities": ["diagnostics", "network"],
                 "known_hosts_path": str(known_hosts), "use_ssh_agent": True,
             },
@@ -79,7 +79,7 @@ def registry_file(tmp_path: Path, private_key: Path | None = None) -> Path:
         {
             "id": "noauth", "address": "192.168.1.9", "aliases": ["semcredencial"],
             "remote_shell": {
-                "enabled": True, "port": 22, "username": "nyra", "platform": "linux",
+                "enabled": True, "port": 22, "username": "kazumi", "platform": "linux",
                 "capabilities": ["diagnostics"],
                 "known_hosts_path": str(known_hosts), "use_ssh_agent": False,
             },
@@ -129,7 +129,7 @@ async def test_openwrt_password_transport_authenticates_without_ssh_exe(monkeypa
     assert len(passwords.calls) == 1
     call = passwords.calls[0]
     assert call["address"] == "192.168.1.1" and call["port"] == 22
-    # usuário vem da config da integração (root), não do registry (nyra)
+    # usuário vem da config da integração (root), não do registry (kazumi)
     assert call["username"] == "root"
     assert call["password"] == SECRET
     assert call["command"] == "ubus call system info"
@@ -150,7 +150,7 @@ async def test_password_transport_rejects_missing_known_hosts_file(monkeypatch, 
                                 executor=FakeSSHExecutor(),
                                 password_executor=FakePasswordExecutor(store_path=tmp_path / "keys"))
     await remote.initialize()
-    result = await remote.execute("openwrt", "echo NYRA_SSH_OK")
+    result = await remote.execute("openwrt", "echo KAZUMI_SSH_OK")
     assert result["success"] is False
     assert result["error_code"] == RemoteShellErrorCode.SSH_KNOWN_HOSTS_MISSING.value
 
@@ -230,7 +230,7 @@ async def test_secret_never_leaks_into_results_events_or_history(monkeypatch, tm
     configure_broker(monkeypatch, SECRET)
     passwords = FakePasswordExecutor(store_path=tmp_path / "keys")
     remote = await service(tmp_path, password_executor=passwords)
-    token_result = await remote.execute("openwrt", "echo NYRA_SSH_OK")
+    token_result = await remote.execute("openwrt", "echo KAZUMI_SSH_OK")
     assert token_result["success"] is True
 
     payloads = [

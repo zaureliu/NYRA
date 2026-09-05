@@ -1,14 +1,14 @@
-# NYRA — Validação de Runtime (Edição PRO OpenCode)
+# KAZUMI — Validação de Runtime (Edição PRO OpenCode)
 
 Data: 2026-08-26 · Sessão: Pente-fino máximo unificado (OpenCode)
-Branch: `feature/nyra-avatar-v2` @ `6114452` (working tree pré-existente preservado)
+Branch: `feature/kazumi-avatar-v2` @ `6114452` (working tree pré-existente preservado)
 
 ## Runtimes utilizados
 
 | Runtime | Uso nesta validação |
 |---|---|
 | Dev (`uvicorn` :8010 via `.venv`) | TODOS os E2Es deste documento |
-| Frozen (`nyra-backend.exe` :8000) | Fechado com consentimento do operador durante o E2E (conflito de VRAM); reaberto ao final |
+| Frozen (`kazumi-backend.exe` :8000) | Fechado com consentimento do operador durante o E2E (conflito de VRAM); reaberto ao final |
 | Ollama :11434 | Compartilhado; modelo residente gerido por warm manager |
 
 ## VEREDITO GERAL: PASS com bloqueio externo documentado
@@ -30,7 +30,7 @@ Branch: `feature/nyra-avatar-v2` @ `6114452` (working tree pré-existente preser
 - Recovery de launch: OSError no Popen → ShellExecuteW com verificação pid-free.
 - `open_file/open_url` honestos: `effect_verified=null` sem probe de janela.
 - Semântica read_only corrigida: LOW_RISK passa quando política permite; ELEVATED+ bloqueado.
-- **E2E real**: "Nyra, abre o bloco de notas." via `/api/chat` → notepad REAL aberto, PID confirmado por probe externo, fechado depois. Resposta grounded: "Confirmado: Bloco de Notas está aberto e visível (PID …)".
+- **E2E real**: "Kazumi, abre o bloco de notas." via `/api/chat` → notepad REAL aberto, PID confirmado por probe externo, fechado depois. Resposta grounded: "Confirmado: Bloco de Notas está aberto e visível (PID …)".
 
 ## TTS / CORRELAÇÃO POR TURNO
 - `_SpeechItem` agora tem `conversation_id`+`created_at`; auto-tagging de rotas sem turno.
@@ -47,9 +47,9 @@ Branch: `feature/nyra-avatar-v2` @ `6114452` (working tree pré-existente preser
 - Proxmox ONLINE · OpenWrt ONLINE · Home Assistant ONLINE (perfil ha-vm) · dc1 UNREACHABLE (host desabilitado).
 - Inventário real: 6 VMs, 3 running (Ubuntu-Utamo-Server, utamo-mail, home-assistant).
 
-## VOICE SATELLITE / nyra.voice.v1
-- NYRA WS: `hello→hello_ack`, `voice.barge_in/tts.stop → cancel_speech()` (só TTS), heartbeat ack, lock de saída.
-- Satellite: HELLO versionado + handshake obrigatório; estado CONNECTING usado; backoff reset corrigido; dedup HTTP+WS; health "nyra"/"vad" reais; `.env.example` corrigido (variáveis eram inertes).
+## VOICE SATELLITE / kazumi.voice.v1
+- KAZUMI WS: `hello→hello_ack`, `voice.barge_in/tts.stop → cancel_speech()` (só TTS), heartbeat ack, lock de saída.
+- Satellite: HELLO versionado + handshake obrigatório; estado CONNECTING usado; backoff reset corrigido; dedup HTTP+WS; health "kazumi"/"vad" reais; `.env.example` corrigido (variáveis eram inertes).
 - E2E WS: `{"connected":"CONNECTED","hello_ack":true,"heartbeat_ack":true}`.
 - Bridge :8977 ciclo real: OFFLINE+fallback ON → HEALTHY (processor conectado) → OFFLINE+fallback ON.
 
@@ -77,11 +77,11 @@ Templates rígidos de chat (wrench/qwen3 no Ollama) rejeitam `system` fora do in
 
 ## ARQUIVOS ALTERADOS (resumo)
 Backend: tools/registry.py, tools/agent.py, realtime/orchestrator.py, character/context.py, llm/ollama.py, speech/queue.py, events/bus.py, core/release_info.py, api/routes.py, desktop/{discovery,models,control}.py · config/desktop_apps.yaml · testes novos/atualizados.
-Satellite: app/nyra/{heartbeat,reconnect,client,protocol}.py, app/pipeline.py, .env.example, tests/test_voice_v1_contract.py.
+Satellite: app/kazumi/{heartbeat,reconnect,client,protocol}.py, app/pipeline.py, .env.example, tests/test_voice_v1_contract.py.
 
 ---
 
-# FULL COMPUTER OPERATOR UNIVERSAL V1 (nyra-full.md) — 2026-08-26
+# FULL COMPUTER OPERATOR UNIVERSAL V1 (kazumi-full.md) — 2026-08-26
 
 ## APP DISCOVERY (fontes reais desta máquina)
 ```
@@ -127,7 +127,7 @@ Refresh: startup + a cada 6h + POST /api/apps/registry/refresh
 Mesmo pipeline estrutural (STT → /api/chat → intents). Teste audível: MANUAL_REQUIRED.
 
 ## MULTI-STEP
-`abre o bloco de notas, escreve "NYRA teste" e salva na área de trabalho como nyra-teste.txt`
+`abre o bloco de notas, escreve "KAZUMI teste" e salva na área de trabalho como kazumi-teste.txt`
 → executor determinístico `desktop/multistep.py`: launch✔ focus✔ type(UIA read-back)✔ Ctrl+S✔ diálogo✔ path+Enter✔ **arquivo criado e conteúdo verificado** (13.8s).
 
 ## GROUNDING

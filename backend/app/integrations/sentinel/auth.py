@@ -17,7 +17,7 @@ class SentinelSecretStore:
         self.fallback = fallback.strip()
 
     def load(self) -> str:
-        environment = str(os.environ.get("NYRA_SENTINEL_BRIDGE_TOKEN", "") or "").strip()
+        environment = str(os.environ.get("KAZUMI_SENTINEL_BRIDGE_TOKEN", "") or "").strip()
         if environment:
             return environment
         try:

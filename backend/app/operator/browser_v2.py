@@ -57,7 +57,7 @@ def _target_lookup_js(selector: str, x: int = 0, y: int = 0) -> str:
 
 
 _TARGET_SNAPSHOT_JS = (
-    "const nyraSnapshot = (el) => {"
+    "const kazumiSnapshot = (el) => {"
     " const r = el.getBoundingClientRect();"
     " const password = String(el.type || '').toLowerCase() === 'password';"
     " const form = el.form || null;"
@@ -78,7 +78,7 @@ _TARGET_SNAPSHOT_JS = (
     "     target:String(form.target || ''), noValidate:!!form.noValidate, fields:fields} : null,"
     "   rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]"
     " });"
-    " return snapshot.length <= 65536 ? snapshot : '__NYRA_TARGET_TOO_COMPLEX__';"
+    " return snapshot.length <= 65536 ? snapshot : '__KAZUMI_TARGET_TOO_COMPLEX__';"
     "};"
 )
 
@@ -421,7 +421,7 @@ class BrowserV2Controller:
             f"const el = {lookup};"
             "if (!el) return JSON.stringify({guard_error:'ELEMENT_NOT_FOUND'});"
             "const r = el.getBoundingClientRect();"
-            "return JSON.stringify({snapshot: nyraSnapshot(el),"
+            "return JSON.stringify({snapshot: kazumiSnapshot(el),"
             " x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2)});"
             "})()"
         )
@@ -432,7 +432,7 @@ class BrowserV2Controller:
                 app="browser", action="interaction", success=False,
                 error_code=str(result.get("guard_error") or "ELEMENT_NOT_FOUND"),
             )
-        if result["snapshot"] == "__NYRA_TARGET_TOO_COMPLEX__":
+        if result["snapshot"] == "__KAZUMI_TARGET_TOO_COMPLEX__":
             return None, operation_result(
                 app="browser", action="interaction", success=False,
                 error_code="TARGET_TOO_COMPLEX",
@@ -496,7 +496,7 @@ class BrowserV2Controller:
             "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             f"const el = {lookup};"
             "if (!el) return JSON.stringify({guard_error:'ELEMENT_NOT_FOUND'});"
-            f"if (nyraSnapshot(el) !== {json.dumps(target_snapshot)}) "
+            f"if (kazumiSnapshot(el) !== {json.dumps(target_snapshot)}) "
             "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "const r = el.getBoundingClientRect();"
             "el.click();"
@@ -577,7 +577,7 @@ class BrowserV2Controller:
             "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             f"const el = {lookup};"
             "if (!el || !el.focus) return JSON.stringify({guard_error:'FOCUS_FAILED'});"
-            f"if (nyraSnapshot(el) !== {json.dumps(target_snapshot)}) "
+            f"if (kazumiSnapshot(el) !== {json.dumps(target_snapshot)}) "
             "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "const tag = String(el.tagName || '').toLowerCase();"
             "const password = String(el.type || '').toLowerCase() === 'password';"
@@ -599,7 +599,7 @@ class BrowserV2Controller:
             " inserted = true;"
             "}"
             "const stored = 'value' in el ? String(el.value || '') : String(el.textContent || '');"
-            "const nyraResult = JSON.stringify({inserted:!!inserted, tag:tag, password:password, len:stored.length,"
+            "const kazumiResult = JSON.stringify({inserted:!!inserted, tag:tag, password:password, len:stored.length,"
             + ("masked:true" if secret else "preview:password ? '<password>' : stored.slice(0,60)") +
             "});"
             + (
@@ -608,7 +608,7 @@ class BrowserV2Controller:
                 "el.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',bubbles:true})); }"
                 if submit else ""
             ) +
-            "return nyraResult;"
+            "return kazumiResult;"
             "})()"
         )
         ok, value = await self._evaluate(port, resolved, action_expression)
@@ -678,7 +678,7 @@ class BrowserV2Controller:
             "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "const el = document.querySelector(" + json.dumps(selector) + ");"
             "if (!el || el.tagName !== 'SELECT') return 'not-select';"
-            f"if (nyraSnapshot(el) !== {json.dumps(snapshot)}) "
+            f"if (kazumiSnapshot(el) !== {json.dumps(snapshot)}) "
             "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "const option = Array.from(el.options).find(o => o.value === " + json.dumps(value) +
             " || o.textContent.trim() === " + json.dumps(value) + ");"
@@ -736,7 +736,7 @@ class BrowserV2Controller:
             "if (location.href !== approvedUrl) return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "const el = document.querySelector(" + json.dumps(selector) + ");"
             "if (!el || !('checked' in el)) return 'not-checkable';"
-            f"if (nyraSnapshot(el) !== {json.dumps(snapshot)}) "
+            f"if (kazumiSnapshot(el) !== {json.dumps(snapshot)}) "
             "return JSON.stringify({guard_error:'BROWSER_TARGET_CHANGED'});"
             "if (el.checked !== " + ("true" if checked else "false") + ") { el.click(); }"
             "return JSON.stringify({checked: el.checked}); })()"
@@ -920,7 +920,7 @@ class BrowserV2Controller:
         guarded_script = (
             "(() => {"
             f"const approvedUrl={json.dumps(origin_value)};"
-            "if (location.href !== approvedUrl) { throw new Error('NYRA_BROWSER_TARGET_CHANGED'); }"
+            "if (location.href !== approvedUrl) { throw new Error('KAZUMI_BROWSER_TARGET_CHANGED'); }"
             f"return eval({json.dumps(script)});"
             "})()"
         )

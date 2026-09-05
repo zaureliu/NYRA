@@ -2,8 +2,8 @@
 import asyncio, os, statistics, sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-os.environ.setdefault("NYRA_OLLAMA_PRELOAD", "false")
-os.environ.setdefault("NYRA_CONVERSATION_ENGINE", "false")
+os.environ.setdefault("KAZUMI_OLLAMA_PRELOAD", "false")
+os.environ.setdefault("KAZUMI_CONVERSATION_ENGINE", "false")
 from fastapi.testclient import TestClient
 from app.main import app
 

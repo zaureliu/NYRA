@@ -3,7 +3,7 @@
 ## Contrato
 
 `app.open_loops.OpenLoopEngine` mantém objetivos e continuidades futuras no
-SQLite local configurado da NYRA. Open Loop não é Task: ele lembra o que está
+SQLite local configurado da KAZUMI. Open Loop não é Task: ele lembra o que está
 incompleto, aguardando ou bloqueado, sem agendar ou executar nada. Tasks mantêm
 seu scheduler existente e podem referenciar um único `goal_id` principal.
 

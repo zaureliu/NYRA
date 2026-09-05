@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 BRIDGE_VERSION = 1
-NAMESPACE = "/integrations/nyra"
+NAMESPACE = "/integrations/kazumi"
 MAX_EVENT_BYTES = 32 * 1024
 
 
@@ -60,7 +60,7 @@ class SentinelEvent(BaseModel):
 class SentinelFingerprint(BaseModel):
     model_config = ConfigDict(extra="ignore")
     service: str = Field(pattern=r"^utamo-sentinel$")
-    integration: str = Field(pattern=r"^nyra$")
+    integration: str = Field(pattern=r"^kazumi$")
     status: str
     api_version: str
     sentinel_version: str

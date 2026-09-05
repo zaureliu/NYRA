@@ -83,7 +83,7 @@ class STTProviderRegistry:
             session = RecognitionSession(self, audio_format, sink, mic_started_at=mic_started_at)
             self.active = session
             self.available.clear()
-            session.worker = asyncio.create_task(session.run(), name="nyra-stt-audio-sender")
+            session.worker = asyncio.create_task(session.run(), name="kazumi-stt-audio-sender")
             return session
 
     def remote_failed(self, failure: STTFailure) -> None:

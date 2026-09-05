@@ -2,7 +2,7 @@
 
 ## Spout2
 
-The NYRA VTube Studio Presence interoperates with the Spout2 sender registry,
+The KAZUMI VTube Studio Presence interoperates with the Spout2 sender registry,
 frame synchronization objects and DirectX 11 shared textures documented by the
 official [leadedge/Spout2](https://github.com/leadedge/Spout2) implementation.
 
@@ -12,7 +12,7 @@ official [leadedge/Spout2](https://github.com/leadedge/Spout2) implementation.
 - Copyright (c) 2020-2024, Lynn Jarvis
 
 No upstream binary, model file or VTube Studio asset is redistributed. The
-native receiver is compiled into `nyra-desktop.exe` and uses Windows DirectX 11
+native receiver is compiled into `kazumi-desktop.exe` and uses Windows DirectX 11
 and DirectComposition APIs directly.
 
 BSD 2-Clause License

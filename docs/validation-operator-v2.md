@@ -5,7 +5,7 @@ Data: 2026-08-23 · Spec: `prompt9_autonomous_computer_operator_v2.md`
 ## Estado inicial
 
 ```text
-branch: feature/nyra-avatar-v2
+branch: feature/kazumi-avatar-v2
 HEAD: 6114452 (feat: add Voice 2.0 and desktop presence)
 working tree: preservada (82 arquivos modificados do prompt8 + ~200 não rastreados)
 baseline: suíte backend do prompt8 verde antes das mudanças (test_agent_loop,
@@ -29,7 +29,7 @@ Depois: as MESMAS camadas + `app/operator/` com 15 sub-módulos novos
 watcher/workflows/proactive_rules/contexts/watchdog_bridge/service/tools_reg),
 43 ferramentas novas no ToolRegistry, ~30 endpoints novos sob `/api/*`,
 painel Operator Activity no frontend, watchdog externo standalone em
-`watchdog/nyra_watchdog.py` e flags Parte R com consumer+teste.
+`watchdog/kazumi_watchdog.py` e flags Parte R com consumer+teste.
 
 ## Vision
 
@@ -54,7 +54,7 @@ do DesktopController continua valendo para todo o resto.
 
 ## Browser
 
-CDP sobre navegador gerenciado (perfil dedicado da NYRA). Novidades:
+CDP sobre navegador gerenciado (perfil dedicado da KAZUMI). Novidades:
 select_tab (bringToFront), dom_inspect (máscara `<password>` garantida),
 find_element (role/label/text/selector), click_element (Input.dispatchMouseEvent
 real + detecção de navegação), type_text (focus+insertText com read-back;
@@ -88,7 +88,7 @@ do usuário atual, token efêmero random por sessão (nunca logado/persistido),
 TTL aplicado cliente+servidor (default 300s, máx 900s, nunca permanente).
 Cada comando ainda passa pelo ShellRiskClassifier; DESTRUCTIVE/CRITICAL exigem
 approval próprio mesmo dentro da sessão (§112). UAC_CANCELLED tratado
-honestamente. Status/close expostos; IPC é named pipe `\\.\pipe\nyra-elevated-*`
+honestamente. Status/close expostos; IPC é named pipe `\\.\pipe\kazumi-elevated-*`
 (loopback do sistema, sem rede).
 
 ## Persistent Jobs
@@ -155,12 +155,12 @@ frontend TCP / Ollama HTTP / processo desktop, threshold 3 falhas → restart
 RESTART_LIMIT=3 por janela de 600s → CRASH_LOOP_PROTECTED, heartbeat JSON
 (lido pela API `/api/watchdog/status` com staleness 30s), canal one-shot
 `data/watchdog-requests/*.json` consumido (bridge subscreve RUNTIME_FAILED/
-RUNTIME_CRASH_LOOP do nyra_backend — §227), log separado `logs/watchdog.log`,
+RUNTIME_CRASH_LOOP do kazumi_backend — §227), log separado `logs/watchdog.log`,
 sem admin, sem self-update.
 
 ## Proactive Operator
 
-Default OFF (`NYRA_PROACTIVE_OPERATOR_ENABLED=false`, validado em teste).
+Default OFF (`KAZUMI_PROACTIVE_OPERATOR_ENABLED=false`, validado em teste).
 Regras cadastradas (schema Pydantic) com allowlist de ações {notify,
 run_workflow, open_report} — ação destrutiva não solicitada é IMPOSSÍVEL
 (§239). Orçamento/cooldown continuam no ProactiveEngine existente.
@@ -232,7 +232,7 @@ verification: SIM             audit: SIM
 Adicionalmente: approval single-use mantido em TODOS os novos fluxos de risco;
 modais destrutivos nunca auto-aceitos; password fields mascarados no DOM e no
 visual; cookies/tokens jamais lidos; scripts de página com APIs sensíveis
-exigem approval; components NYRA protegidos (taskkill de jobs nunca toca
+exigem approval; components KAZUMI protegidos (taskkill de jobs nunca toca
 processos próprios — herança das proteções existentes).
 
 ## Critérios de aceite (§320-§324)
@@ -246,7 +246,7 @@ processos próprios — herança das proteções existentes).
 - Watchdog revive backend morto: LÓGICA e CANAL validados por testes; restart
   real do backend de produção NÃO foi executado durante a sessão (§309 — não
   matar a sessão de desenvolvimento sem plano). Executar manualmente:
-  `python watchdog\nyra_watchdog.py` e derrubar o backend.
+  `python watchdog\kazumi_watchdog.py` e derrubar o backend.
 - Tarefa longa sem travar o chat: VALIDADO (jobs/tasks rodam fora de tool calls;
   status consultável a qualquer momento).
 

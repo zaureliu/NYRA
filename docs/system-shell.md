@@ -1,6 +1,6 @@
 # System Shell local
 
-`system_shell` fornece execução local arbitrária de PowerShell e CMD ao agente NYRA. A tool está no mesmo `ToolRegistry` usado pelo backend, recebe schema Pydantic no `/api/chat` do Ollama e devolve stdout, stderr, exit code, duração, timeout, truncamento e risco. Texto comum do modelo nunca é avaliado como comando.
+`system_shell` fornece execução local arbitrária de PowerShell e CMD ao agente KAZUMI. A tool está no mesmo `ToolRegistry` usado pelo backend, recebe schema Pydantic no `/api/chat` do Ollama e devolve stdout, stderr, exit code, duração, timeout, truncamento e risco. Texto comum do modelo nunca é avaliado como comando.
 
 ## Fluxo
 
@@ -15,18 +15,18 @@
 
 ## Configuração
 
-- `NYRA_SHELL_ENABLED=true`
-- `NYRA_SHELL_DEFAULT=powershell`
-- `NYRA_SHELL_TIMEOUT_SECONDS=30`
-- `NYRA_SHELL_MAX_TIMEOUT_SECONDS=300`
-- `NYRA_SHELL_MAX_OUTPUT_CHARS=50000`
-- `NYRA_SHELL_MAX_CALLS_PER_TURN=10`
-- `NYRA_SHELL_CONFIRM_DESTRUCTIVE=true`
-- `NYRA_SHELL_APPROVAL_TTL_SECONDS=300`
-- `NYRA_SHELL_DEFAULT_WORKING_DIRECTORY=.`
+- `KAZUMI_SHELL_ENABLED=true`
+- `KAZUMI_SHELL_DEFAULT=powershell`
+- `KAZUMI_SHELL_TIMEOUT_SECONDS=30`
+- `KAZUMI_SHELL_MAX_TIMEOUT_SECONDS=300`
+- `KAZUMI_SHELL_MAX_OUTPUT_CHARS=50000`
+- `KAZUMI_SHELL_MAX_CALLS_PER_TURN=10`
+- `KAZUMI_SHELL_CONFIRM_DESTRUCTIVE=true`
+- `KAZUMI_SHELL_APPROVAL_TTL_SECONDS=300`
+- `KAZUMI_SHELL_DEFAULT_WORKING_DIRECTORY=.`
 
 Quando desabilitada, a tool permanece acessível pela API para devolver `SHELL_DISABLED`, mas não é anunciada ao LLM.
-Se `NYRA_SHELL_CONFIRM_DESTRUCTIVE=false`, comandos sensíveis ficam bloqueados com `COMMAND_REJECTED`; a opção nunca transforma ausência de confirmação em execução automática.
+Se `KAZUMI_SHELL_CONFIRM_DESTRUCTIVE=false`, comandos sensíveis ficam bloqueados com `COMMAND_REJECTED`; a opção nunca transforma ausência de confirmação em execução automática.
 
 ## API e observabilidade
 

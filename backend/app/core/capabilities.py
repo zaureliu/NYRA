@@ -23,7 +23,7 @@ from typing import Any, Awaitable, Callable
 
 from app.core.runtime_settings import save_runtime_settings
 
-logger = logging.getLogger("nyra.capabilities")
+logger = logging.getLogger("kazumi.capabilities")
 
 
 @dataclass(frozen=True)

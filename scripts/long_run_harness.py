@@ -1,4 +1,4 @@
-"""Long-run harness acelerado da NYRA (spec Parte AK §157-§161).
+"""Long-run harness acelerado da KAZUMI (spec Parte AK §157-§161).
 
 Monitora o processo do backend por N minutos amostrando threads, handles,
 RAM e conexões — detecta leaks com thresholds configuráveis. Documenta a

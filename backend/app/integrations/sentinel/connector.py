@@ -26,7 +26,7 @@ from app.integrations.sentinel.models import (
 )
 
 
-logger = logging.getLogger("nyra.sentinel_bridge")
+logger = logging.getLogger("kazumi.sentinel_bridge")
 
 
 class SentinelConnector:
@@ -64,7 +64,7 @@ class SentinelConnector:
         self._stop.clear()
         self._wake.set()
         if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._run(), name="nyra-sentinel-connector")
+            self._task = asyncio.create_task(self._run(), name="kazumi-sentinel-connector")
 
     async def stop(self) -> None:
         self.settings.sentinel_watch_enabled = False
@@ -208,10 +208,10 @@ class SentinelConnector:
         if not self.settings.sentinel_debug_mode:
             raise PermissionError("Debug do Sentinel Watch está desativado")
         event = SentinelEvent.model_validate({
-            "schema_version": 1, "event_id": f"nyra-debug-{severity}-{time.time_ns()}",
-            "source": "utamo-sentinel", "instance_id": "nyra-local-debug",
+            "schema_version": 1, "event_id": f"kazumi-debug-{severity}-{time.time_ns()}",
+            "source": "utamo-sentinel", "instance_id": "kazumi-local-debug",
             "timestamp": datetime.now(timezone.utc), "category": "integration",
-            "type": f"nyra_bridge_test_{severity}", "severity": severity,
+            "type": f"kazumi_bridge_test_{severity}", "severity": severity,
             "title": "Teste do Sentinel", "summary": f"Evento {severity} de teste do Sentinel.",
             "entity": {"type": "integration", "name": "Utamo Sentinel"}, "metadata": {"debug": True},
         })
@@ -355,7 +355,7 @@ class SentinelConnector:
             require_secure_credential_transport(candidate.base_url)
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(
-                    f"{candidate.base_url}/api/integrations/nyra/status",
+                    f"{candidate.base_url}/api/integrations/kazumi/status",
                     headers={"Authorization": f"Bearer {self.secrets.load()}"},
                 )
             return (response.json() if response.content else {}, response.status_code)
@@ -368,7 +368,7 @@ class SentinelConnector:
             require_secure_credential_transport(candidate.base_url)
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(
-                    f"{candidate.base_url}/api/integrations/nyra/alerts/recent",
+                    f"{candidate.base_url}/api/integrations/kazumi/alerts/recent",
                     params={"limit": 100, "since": since},
                     headers={"Authorization": f"Bearer {self.secrets.load()}"},
                 )

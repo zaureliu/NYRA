@@ -33,7 +33,7 @@ _FUTURE = re.compile(
 )
 
 _ENTITY_ANCHORS = {
-    "audio", "discord", "documentacao", "download", "nyra", "release", "vm", "voz",
+    "audio", "discord", "documentacao", "download", "kazumi", "release", "vm", "voz",
 }
 
 _STOPWORDS = {

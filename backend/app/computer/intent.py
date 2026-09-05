@@ -1,4 +1,4 @@
-"""Camada 3 — IntentUnderstandingService (nyra-7c §23-§31).
+"""Camada 3 — IntentUnderstandingService (kazumi-7c §23-§31).
 
 Transforma texto digitado OU transcrição STT em NormalizedUserIntent (§24).
 Um único caminho para texto e voz (§25): ambos entram normalizados aqui.
@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.computer.state import ComputerStateService, ResolvedTarget
 
-logger = logging.getLogger("nyra.computer.intent")
+logger = logging.getLogger("kazumi.computer.intent")
 
 
 class PlanStep(BaseModel):
@@ -33,7 +33,7 @@ class PlanStep(BaseModel):
 
 
 class NormalizedUserIntent(BaseModel):
-    """Schema mínimo nyra-7c §24."""
+    """Schema mínimo kazumi-7c §24."""
 
     intent_id: str = Field(default_factory=lambda: f"int_{uuid4().hex[:12]}")
     turn_id: str = ""

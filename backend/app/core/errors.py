@@ -16,7 +16,7 @@ import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger("nyra.errors")
+logger = logging.getLogger("kazumi.errors")
 
 _STAGE_HINTS = {
     "ollama": "llm",

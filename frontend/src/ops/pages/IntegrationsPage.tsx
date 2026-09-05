@@ -47,7 +47,7 @@ export function IntegrationsPage({ onOpenSentinel }: { onOpenSentinel: () => voi
   }
 
   const openIntegration = (integration: IntegrationCard) => {
-    // prompt11_2 §13: Abrir do Proxmox abre a view detalhada DENTRO da NYRA
+    // prompt11_2 §13: Abrir do Proxmox abre a view detalhada DENTRO da KAZUMI
     // (nunca card falso); as demais usam a URL real reportada pelo backend.
     if (integration.id === 'proxmox') {
       setConfigureId('proxmox')

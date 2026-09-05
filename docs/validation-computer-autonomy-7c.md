@@ -1,4 +1,4 @@
-# Validação final — autonomia local em sete camadas (NYRA-7c)
+# Validação final — autonomia local em sete camadas (KAZUMI-7c)
 
 Data: 2026-08-26
 Status: **PASS**, com voz física marcada como `MANUAL_REQUIRED` e limitações ambientais documentadas abaixo.
@@ -70,7 +70,7 @@ A retomada começou pela inspeção de `git status`, `git diff`, arquivos altera
 - Status: PASS.
 - Arquivos: `scripts/e2e_computer_layers_runtime.py`, `scripts/e2e_frozen_parity_7c.py` e `frontend/scripts/ops-ui-smoke.mjs`.
 - Testes/E2E: runtime-fonte `13/13 PASS`; executável PyInstaller atual `8/8 PASS`; smoke geral da UI PASS; smoke de operações percorreu 13 rotas PASS.
-- Issues: o harness inicial não detectava uma janela residual, não falhava o processo quando havia cenário FAIL e usava espera fixa curta na página Capabilities. A primeira repetição congelada também criou a fixture fora das raízes conhecidas pelo resolvedor. Corrigidos com baseline de HWND, cleanup seletivo, exit code obrigatório, polling limitado, fixture exclusiva em `Documents` e armazenamento `NYRA_*` isolado no runtime temporário.
+- Issues: o harness inicial não detectava uma janela residual, não falhava o processo quando havia cenário FAIL e usava espera fixa curta na página Capabilities. A primeira repetição congelada também criou a fixture fora das raízes conhecidas pelo resolvedor. Corrigidos com baseline de HWND, cleanup seletivo, exit code obrigatório, polling limitado, fixture exclusiva em `Documents` e armazenamento `KAZUMI_*` isolado no runtime temporário.
 - Telemetria futura: os sete sinais passivos do §103 (`perception_failure`, `intent_resolution_failure`, `context_resolution_failure`, `operator_failure`, `verification_failure`, `usage_pattern_failure`, `skill_execution_failure`) têm contadores e eventos redigidos; não executam SelfDev.
 
 ## PERCEPTION
@@ -128,7 +128,7 @@ A retomada começou pela inspeção de `git status`, `git diff`, arquivos altera
 - preferences: agregadas sem conteúdo privado.
 - workflow candidates: janela deslizante, sequência real e confidence growth confirmados.
 - negative corrections: associação errada perde votos; associação corrigida recebe confirmação explícita.
-- storage: `%LOCALAPPDATA%/NYRA/usage-learning`, com escrita atômica.
+- storage: `%LOCALAPPDATA%/KAZUMI/usage-learning`, com escrita atômica.
 - privacy: sem áudio, clipboard content, tokens, secrets ou chain-of-thought.
 
 ## SKILL MEMORY
@@ -138,7 +138,7 @@ A retomada começou pela inspeção de `git status`, `git diff`, arquivos altera
 - execution: match -> preconditions -> step permitido -> efeito verificado -> próximo step.
 - failure handling: fail-closed, confidence reduction, degraded e fallback ao planner.
 - versioning: versão e histórico preservados.
-- storage: `%LOCALAPPDATA%/NYRA/skills`, local e sem secrets.
+- storage: `%LOCALAPPDATA%/KAZUMI/skills`, local e sem secrets.
 
 ## UI
 
@@ -164,8 +164,8 @@ A retomada começou pela inspeção de `git status`, `git diff`, arquivos altera
 | Target inexistente | PASS | Sim (ausência) | `NOT_FOUND`; nada executado |
 | FULL_LOCAL_OPERATOR | PASS | Sim | health `read_only=false` |
 | Clipboard comum em FULL_LOCAL_OPERATOR | PASS | Controlado | tools tipadas com riscos esperados; backend injetável confirmou write/clear; clipboard real não foi lido nem alterado |
-| Runtime-fonte | 13/13 PASS | Sim | `.tmp/nyra-7c-runtime-e2e.json` |
-| Runtime congelado atual | 8/8 PASS | Sim | `.tmp/nyra-7c-frozen-e2e.json` |
+| Runtime-fonte | 13/13 PASS | Sim | `.tmp/kazumi-7c-runtime-e2e.json` |
+| Runtime congelado atual | 8/8 PASS | Sim | `.tmp/kazumi-7c-frozen-e2e.json` |
 | Texto/voz normalizados | PASS / MANUAL_REQUIRED | Unitário | mesma intenção no teste; microfone físico indisponível |
 | UI navigation | PASS | N/A | smoke geral + 13 rotas de operações |
 

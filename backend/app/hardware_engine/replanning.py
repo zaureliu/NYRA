@@ -84,7 +84,7 @@ def reconcile_target(projects, meta, identity, revision):
     if not trusted:
         raise HardwareError('UNTRUSTED_BUILD_TARGET')
     meta['board'], meta['framework'], meta['sources'] = trusted.model_dump(), trusted.framework, []
-    config = f'[env:nyra]\nplatform = {trusted.platform}\nboard = {trusted.board_id}\nframework = {trusted.framework}\nmonitor_speed = 115200\n'
+    config = f'[env:kazumi]\nplatform = {trusted.platform}\nboard = {trusted.board_id}\nframework = {trusted.framework}\nmonitor_speed = 115200\n'
     projects.write(meta['project_id'], 'platformio.ini', config)
     projects.checkpoint(meta)
     return True

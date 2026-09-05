@@ -2,7 +2,7 @@
 
 Owns persistent services registered in config/runtime_services.yaml. Mutations are
 locked per service, verified after execution (ACT -> VERIFY) and reported with
-grounding fields. External services are never terminated by NYRA shutdown.
+grounding fields. External services are never terminated by KAZUMI shutdown.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from app.runtime.models import (
 from app.runtime.process_manager import ProcessManager, rotate_log_file
 from app.runtime.registry import RuntimeRegistry, load_runtime_registry
 
-logger = logging.getLogger("nyra.runtime")
+logger = logging.getLogger("kazumi.runtime")
 
 
 class RuntimeSupervisor:
@@ -500,7 +500,7 @@ class RuntimeSupervisor:
         spec = self._spec(service_id)
         if spec is None:
             return base_fail(OperationErrorCodes.UNKNOWN_SERVICE, "Serviço não registrado.")
-        if spec.id == "nyra_backend" and spec.ownership == Ownership.OWNED:
+        if spec.id == "kazumi_backend" and spec.ownership == Ownership.OWNED:
             return base_fail(OperationErrorCodes.SELF_RESTART_UNSUPPORTED,
                              "Self-restart do backend exige supervisor externo; não implementado nesta etapa (limitação declarada).")
         if not spec.capabilities.restart:
@@ -631,7 +631,7 @@ class RuntimeSupervisor:
                 logger.warning("runtime_monitor_iteration_failed", extra={"error_type": type(exc).__name__})
     def start_monitor(self) -> None:
         if self._monitor_task is None or self._monitor_task.done():
-            self._monitor_task = asyncio.create_task(self._monitor_loop(), name="nyra-runtime-monitor")
+            self._monitor_task = asyncio.create_task(self._monitor_loop(), name="kazumi-runtime-monitor")
 
     async def shutdown(self) -> None:
         self._stopping = True

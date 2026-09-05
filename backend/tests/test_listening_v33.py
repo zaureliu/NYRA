@@ -24,10 +24,10 @@ def test_voice_satellite_only_receives_actionable_owned_backend_errors():
 
 def test_local_wake_word_extracts_command_and_rejects_mentions():
     provider = TranscriptWakeWordProvider()
-    match = provider.detect("Nyra, como está a rede?", "Nyra")
+    match = provider.detect("Kazumi, como está a rede?", "Kazumi")
     assert match.detected is True
     assert match.command_text == "como esta a rede?"
-    assert provider.detect("Eu estava falando sobre a Nyra ontem", "Nyra").detected is False
+    assert provider.detect("Eu estava falando sobre a Kazumi ontem", "Kazumi").detected is False
 
 
 @pytest.mark.asyncio
@@ -36,11 +36,11 @@ async def test_wake_word_opens_hands_free_and_close_phrase_ends_it(tmp_path):
         database_path=tmp_path / "memory.db",
         always_listening_enabled=True,
         listening_mode="wake_word",
-        wake_word="Nyra",
+        wake_word="Kazumi",
         hands_free_timeout_seconds=120,
     )
     manager = AlwaysListeningManager(settings, EventBus())
-    first = manager.decide("Nyra, como está a rede?")
+    first = manager.decide("Kazumi, como está a rede?")
     assert first.accepted and first.wake_word_detected
     follow_up = manager.decide("E o servidor?")
     assert follow_up.accepted and follow_up.reason == "hands_free"

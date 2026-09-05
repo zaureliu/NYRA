@@ -1,4 +1,4 @@
-"""Real homelab smoke for the NYRA Control Plane.
+"""Real homelab smoke for the KAZUMI Control Plane.
 
 Runs read-only checks against the operator's actual infrastructure using the
 configured .env (never printing secrets):
@@ -66,7 +66,7 @@ async def smoke_ha(plane: HomelabControlPlane) -> None:
 async def smoke_proxmox(plane: HomelabControlPlane) -> None:
     print("\n== PROXMOX (API nativa) ==")
     if not plane.proxmox.configured:
-        line("status", "PROXMOX_AUTH_MISSING — configure NYRA_PROXMOX_TOKEN_ID/SECRET (docs/integrations/proxmox.md)")
+        line("status", "PROXMOX_AUTH_MISSING — configure KAZUMI_PROXMOX_TOKEN_ID/SECRET (docs/integrations/proxmox.md)")
         return
     try:
         version = await plane.proxmox.version()

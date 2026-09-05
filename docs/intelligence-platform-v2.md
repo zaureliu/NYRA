@@ -1,4 +1,4 @@
-# NYRA Intelligence Platform V2
+# KAZUMI Intelligence Platform V2
 
 ## Escopo e princípios
 
@@ -128,7 +128,7 @@ limitada e falhas de persistência não matam o worker.
 Diagnostics executa checks registrados e limitados por timeout. O resultado
 inclui diagnosis, probable cause, confidence, evidence, passed/failed checks e
 ação recomendada. Nenhum texto livre do LLM é tratado como evidência. Domínios
-atuais: NYRA, Ollama, memory, RAG, desktop, browser, voice, network e SelfDev.
+atuais: KAZUMI, Ollama, memory, RAG, desktop, browser, voice, network e SelfDev.
 
 ## Browser, Desktop e Vision
 

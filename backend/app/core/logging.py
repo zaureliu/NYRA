@@ -9,20 +9,20 @@ from app.core.paths import LOG_ROOT, ensure_runtime_directories
 
 
 LOGGERS = {
-    "nyra": "application.log",
-    "nyra.conversation": "conversation.log",
-    "nyra.tools": "tools.log",
-    "nyra.homelab": "homelab.log",
-    "nyra.errors": "errors.log",
-    "nyra.voice": "voice.log",
-    "nyra.microphone": "microphone.log",
-    "nyra.desktop": "desktop.log",
-    "nyra.listening": "listening.log",
-    "nyra.network_watch": "network-watch.log",
-    "nyra.shell": "shell.log",
-    "nyra.remote_shell": "remote-shell.log",
-    "nyra.agent": "agent-runs.log",
-    "nyra.ollama_warm": "ollama-warm.log",
+    "kazumi": "application.log",
+    "kazumi.conversation": "conversation.log",
+    "kazumi.tools": "tools.log",
+    "kazumi.homelab": "homelab.log",
+    "kazumi.errors": "errors.log",
+    "kazumi.voice": "voice.log",
+    "kazumi.microphone": "microphone.log",
+    "kazumi.desktop": "desktop.log",
+    "kazumi.listening": "listening.log",
+    "kazumi.network_watch": "network-watch.log",
+    "kazumi.shell": "shell.log",
+    "kazumi.remote_shell": "remote-shell.log",
+    "kazumi.agent": "agent-runs.log",
+    "kazumi.ollama_warm": "ollama-warm.log",
 }
 
 
@@ -44,7 +44,7 @@ def configure_logging(level: str = "INFO") -> None:
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-        if logger_name == "nyra":
+        if logger_name == "kazumi":
             console = logging.StreamHandler()
             console.setFormatter(formatter)
             logger.addHandler(console)

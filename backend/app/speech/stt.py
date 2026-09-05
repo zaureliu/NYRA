@@ -16,7 +16,7 @@ from app.speech.vad import AudioMetrics, SileroVAD, VADConfig, VADResult
 from app.speech.recognition.models import RealtimeSTTProvider as StreamingSTTProvider
 
 
-logger = logging.getLogger("nyra.microphone")
+logger = logging.getLogger("kazumi.microphone")
 
 
 class Transcription(BaseModel):

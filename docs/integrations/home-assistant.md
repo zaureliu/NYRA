@@ -2,7 +2,7 @@
 
 ## Estado atual validado
 
-Instância real do operador acessível por HTTPS (a URL é usada **exatamente como configurada**; a NYRA nunca adiciona `:8123` por conta própria). HTTP com Bearer só é aceito em loopback.
+Instância real do operador acessível por HTTPS (a URL é usada **exatamente como configurada**; a KAZUMI nunca adiciona `:8123` por conta própria). HTTP com Bearer só é aceito em loopback.
 
 Testes manuais prévios confirmaram:
 
@@ -14,17 +14,17 @@ GET /api/states  → lista de entidades
 
 ## Token
 
-Existe um **Long-Lived Access Token dedicado à NYRA**. Ele vive somente em:
+Existe um **Long-Lived Access Token dedicado à KAZUMI**. Ele vive somente em:
 
 ```env
-NYRA_HOME_ASSISTANT_ENABLED=true
-NYRA_HOME_ASSISTANT_URL=https://home-assistant.local
-NYRA_HOME_ASSISTANT_TOKEN=<SECRET>
+KAZUMI_HOME_ASSISTANT_ENABLED=true
+KAZUMI_HOME_ASSISTANT_URL=https://home-assistant.local
+KAZUMI_HOME_ASSISTANT_TOKEN=<SECRET>
 ```
 
 O token NUNCA aparece em código, registry, logs, histórico, contexto do LLM ou respostas da API (`public_dict` mascara como `***configured***`). Vai exclusivamente no header `Authorization: Bearer …`.
 
-Criar/renovar o token no HA: Profile → Security → *Long-Lived Access Tokens* → nome sugerido `nyra`.
+Criar/renovar o token no HA: Profile → Security → *Long-Lived Access Tokens* → nome sugerido `kazumi`.
 
 ## Endpoints suportados
 
@@ -45,7 +45,7 @@ POST /api/services/<domain>/<service>
 | `ha_get_state` | READ_ONLY | estado e atributos limitados de uma entidade |
 | `ha_call_service` | LOW_RISK/ELEVATED | service call estruturado com target/service_data |
 
-Mutações ficam desabilitadas por padrão. Após `NYRA_HOMELAB_MUTATIONS_ENABLED=true`, toda chamada de serviço exige approval de uso único; pares fora da allowlist também sobem para risco ELEVATED.
+Mutações ficam desabilitadas por padrão. Após `KAZUMI_HOMELAB_MUTATIONS_ENABLED=true`, toda chamada de serviço exige approval de uso único; pares fora da allowlist também sobem para risco ELEVATED.
 
 URL arbitrária não existe na superfície: a tool só aceita `domain`, `service`, `target` (entity_id/device_id/area_id) e `service_data`.
 
@@ -63,7 +63,7 @@ O resultado da tool traz `effect_verified` e `verification_status`; quando o efe
 
 ## Sem dispositivos IoT
 
-A integração funciona mesmo sem lâmpadas/sensores — status, entidades e contagem são observação válida. Para validar o ciclo de ação com segurança, crie manualmente no HA um helper `input_boolean.nyra_test` e use:
+A integração funciona mesmo sem lâmpadas/sensores — status, entidades e contagem são observação válida. Para validar o ciclo de ação com segurança, crie manualmente no HA um helper `input_boolean.kazumi_test` e use:
 
 ```text
 ha_call_service input_boolean.turn_on  → state=on  (verified)
@@ -83,11 +83,11 @@ WebSocket API e eventos realtime ficam preparados para uma fase futura (V2).
 
 ## V11 — Resolução única de credencial + guardas de regressão (prompt11_1)
 
-A regressão de `invalid authentication` em `GET /api/` (UAs `NYRA-Homelab/1.0` e
+A regressão de `invalid authentication` em `GET /api/` (UAs `KAZUMI-Homelab/1.0` e
 `python-httpx/0.28.1`) foi corrigida na fonte. Regras vigentes:
 
 - **Resolução autoritativa única** (`resolve_profile_token`): perfil ativo →
-  env `NYRA_HOME_ASSISTANT_TOKEN` → Credential Broker
+  env `KAZUMI_HOME_ASSISTANT_TOKEN` → Credential Broker
   (`homeassistant_token_<profile>`) → arquivo legado `data/secrets/…`
   (migrado em silêncio para o Broker) → settings legadas (.env via pydantic).
 - **Guarda no client** (`home_assistant.py`): endpoint autenticado
@@ -95,7 +95,7 @@ A regressão de `invalid authentication` em `GET /api/` (UAs `NYRA-Homelab/1.0` 
   `HA_AUTH_MISSING` ANTES de qualquer pacote sair — nenhum 401 é gerado.
 - **Guarda no monitor** (`homelab/controller.py`): com token ausente o ciclo
   nem consulta a API (`INTEGRATION_UNAVAILABLE / HA_AUTH_MISSING`).
-- **Test Connection** (`_probe`): UA identificado da NYRA, exige Bearer,
+- **Test Connection** (`_probe`): UA identificado da KAZUMI, exige Bearer,
   estados `READY | AUTH_FAILED | UNCONFIGURED | OFFLINE | HA_TIMEOUT |
   HA_TLS_ERROR`; nunca `READY` sem auth validada (invariante testada).
 - Estados do card único para Homelab + Integrations via

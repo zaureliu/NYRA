@@ -1,4 +1,4 @@
-# NYRA Operations UI V3 — Feature Control, Sentinel, Voice Bridge e Release
+# KAZUMI Operations UI V3 — Feature Control, Sentinel, Voice Bridge e Release
 
 Implementação do `prompt11_operations_ui_v3_voice_sentinel_release_candidate.md`.
 Esta é a **última grande fase funcional** antes de: freeze → documentação PDF → installer.
@@ -9,7 +9,7 @@ Esta é a **última grande fase funcional** antes de: freeze → documentação 
 
 ```text
 ┌─────────────────────────────────────────────┐
-│ TopStatusBar  NYRA · Ollama · Voz · Backend │
+│ TopStatusBar  KAZUMI · Ollama · Voz · Backend │
 │               Watchdog · Tarefa             │
 ├──────────────┬──────────────────────────────┤
 │ Sidebar      │ Página (ops-content)         │
@@ -78,7 +78,7 @@ validation`.
   Seeds: `ha-vm` (ativo default) e `ha-physical` (**desabilitado**, sem URL —
   nunca é contatado: teste retorna 409 `HA_PROFILE_DISABLED`).
 * Tokens por perfil em `data/secrets/home-assistant-token-<id>.txt`
-  (env `NYRA_HOME_ASSISTANT_TOKEN` tem precedência). Nunca expostos.
+  (env `KAZUMI_HOME_ASSISTANT_TOKEN` tem precedência). Nunca expostos.
 * Ativação altera RUNTIME (`HomeAssistantClient.set_credentials`) sem reescrever
   adapter — pronto para hardware físico futuro.
 * Teste devolve `api/core_version/state/entity_count/latency_ms`.

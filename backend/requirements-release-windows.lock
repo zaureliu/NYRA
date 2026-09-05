@@ -1,4 +1,4 @@
-# Validated Windows / CPython 3.11 dependency resolution for NYRA 0.5.0.
+# Windows / CPython 3.11 dependency resolution retained for Kazumi 0.6.0.
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.3
 aiosignal==1.4.0

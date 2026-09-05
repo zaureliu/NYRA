@@ -78,7 +78,7 @@ navigation/download label. It does not manufacture a version or elevate stale da
 Request-local diagnostics retain query, provider attempts, HTTP status,
 DNS/TLS stages, byte counts, ranking exclusions, extraction errors, selected
 URLs, refinement and completion. They are available in the existing Hardware
-status research snapshot and structured `nyra.web_research` log. Headers,
+status research snapshot and structured `kazumi.web_research` log. Headers,
 cookies, bodies and underlying exception messages are excluded. Queries pass
 the existing privacy filter; URL query strings are removed from fetch logs.
 
@@ -111,7 +111,7 @@ then uses real Bing and official documentation; this is not simulated Internet.
 - PyInstaller and the official Tauri release build passed. Source fingerprints
   matched both final build markers; the packaged and bundled backend executables
   had identical SHA-256 hashes. No packaging/CA configuration change was needed.
-- Text submitted through the actual NYRA.lnk WebView returned PlatformIO 6.1.19
+- Text submitted through the actual KAZUMI.lnk WebView returned PlatformIO 6.1.19
   from `https://pypi.org/pypi/platformio/json`, followed by the specific `pio run`
   command documentation in the same conversation. The final release's Python
   question returned the retrieved Python 3.14.7 line from

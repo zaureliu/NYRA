@@ -7,8 +7,8 @@ import {
 } from './RuntimeServicesPanel'
 
 const service = (overrides: Partial<RuntimeService> = {}): RuntimeService => ({
-  id: 'nyra_backend',
-  display_name: 'NYRA Backend',
+  id: 'kazumi_backend',
+  display_name: 'KAZUMI Backend',
   state: 'READY',
   ownership: 'OWNED',
   type: 'PROCESS',
@@ -45,7 +45,7 @@ describe('runtime services panel logic', () => {
     expect(capabilityAllows(backend, 'restart')).toBe(false)
     expect(capabilityAllows(backend, 'logs')).toBe(true)
     const testService = service({
-      id: 'nyra_test_service',
+      id: 'kazumi_test_service',
       capabilities: { status: true, health: true, start: true, stop: true, restart: true, logs: true },
     })
     expect(capabilityAllows(testService, 'restart')).toBe(true)

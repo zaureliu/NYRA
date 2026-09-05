@@ -283,7 +283,7 @@ def candidate_from_event(event: Event, linked_loop: Any = None) -> ProactiveCand
                           ProactivePriority.NORMAL, .68, .4)
 
     if event_type in {EventType.RUNTIME_FAILED, EventType.RUNTIME_CRASH_LOOP, EventType.RUNTIME_RECOVERED}:
-        entity = _label(payload, "service_id", "service", default="um serviço da NYRA")
+        entity = _label(payload, "service_id", "service", default="um serviço da KAZUMI")
         incident = f"runtime:{entity.casefold()}"
         if event_type == EventType.RUNTIME_CRASH_LOOP:
             return _candidate(event, source, entity, "runtime_failure",

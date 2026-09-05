@@ -1,12 +1,12 @@
 [package]
-name = "nyra-desktop"
-version = "0.5.0"
-description = "NYRA Desktop Presence"
-authors = ["NYRA Project"]
+name = "kazumi-desktop"
+version = "0.6.0"
+description = "KAZUMI Desktop Presence"
+authors = ["KAZUMI Project"]
 edition = "2021"
 
 [lib]
-name = "nyra_desktop_lib"
+name = "kazumi_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

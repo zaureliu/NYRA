@@ -19,7 +19,7 @@ import threading
 import time
 from typing import Any
 
-logger = logging.getLogger("nyra.desktop.uia")
+logger = logging.getLogger("kazumi.desktop.uia")
 
 # UI Automation runs on background workers and does not require an STA message
 # pump. Ask comtypes to use MTA if this module is the first COM consumer.

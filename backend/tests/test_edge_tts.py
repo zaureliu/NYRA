@@ -4,7 +4,7 @@ import pytest
 
 from app.speech.profile import VoiceSynthesisOptions
 from app.speech.tts import EdgeTTSProvider
-from app.speech.tts_identity import NYRA_VOICE_ID
+from app.speech.tts_identity import KAZUMI_VOICE_ID
 
 
 def test_edge_options_accept_safe_ranges():
@@ -44,7 +44,7 @@ async def test_edge_synthesis_never_substitutes_approved_ava(monkeypatch, tmp_pa
 
     import edge_tts
     monkeypatch.setattr(edge_tts, "Communicate", FakeCommunicate)
-    provider = EdgeTTSProvider(voice=NYRA_VOICE_ID)
+    provider = EdgeTTSProvider(voice=KAZUMI_VOICE_ID)
     provider.output_dir = tmp_path
     monkeypatch.setattr(
         provider,
@@ -52,7 +52,7 @@ async def test_edge_synthesis_never_substitutes_approved_ava(monkeypatch, tmp_pa
         lambda _source, destination: destination.write_bytes(b"RIFF" + b"x" * 200),
     )
     output = await provider.synthesize(
-        "Oi. Eu sou a Nyra.",
+        "Oi. Eu sou a Kazumi.",
         options=VoiceSynthesisOptions(provider="edge_tts", voice="pt-BR-OtherNeural"),
     )
     assert output.is_file()

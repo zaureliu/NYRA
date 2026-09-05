@@ -1,7 +1,7 @@
 """Isolated, allowlisted OmniVoice BR-PT voice-design worker.
 
 This worker never accepts a reference recording. It creates a synthetic voice from
-text attributes, so no third-party biometric identity enters the NYRA pipeline.
+text attributes, so no third-party biometric identity enters the KAZUMI pipeline.
 """
 from __future__ import annotations
 

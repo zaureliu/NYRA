@@ -1,6 +1,6 @@
-"""Camada 5 — EffectVerificationService (nyra-7c §40-§49).
+"""Camada 5 — EffectVerificationService (kazumi-7c §40-§49).
 
-A NYRA só considera operação concluída quando o efeito esperado é COMPROVADO
+A KAZUMI só considera operação concluída quando o efeito esperado é COMPROVADO
 por fonte determinística (Win32/UIA/filesystem/processo/browser/homelab).
 `verified=None` significa "não consegui provar" → resposta honesta (§49).
 

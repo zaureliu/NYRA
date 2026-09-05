@@ -1,4 +1,4 @@
-"""Fase B — paridade do backend CONGELADO (nyra-backend.exe empacotado).
+"""Fase B — paridade do backend CONGELADO (kazumi-backend.exe empacotado).
 
 O desktop real spawnou o backend congelado da própria resource
 (backend-runtime). Esta bateria valida o operador universal NELE.

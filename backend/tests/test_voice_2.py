@@ -33,10 +33,10 @@ def test_response_style_removes_attendant_closer_variants():
 
 
 def test_pronunciation_dictionary_changes_only_speech():
-    source = "NYRA verificou DNS, Proxmox e OpenWrt."
+    source = "KAZUMI verificou DNS, Proxmox e OpenWrt."
     prepared = ProsodyProcessor(PronunciationDictionary()).prepare(source)
     assert prepared.display_text == source
-    assert "Naira" in prepared.speech_text
+    assert "Kazumi" in prepared.speech_text and "Naira" not in prepared.speech_text
     assert "dê ene ésse" in prepared.speech_text
 
 
@@ -52,7 +52,7 @@ def test_emotional_state_changes_voice_subtly():
 
 def test_official_voice_profile_contains_only_supported_parameters():
     raw, options = load_voice_profile()
-    assert raw["profile_id"] == "NYRA_VOICE_AVA_V1"
+    assert raw["profile_id"] == "KAZUMI_VOICE_AVA_V1"
     assert options.provider == "edge_tts"
     assert options.voice == "en-US-AvaMultilingualNeural"
     assert "expressiveness" not in raw
@@ -60,11 +60,11 @@ def test_official_voice_profile_contains_only_supported_parameters():
 
 
 def test_prosody_preserves_questions_and_all_technical_pronunciations():
-    source = "NYRA usa Utamo, Proxmox, OpenWrt, Ollama, Qwen, Linux, Docker, Nginx, Cloudflare, VLAN, DNS, DHCP, SSH, HTTP, HTTPS, API, CPU, GPU, RAM, Wi-Fi, IPv4 e IPv6?"
+    source = "KAZUMI usa Utamo, Proxmox, OpenWrt, Ollama, Qwen, Linux, Docker, Nginx, Cloudflare, VLAN, DNS, DHCP, SSH, HTTP, HTTPS, API, CPU, GPU, RAM, Wi-Fi, IPv4 e IPv6?"
     prepared = ProsodyProcessor().prepare(source)
     assert prepared.display_text == source
     assert prepared.speech_text.endswith("?")
-    assert "Naira" in prepared.speech_text
+    assert "Kazumi" in prepared.speech_text and "Naira" not in prepared.speech_text
     assert "IP versão seis" in prepared.speech_text
 
 

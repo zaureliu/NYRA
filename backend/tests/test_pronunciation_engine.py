@@ -18,7 +18,7 @@ def test_technical_units_bits_bytes_and_ip():
 
 
 def test_urls_are_summarized_and_literal_mode_preserves_them():
-    normal = PronunciationEngine().prepare_for_speech("Veja https://github.com/openai/nyra")
-    literal = PronunciationEngine().prepare_for_speech("Veja https://github.com/openai/nyra", literal_required=True)
+    normal = PronunciationEngine().prepare_for_speech("Veja https://github.com/openai/kazumi")
+    literal = PronunciationEngine().prepare_for_speech("Veja https://github.com/openai/kazumi", literal_required=True)
     assert "endereço disponível na tela" in normal.speech_text
-    assert "https://github.com/openai/nyra" in literal.speech_text
+    assert "https://github.com/openai/kazumi" in literal.speech_text

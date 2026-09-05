@@ -32,7 +32,7 @@ class FlashEngine:
             chip = chip_from_probe(probe)
             if chip != meta['board']['chip']:
                 raise HardwareError('BOARD_MCU_MISMATCH')
-            backup = root / '.nyra-history' / ('backup-' + meta['project_id'][-8:] + '.bin')
+            backup = root / '.kazumi-history' / ('backup-' + meta['project_id'][-8:] + '.bin')
             if backup.exists():
                 raise HardwareError('BACKUP_ALREADY_EXISTS_REVIEW_REQUIRED')
             saved = await self.executor.run('backup', port=port, workspace=root, output=backup)

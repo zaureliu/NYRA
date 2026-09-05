@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-SPEC = REPO / "packaging/nyra-backend.spec"
+SPEC = REPO / "packaging/kazumi-backend.spec"
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def spec(monkeypatch, tmp_path):
     models.mkdir(parents=True)
     for name in ("kokoro-v1.0.int8.onnx", "voices-v1.0.bin"):
         (models / name).touch()
-    monkeypatch.setenv("NYRA_DATA_HOME", str(tmp_path))
+    monkeypatch.setenv("KAZUMI_DATA_HOME", str(tmp_path))
     captured = {}
 
     def analysis(*args, **kwargs):

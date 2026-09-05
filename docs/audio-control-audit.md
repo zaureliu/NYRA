@@ -20,7 +20,7 @@ Problemas concretos encontrados:
 - microfone e speaker eram persistidos no frontend, enquanto o backend mantinha outros defaults;
 - `Settings.from_sources` mascarava valores de `.env` presentes também no YAML;
 - barge-in existia em dois modelos de configuração;
-- a UI suspendia a captura enquanto a NYRA falava, tornando interrupção natural impossível;
+- a UI suspendia a captura enquanto a KAZUMI falava, tornando interrupção natural impossível;
 - a factory consultava Chatterbox antes de respeitar uma seleção explícita de Kokoro;
 - Voice Lab, Voice Hunter e Voice Processor competiam visualmente com as escolhas normais;
 - o launcher e o backend executavam warm-ups diferentes;

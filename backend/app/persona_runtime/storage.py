@@ -8,14 +8,14 @@ from pathlib import Path
 
 import aiosqlite
 
-from app.persona_runtime.models import EmotionalState, NyraIdentity, RelationshipState
+from app.persona_runtime.models import EmotionalState, KazumiIdentity, RelationshipState
 
 
 class PersonaRuntimeStore:
     def __init__(self, database_path: Path) -> None:
         self.database_path = Path(database_path)
 
-    async def initialize(self, identity: NyraIdentity) -> None:
+    async def initialize(self, identity: KazumiIdentity) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.database_path) as db:
             await db.execute("PRAGMA journal_mode=WAL")
@@ -57,14 +57,14 @@ class PersonaRuntimeStore:
             )
             await db.commit()
 
-    async def load_identity(self) -> NyraIdentity | None:
+    async def load_identity(self) -> KazumiIdentity | None:
         value = await self._document("nyra_identity_v1")
         try:
-            return NyraIdentity.model_validate_json(value) if value else None
+            return KazumiIdentity.model_validate_json(value) if value else None
         except ValueError:
             return None
 
-    async def save_identity(self, identity: NyraIdentity) -> None:
+    async def save_identity(self, identity: KazumiIdentity) -> None:
         async with aiosqlite.connect(self.database_path) as db:
             await db.execute(
                 "UPDATE nyra_identity_v1 SET identity_version=?,document=?,updated_at=datetime('now') WHERE singleton=1",

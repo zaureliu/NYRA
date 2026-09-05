@@ -1,12 +1,12 @@
-# NYRA — Validação Final Release Candidate V1
+# KAZUMI — Validação Final Release Candidate V1
 
-Consolidado da execução `NYRA_FINAL_RELEASE_CANDIDATE_CLOSURE_V1` — último
+Consolidado da execução `KAZUMI_FINAL_RELEASE_CANDIDATE_CLOSURE_V1` — último
 ciclo de desenvolvimento antes do freeze funcional.
 
 ## 1. Baseline
 
 ```text
-branch:      feature/nyra-avatar-v2
+branch:      feature/kazumi-avatar-v2
 HEAD:        6114452 (feat: add Voice 2.0 and desktop presence)
 versão:      0.2.0 (unificada backend/frontend/Tauri/pyproject)
 modelo:      qwen3:8b (oficial, sem promoções)
@@ -38,9 +38,9 @@ Adições cirúrgicas desta closure:
 | `backend/app/core/release_info.py` | Freshness/STALE por artefato + git_head + revalidation |
 | `scripts/release_gate.py` | Publica progresso N/M (`release-gate-progress.json`) + git_head no relatório |
 | `frontend/src/components/ConversationPanel.tsx` | Agrupador de tools por Agent Run + modo técnico persistido |
-| `frontend/src/ops/pages/SettingsPageV3.tsx` | Botões Encerrar/Reiniciar NYRA com confirmação |
+| `frontend/src/ops/pages/SettingsPageV3.tsx` | Botões Encerrar/Reiniciar KAZUMI com confirmação |
 | `frontend/src/ops/pages/AboutPage.tsx` | STALE/timestamp/Revalidar sem congelar UI |
-| `watchdog/nyra_watchdog.py` | Canal one-shot `shutdown` (disarm antes do backend sair); requests avaliados ANTES das decisões de health |
+| `watchdog/kazumi_watchdog.py` | Canal one-shot `shutdown` (disarm antes do backend sair); requests avaliados ANTES das decisões de health |
 | `backend/tests/conftest.py` | Suíte hermética contra estado persistido do operador |
 
 ## 3. Bugs reais corrigidos
@@ -77,7 +77,7 @@ backend full ....... 515 passed / 0 failed (253s)
 frontend vitest .... 86 passed / 22 arquivos
 tsc -b + vite ...... OK (dist regenerado)
 cargo check/test ... OK
-Tauri release ...... OK (nyra-desktop.exe reconstruído)
+Tauri release ...... OK (kazumi-desktop.exe reconstruído)
 daily-use .......... 15 PASS · 0 FAIL · 1 DEGRADED (notepad aba) · 2 SKIPPED
 stress ............. PASS — 100 turnos 0 falhas, correlação 1.0, RAM Δ negativa
 long-run ........... ver seção 7

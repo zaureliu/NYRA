@@ -67,7 +67,7 @@ class FakeListening:
 class FakeChat:
     def __init__(self, pipeline_status: str = "COMPLETE", audio_urls: list[str] | None = None) -> None:
         self.pipeline_status = pipeline_status
-        self.audio_urls = ["/api/audio/nyra-test.wav"] if audio_urls is None else audio_urls
+        self.audio_urls = ["/api/audio/kazumi-test.wav"] if audio_urls is None else audio_urls
         self.audio_url = None
 
     def model_dump(self, mode: str = "json") -> dict:
@@ -137,10 +137,10 @@ async def test_conversation_states_empty_stt_and_direct_turn_do_not_guess(tmp_pa
     assert engine.state == ConversationState.LISTENING
     assert EventType.STT_STARTED in events and EventType.STT_COMPLETED in events
 
-    stt.text = "Nyra, bom dia"
+    stt.text = "Kazumi, bom dia"
     accepted = await engine.direct_audio_turn(tmp_path / "speech.wav")
     assert accepted["accepted"] is True
-    assert orchestrator.calls[0][0] == "Nyra, bom dia"
+    assert orchestrator.calls[0][0] == "Kazumi, bom dia"
     assert orchestrator.calls[0][1]["response_id"].startswith("turn_")
     assert orchestrator.calls[0][1]["turn"].approval_capable is False
     await engine.stop()
@@ -149,7 +149,7 @@ async def test_conversation_states_empty_stt_and_direct_turn_do_not_guess(tmp_pa
 @pytest.mark.asyncio
 async def test_always_listening_reports_each_voice_stage_without_hiding_text(tmp_path: Path):
     engine = ConversationEngine(
-        conversation_settings(), EventBus(), FakeSTT("Nyra, fala oi"),
+        conversation_settings(), EventBus(), FakeSTT("Kazumi, fala oi"),
         FakeListening(), FakeOrchestrator(), RealtimeTelemetry(),
     )
     result = await engine.listening_audio_turn(tmp_path / "speech.wav", "client_12345678")
@@ -173,7 +173,7 @@ async def test_always_listening_keeps_text_valid_when_tts_is_degraded(tmp_path: 
 
     orchestrator.converse = degraded  # type: ignore[method-assign]
     engine = ConversationEngine(
-        conversation_settings(), EventBus(), FakeSTT("Nyra, responda"),
+        conversation_settings(), EventBus(), FakeSTT("Kazumi, responda"),
         FakeListening(), orchestrator, RealtimeTelemetry(),
     )
     result = await engine.listening_audio_turn(tmp_path / "speech.wav", "client_12345678")
@@ -396,7 +396,7 @@ def test_stt_instance_is_reusable_and_low_latency_defaults_are_real():
 
 def test_tool_schemas_are_contextual_for_casual_and_operational_turns():
     tools = ToolRegistry()
-    assert tools.should_route_to_agent("Nyra, bom dia") is False
+    assert tools.should_route_to_agent("Kazumi, bom dia") is False
     assert tools.should_route_to_agent("me explica o que é DNS") is False
     assert tools.should_route_to_agent("qual processo está usando a porta 5173?") is True
     assert tools.should_route_to_agent("verifica o status do Git") is True

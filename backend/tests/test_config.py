@@ -31,7 +31,7 @@ def test_secrets_are_masked():
 
 
 def test_hands_on_is_the_fresh_install_default(tmp_path):
-    settings = Settings(database_path=tmp_path / "nyra.db")
+    settings = Settings(database_path=tmp_path / "kazumi.db")
     assert settings.always_listening_enabled is True
     assert settings.listening_mode == "hands_free"
 

@@ -79,12 +79,12 @@ ENTRIES: tuple[SettingSpec, ...] = (
     SettingSpec("vad_enabled", "voice", "bool", True, "VAD Silero local no STT."),
     SettingSpec("vad_threshold", "voice", "float", 0.5, "Limiar do VAD.", minimum=0.0, maximum=1.0),
     SettingSpec("voice_barge_in", "voice", "bool", True,
-                "Permitir interrupção da NYRA pela voz do operador."),
+                "Permitir interrupção da KAZUMI pela voz do operador."),
     SettingSpec("voice_stream_tts", "voice", "bool", True, "Streaming de TTS por sentenças."),
     SettingSpec("listening_mode", "voice", "enum", "hands_free",
                 "Modo de conversação por voz.",
                 options=("push_to_talk", "wake_word", "hands_free")),
-    SettingSpec("wake_word", "voice", "str", "Nyra", "Palavra de desperta."),
+    SettingSpec("wake_word", "voice", "str", "Kazumi", "Palavra de desperta."),
     SettingSpec("hands_free_timeout_seconds", "voice", "int", 120,
                 "Timeout da sessão hands-free (segundos).", minimum=15, maximum=3600),
     SettingSpec("always_listening_enabled", "voice", "bool", True,
@@ -180,7 +180,7 @@ ENTRIES: tuple[SettingSpec, ...] = (
                 options=("OFF", "OBSERVE_ONLY", "AUTONOMOUS_SAFE", "AUTONOMOUS_ADVANCED")),
     SettingSpec("selfdev_model", "selfdev", "str", "qwen3:8b",
                 "Modelo local instalado no Ollama usado somente pelo SelfDev."),
-    SettingSpec("selfdev_workspace", "selfdev", "str", "../Nyra-Auto-Code",
+    SettingSpec("selfdev_workspace", "selfdev", "str", "../Kazumi-Auto-Code",
                 "Workspace isolado de candidates e worktrees.", requires_restart=True),
     SettingSpec("selfdev_run_when_idle", "selfdev", "bool", True,
                 "Executar candidates somente quando o sistema estiver ocioso."),
@@ -341,7 +341,7 @@ def export_config(settings: Any, about: dict[str, Any]) -> dict[str, Any]:
                         "type": e.type, "value": value})
     return {
         "exported_at": about.get("generated_at"),
-        "nyra_version": about.get("version"),
+        "kazumi_version": about.get("version"),
         "settings": entries,
         "note": "Segredos aparecem apenas como {\"configured\": true|false}.",
     }

@@ -47,7 +47,7 @@ def _registry() -> ToolRegistry:
     ("text", "domain"),
     [
         ("abre o bloco de notas", DOMAIN_DESKTOP),
-        ("Nyra, abre a calculadora.", DOMAIN_DESKTOP),
+        ("Kazumi, abre a calculadora.", DOMAIN_DESKTOP),
         ("fecha o vs code", DOMAIN_DESKTOP),
         ("verifica o Proxmox", DOMAIN_HOMELAB_PROXMOX),
         ("quais VMs estão rodando?", DOMAIN_HOMELAB_PROXMOX),

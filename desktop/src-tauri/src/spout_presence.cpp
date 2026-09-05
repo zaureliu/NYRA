@@ -1,4 +1,4 @@
-// NYRA VTube Studio Presence receiver.
+// KAZUMI VTube Studio Presence receiver.
 //
 // Spout interoperability is implemented from the public wire contract in the
 // official leadedge/Spout2 SDK, pinned for this implementation to 2.007.017
@@ -32,7 +32,7 @@ using Clock = std::chrono::steady_clock;
 
 namespace {
 
-constexpr wchar_t kOverlayClass[] = L"NYRA.SpoutPresence.Overlay";
+constexpr wchar_t kOverlayClass[] = L"KAZUMI.SpoutPresence.Overlay";
 constexpr uint32_t kSenderNameBytes = 256;
 constexpr uint32_t kSenderInfoBytes = 280;
 
@@ -84,7 +84,7 @@ struct Runtime {
     std::mutex config_mutex;
     Config config;
     std::mutex status_mutex;
-    NyraSpoutStatus status{};
+    KazumiSpoutStatus status{};
 };
 
 Runtime g_runtime;
@@ -210,7 +210,7 @@ HWND create_overlay(HWND owner) {
     return CreateWindowExW(
         WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_NOREDIRECTIONBITMAP,
         kOverlayClass,
-        L"NYRA VTube Studio Presence",
+        L"KAZUMI VTube Studio Presence",
         WS_CHILD,
         0,
         0,
@@ -837,7 +837,7 @@ void worker_loop() {
 
 } // namespace
 
-extern "C" bool nyra_spout_start(void* owner_hwnd) {
+extern "C" bool kazumi_spout_start(void* owner_hwnd) {
     if (g_runtime.running.exchange(true)) return true;
     g_runtime.owner = static_cast<HWND>(owner_hwnd);
     {
@@ -855,12 +855,12 @@ extern "C" bool nyra_spout_start(void* owner_hwnd) {
     }
 }
 
-extern "C" void nyra_spout_stop() {
+extern "C" void kazumi_spout_stop() {
     if (!g_runtime.running.exchange(false)) return;
     if (g_runtime.worker.joinable()) g_runtime.worker.join();
 }
 
-extern "C" void nyra_spout_configure(
+extern "C" void kazumi_spout_configure(
     const char* sender,
     float scale,
     float offset_x,
@@ -874,7 +874,7 @@ extern "C" void nyra_spout_configure(
     g_runtime.config.watchdog_seconds = std::clamp<uint32_t>(watchdog_seconds, 5, 60);
 }
 
-extern "C" void nyra_spout_get_status(NyraSpoutStatus* status) {
+extern "C" void kazumi_spout_get_status(KazumiSpoutStatus* status) {
     if (!status) return;
     std::scoped_lock lock(g_runtime.status_mutex);
     *status = g_runtime.status;

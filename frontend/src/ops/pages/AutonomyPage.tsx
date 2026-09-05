@@ -62,7 +62,7 @@ export function AutonomyPage() {
         <div>
           <h1 className="ops-page-title">Autonomia</h1>
           <p className="ops-page-subtitle">
-            O que a NYRA pode iniciar sozinha, sob quais políticas e com qual verificação.
+            O que a KAZUMI pode iniciar sozinha, sob quais políticas e com qual verificação.
             Nada aqui executa sem passar por grounding e approval quando mutável.
           </p>
         </div>
@@ -71,7 +71,7 @@ export function AutonomyPage() {
       <ErrorAlert message={operator.error} />
 
       <div className="ops-grid-2">
-        <Card title="Proactive Mode" sub="Iniciativas autônomas da NYRA">
+        <Card title="Proactive Mode" sub="Iniciativas autônomas da KAZUMI">
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
             <span style={{
               fontSize: 34,
@@ -83,8 +83,8 @@ export function AutonomyPage() {
             </span>
             <div className="ops-card-sub" style={{ flex: 1 }}>
               {proactiveEnabled
-                ? 'A NYRA pode propor ações por regras registradas (sempre dentro das policies).'
-                : 'A NYRA só age em resposta direta ao operador. Recomendado manter OFF para uso diário.'}
+                ? 'A KAZUMI pode propor ações por regras registradas (sempre dentro das policies).'
+                : 'A KAZUMI só age em resposta direta ao operador. Recomendado manter OFF para uso diário.'}
             </div>
           </div>
         </Card>

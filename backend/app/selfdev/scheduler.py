@@ -27,7 +27,7 @@ class SelfDevScheduler:
 
     def start(self) -> None:
         if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._loop(), name="nyra-selfdev-scheduler")
+            self._task = asyncio.create_task(self._loop(), name="kazumi-selfdev-scheduler")
 
     async def stop(self) -> None:
         if self._task and not self._task.done():

@@ -27,7 +27,7 @@ Por contexto (2048/4096/8192) e repetição (default 3, mínimo recomendado):
 
 Sempre reportar **mediana**; p95 somente com amostra suficiente (≥4).
 
-## Quality benchmark (tarefas reais da NYRA)
+## Quality benchmark (tarefas reais da KAZUMI)
 
 Categorias com verificação determinística: Conversation, Tool Selection,
 Multi-step, Troubleshooting, Recovery, Grounding, Turn Isolation, Homelab,

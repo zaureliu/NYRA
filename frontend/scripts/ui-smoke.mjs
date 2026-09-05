@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 
-const edge = process.env.NYRA_EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+const edge = process.env.KAZUMI_EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 const port = 9337
-const viewportWidth = Number(process.env.NYRA_UI_WIDTH || 1440)
-const viewportHeight = Number(process.env.NYRA_UI_HEIGHT || 900)
-const diagnosticOnly = process.env.NYRA_UI_DIAGNOSTIC === '1'
+const viewportWidth = Number(process.env.KAZUMI_UI_WIDTH || 1440)
+const viewportHeight = Number(process.env.KAZUMI_UI_HEIGHT || 900)
+const diagnosticOnly = process.env.KAZUMI_UI_DIAGNOSTIC === '1'
 const profile = path.resolve(process.cwd(), '..', '.tmp', `edge-ui-smoke-${Date.now()}`)
 const browser = spawn(edge, [
   '--headless=new', '--disable-gpu', '--hide-scrollbars', '--disable-background-timer-throttling',
@@ -81,7 +81,7 @@ try {
   }
   if (!appReady) {
     const diagnostic = await evaluate(`({href: location.href, title: document.title, body: document.body?.innerText?.slice(0, 300) || '', html: document.body?.innerHTML?.slice(0, 300) || ''})`)
-    assert.fail(`NYRA conversation UI did not mount before the smoke timeout: ${JSON.stringify({...diagnostic, runtimeEvents: runtimeEvents.slice(-8)})}`)
+    assert.fail(`KAZUMI conversation UI did not mount before the smoke timeout: ${JSON.stringify({...diagnostic, runtimeEvents: runtimeEvents.slice(-8)})}`)
   }
 
   const composerMetrics = await evaluate(`(() => {
@@ -126,7 +126,7 @@ try {
   await evaluate(`(() => {
     const textarea = document.querySelector('.composer textarea');
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-    setter.call(textarea, 'Nyra, responda apenas: interface validada.');
+    setter.call(textarea, 'Kazumi, responda apenas: interface validada.');
     textarea.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText'}));
     document.querySelector('.send-button').click();
   })()`)

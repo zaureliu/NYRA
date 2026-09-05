@@ -6,7 +6,7 @@ import logging
 import time
 from uuid import uuid4
 
-logger = logging.getLogger("nyra.conversation.session")
+logger = logging.getLogger("kazumi.conversation.session")
 
 
 @dataclass

@@ -42,8 +42,8 @@ class RecipeExecutor:
             'install': [python, '-m', 'pip', '--isolated', 'install', '--disable-pip-version-check',
                         '--index-url', 'https://pypi.org/simple', 'platformio==6.1.18', 'esptool==5.0.2'],
             'toolchain_version': [python, '-m', 'platformio', '--version'],
-            'build': [python, '-m', 'platformio', 'run', '-e', 'nyra'],
-            'flash': [python, '-m', 'platformio', 'run', '-e', 'nyra', '-t', 'nobuild', '-t', 'upload', '--upload-port', port or ''],
+            'build': [python, '-m', 'platformio', 'run', '-e', 'kazumi'],
+            'flash': [python, '-m', 'platformio', 'run', '-e', 'kazumi', '-t', 'nobuild', '-t', 'upload', '--upload-port', port or ''],
             'chip_probe': [python, '-m', 'esptool', '--port', port or '', 'chip-id'],
             'flash_info': [python, '-m', 'esptool', '--port', port or '', 'flash-id'],
             'reset': [python, '-m', 'esptool', '--port', port or '', 'run'],
@@ -55,7 +55,7 @@ class RecipeExecutor:
             commands[recipe] = [host] + (['-3'] if Path(host).stem == 'py' else []) + ['-m', 'venv', str(self.tools_root)]
         if recipe == 'backup':
             file = Path(output).resolve()
-            if file.parent != cwd / '.nyra-history' or file.suffix != '.bin':
+            if file.parent != cwd / '.kazumi-history' or file.suffix != '.bin':
                 raise HardwareError('INVALID_BACKUP_TARGET')
             commands[recipe] = [python, '-m', 'esptool', '--port', port or '', 'read-flash', '0', 'ALL', str(file)]
         if recipe not in commands:

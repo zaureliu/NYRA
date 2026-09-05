@@ -8,7 +8,7 @@ param(
 # chama o launcher oficial, que cria nova runtime_session_id.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'runtime-paths.ps1')
-$runtimePaths = Initialize-NyraRuntimePaths
+$runtimePaths = Initialize-KazumiRuntimePaths
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $portFree = $false
 while ((Get-Date) -lt $deadline) {
@@ -21,4 +21,4 @@ if (-not $portFree) {
         '{0} restart-aborted port={1} reason=PORT_STILL_BUSY' -f (Get-Date -Format o), $Port) -Encoding UTF8
     exit 1
 }
-& (Join-Path $PSScriptRoot 'start-nyra.ps1')
+& (Join-Path $PSScriptRoot 'start-kazumi.ps1')

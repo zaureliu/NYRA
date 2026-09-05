@@ -1,8 +1,8 @@
-"""NYRA backend standalone entrypoint (empacotado com PyInstaller).
+"""KAZUMI backend standalone entrypoint (empacotado com PyInstaller).
 
 Modo dev: ``python -m uvicorn app.main:app`` continua o fluxo oficial.
-Modo instalado: este módulo é o entrypoint do ``nyra-backend.exe`` —
-bootstrap do layout %LOCALAPPDATA%\\NYRA, servidor em 127.0.0.1:8000 e
+Modo instalado: este módulo é o entrypoint do ``kazumi-backend.exe`` —
+bootstrap do layout %LOCALAPPDATA%\\KAZUMI, servidor em 127.0.0.1:8000 e
 código de saída que sinaliza restart intencional ao launcher Tauri:
 
     * exit 0  -> encerramento normal/shutdown (Tauri NÃO relança);
@@ -27,12 +27,12 @@ def main() -> int:
         sys.argv = [sys.argv[0], *sys.argv[2:]]
         return sapi_main()
     if getattr(sys, "frozen", False):
-        os.environ.setdefault("NYRA_FROZEN", "1")
+        os.environ.setdefault("KAZUMI_FROZEN", "1")
         # Watchdog não existe no pacote final: sem Python global/.venv/PowerShell.
-        os.environ.setdefault("NYRA_WATCHDOG_ENABLED", "0")
-    elif os.environ.get("NYRA_FROZEN") == "1":
+        os.environ.setdefault("KAZUMI_WATCHDOG_ENABLED", "0")
+    elif os.environ.get("KAZUMI_FROZEN") == "1":
         # Permite validar o layout instalado rodando pelo venv (smoke de packaging).
-        os.environ.setdefault("NYRA_WATCHDOG_ENABLED", "0")
+        os.environ.setdefault("KAZUMI_WATCHDOG_ENABLED", "0")
 
     from app.core.paths import ensure_runtime_directories
 
@@ -42,7 +42,7 @@ def main() -> int:
 
     from app.main import app  # noqa: PLC0415 - settings dependem dos paths finais
 
-    port = int(os.environ.get("NYRA_BACKEND_PORT", "8000"))
+    port = int(os.environ.get("KAZUMI_BACKEND_PORT", "8000"))
     uvicorn.run(
         app,
         host="127.0.0.1",

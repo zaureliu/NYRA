@@ -1,6 +1,6 @@
 # Proactive Presence Engine V1
 
-O Proactive Presence permite que a NYRA apresente uma mudança relevante sem
+O Proactive Presence permite que a KAZUMI apresente uma mudança relevante sem
 depender de uma nova mensagem do operador. O engine não detecta condições por
 conta própria: consome o Event Bus já alimentado por World State, Open Loops,
 Tasks, MonitorJobs, USB Monitor, Network Watch, Proxmox, OpenWrt/Home Assistant,

@@ -1,4 +1,4 @@
-"""NYRA Runtime Supervisor V1."""
+"""KAZUMI Runtime Supervisor V1."""
 
 from app.runtime.history import RuntimeHistory
 from app.runtime.models import (

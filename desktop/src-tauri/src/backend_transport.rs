@@ -1,6 +1,6 @@
-//! Controlled HTTP transport for the packaged NYRA frontend.
+//! Controlled HTTP transport for the packaged KAZUMI frontend.
 //!
-//! This bridge accepts only NYRA API paths and always connects to the fixed
+//! This bridge accepts only KAZUMI API paths and always connects to the fixed
 //! loopback backend; callers cannot select a host, port or external URL.
 
 use serde::{Deserialize, Serialize};
@@ -237,7 +237,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn accepts_only_local_nyra_paths_and_methods() {
+    fn accepts_only_local_kazumi_paths_and_methods() {
         assert!(validate_path("/api/tasks?limit=10").is_ok());
         assert!(validate_path("/health").is_ok());
         assert!(validate_path("http://example.com/api/tasks").is_err());
@@ -260,9 +260,9 @@ mod tests {
     #[test]
     fn decodes_chunked_response_body() {
         let response = parse_response(
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n4\r\nNYRA\r\n1\r\n!\r\n0\r\n\r\n",
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n6\r\nKAZUMI\r\n1\r\n!\r\n0\r\n\r\n",
         )
         .expect("chunked response");
-        assert_eq!(response.body, b"NYRA!");
+        assert_eq!(response.body, b"KAZUMI!");
     }
 }

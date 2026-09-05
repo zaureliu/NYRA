@@ -6,11 +6,11 @@ Baseline canônico: `896ef8ad63f2cb3f29811e555cffdf1990e0cdc4`, em `<REPO_ROOT>`
 Checkpoint local: `checkpoint/pre-deepgram-stt-20260904-896ef8a`. Nenhum reset,
 worktree de implementação ou push é necessário.
 
-O runtime oficial abre `NYRA.lnk` → `scripts/launch-nyra.vbs` → launcher →
+O runtime oficial abre `KAZUMI.lnk` → `scripts/launch-kazumi.vbs` → launcher →
 Tauri release e seu backend PyInstaller. **Desktop Presence/WebView** captura o
 microfone através de `getUserMedia`, AEC/NS/AGC do navegador e AudioContext mono
 a 48 kHz. Não foi encontrado o diretório informado
-`C:\Users\<USER>\Desktop\Nyra-Voice-Satellite` neste host. `backend/app/voice/`
+`C:\Users\<USER>\Desktop\Kazumi-Voice-Satellite` neste host. `backend/app/voice/`
 também não existe neste baseline. O VoiceProcessorBridge existente é uma sonda
 de health/capabilities no loopback; não é o proprietário desta captura.
 
@@ -140,7 +140,7 @@ Falhas remotas usam cooldown exponencial de 5/10/20/40/60 s, com nova conexão e
 uma próxima frase, sem loop de reconexão. AUTH_ERROR e configuração rejeitada
 aguardam atualização de chave/settings. Trocas de provider/opções e remoção de
 chave fecham o STT remoto, preservam o áudio corrente para fallback, e aplicam a
-nova preferência na próxima frase. O microfone e a NYRA não são reiniciados.
+nova preferência na próxima frase. O microfone e a KAZUMI não são reiniciados.
 
 Startup não conecta à nuvem e não bloqueia offline. READY significa configurado
 e apto a tentar conectar; STREAMING exige socket aberto. NETWORK_ERROR só é
@@ -152,7 +152,7 @@ Shutdown fecha o bridge nativo antes do backend, fecha sockets, cancela receiver
 keepalive/sender, drena filas e apaga os buffers. Uma inferência CTranslate2 nativa
 já iniciada não pode ser interrompida com segurança; seu worker é aguardado pelo
 adaptador, limitado ao sample, e o lifecycle oficial mantém seu prazo de saída.
-X continua hide-to-tray; Tray Exit/quit_nyra usam o mesmo coordenador de full exit.
+X continua hide-to-tray; Tray Exit/quit_kazumi usam o mesmo coordenador de full exit.
 
 ## Diagnóstico e validação
 
@@ -190,7 +190,7 @@ isolado sem modificar a árvore canônica.
   `git diff --check`: PASS.
 - Build canônico `npm run build`: PyInstaller reconstruído e validado;
   Tauri release e instalador NSIS gerados, sem instalar dependências novas.
-- `NYRA.lnk` abriu o Tauri release em `<REPO_ROOT>`, com as telas novas presentes.
+- `KAZUMI.lnk` abriu o Tauri release em `<REPO_ROOT>`, com as telas novas presentes.
   A WebView enumerou o microfone USB e os dispositivos virtuais. Nenhuma amostra
   foi capturada: a validação foi interrompida antes do teste de áudio.
 - O backend empacotado carregou o Faster-Whisper `tiny`, mas o Windows Defender
@@ -201,10 +201,10 @@ isolado sem modificar a árvore canônica.
   builds de 3 e 4 de setembro anteriores a esta mudança. Isso não determina se
   a detecção é ou não um falso positivo; é necessária análise da proteção local.
 - Os caminhos afetados foram `desktop/src-tauri/target/release/backend-runtime/
-  nyra-backend.exe` e `packaging/dist/nyra-backend/nyra-backend.exe`. O instalador
+  kazumi-backend.exe` e `packaging/dist/kazumi-backend/kazumi-backend.exe`. O instalador
   gerado não representa uma validação de execução bem-sucedida. Não foram
   alteradas configurações do Defender, exclusões ou itens em quarentena.
-- `quit_nyra` encerrou o desktop de validação; backend=0, desktop=0, porta
+- `quit_kazumi` encerrou o desktop de validação; backend=0, desktop=0, porta
   8000 livre. Isso **não comprova shutdown/restart de uma sessão STT saudável**,
   porque o backend já havia sido interrompido pela proteção.
 - Credential Broker do usuário real: **NOT_CONFIGURED**. Autenticação Deepgram,

@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 BLOCKED_PARTS = {'.tmp', 'tmp', 'temp', 'data', 'logs', 'recordings', 'node_modules',
                  'target', 'dist', 'build', '.venv', 'venv', '__pycache__', 'worktrees',
-                 'backups', 'NYRA-Knowledge', 'NYRA-Projects', 'screenshots'}
+                 'backups', 'KAZUMI-Knowledge', 'KAZUMI-Projects', 'screenshots'}
 BLOCKED_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.log', '.wav', '.mp3', '.ogg',
                     '.pcm', '.raw', '.flac', '.pdf', '.exe', '.dll', '.msi', '.pyc',
                     '.pyo', '.pem', '.key', '.pfx', '.p12', '.moc3', '.bin', '.onnx'}
@@ -25,7 +25,7 @@ RULES = {
 # must never suppress a different credential on the same line.
 FIXTURES = re.compile(r'(?<![\w-])(?:abcdefghijklmnopqrstuvwxyz|NYRA_SECRET_LEAK_TEST_a7f3d9c2b1|NYRA_SECRET_LEAK_TEST|legacy-functional-token|'
     r'tok-abcdef-123456|monitor-tok-9876|ha-live-token-9f2c|supersecrettokenvalue1234|'
-    r'token-super-secreto-da-api-9876|s3cret-NYRA-openwrt-PW|fixture-credential-never-log-this|fixture-secret|'
+    r'token-super-secreto-da-api-9876|s3cret-KAZUMI-openwrt-PW|fixture-credential-never-log-this|fixture-secret|'
     r'secret-token-value|private-token)(?![\w-])')
 PERSONAL_PATH = re.compile(r'(?i)\b[A-Z]:[\\/]+Users[\\/]+(?![<%{])([^\\/\s]+)')
 

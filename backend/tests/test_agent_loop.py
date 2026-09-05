@@ -343,7 +343,7 @@ async def test_textual_tool_call_is_never_executed_and_model_must_retry_native(t
 
 
 @pytest.mark.asyncio
-async def test_local_nyra_backend_goal_rejects_homelab_target_and_requires_two_observations(tmp_path: Path):
+async def test_local_kazumi_backend_goal_rejects_homelab_target_and_requires_two_observations(tmp_path: Path):
     executed: list[str] = []
 
     async def local(command: str, approval_id: str | None = None):
@@ -364,7 +364,7 @@ async def test_local_nyra_backend_goal_rejects_homelab_target_and_requires_two_o
     ])
     controller = AgentController(settings(tmp_path), EventBus(), llm, tools)
     await controller.initialize()
-    response = await controller.run(messages(), "verifica por que o backend da NYRA caiu")
+    response = await controller.run(messages(), "verifica por que o backend da KAZUMI caiu")
     assert executed == ["Test-NetConnection 127.0.0.1 -Port 8000", "Get-Process python"]
     assert "porta e processo" in response
 

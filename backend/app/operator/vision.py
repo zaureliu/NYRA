@@ -53,7 +53,7 @@ class VisionEngine:
         import concurrent.futures
 
         self._pool = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="nyra-vision-com",
+            max_workers=1, thread_name_prefix="kazumi-vision-com",
         )
         self._shutdown = False
 

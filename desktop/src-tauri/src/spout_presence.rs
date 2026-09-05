@@ -132,16 +132,16 @@ mod native {
     }
 
     extern "C" {
-        fn nyra_spout_start(owner_hwnd: *mut c_void) -> bool;
-        fn nyra_spout_stop();
-        fn nyra_spout_configure(
+        fn kazumi_spout_start(owner_hwnd: *mut c_void) -> bool;
+        fn kazumi_spout_stop();
+        fn kazumi_spout_configure(
             sender: *const c_char,
             scale: f32,
             offset_x: f32,
             offset_y: f32,
             watchdog_seconds: u32,
         );
-        fn nyra_spout_get_status(status: *mut NativeStatus);
+        fn kazumi_spout_get_status(status: *mut NativeStatus);
     }
 
     pub struct SpoutPresence {
@@ -160,7 +160,7 @@ mod native {
                 return Ok(());
             }
             let hwnd = window.hwnd().map_err(|error| error.to_string())?;
-            if !unsafe { nyra_spout_start(hwnd.0 as *mut c_void) } {
+            if !unsafe { kazumi_spout_start(hwnd.0 as *mut c_void) } {
                 return Err("SPOUT_RECEIVER_START_FAILED".to_string());
             }
             self.started.store(true, Ordering::SeqCst);
@@ -174,7 +174,7 @@ mod native {
             let sender = CString::new(config.sender.trim())
                 .map_err(|_| "INVALID_SPOUT_SENDER".to_string())?;
             unsafe {
-                nyra_spout_configure(
+                kazumi_spout_configure(
                     sender.as_ptr(),
                     config.scale,
                     config.offset_x,
@@ -187,7 +187,7 @@ mod native {
 
         pub fn status(&self) -> SpoutPresenceStatus {
             let mut native = NativeStatus::default();
-            unsafe { nyra_spout_get_status(&mut native) };
+            unsafe { kazumi_spout_get_status(&mut native) };
             let state = state_name(native.state);
             SpoutPresenceStatus {
                 state,
@@ -212,7 +212,7 @@ mod native {
 
         pub fn stop(&self) {
             if self.started.swap(false, Ordering::SeqCst) {
-                unsafe { nyra_spout_stop() };
+                unsafe { kazumi_spout_stop() };
             }
         }
     }

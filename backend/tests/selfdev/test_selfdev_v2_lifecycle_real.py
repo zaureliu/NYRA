@@ -54,7 +54,7 @@ async def test_low_risk_real_git_promotion_failed_health_and_rollback(tmp_path: 
         directory.mkdir()
 
     _git(canonical, "init", "-b", "main")
-    _git(canonical, "config", "user.name", "NYRA SelfDev Test")
+    _git(canonical, "config", "user.name", "KAZUMI SelfDev Test")
     _git(canonical, "config", "user.email", "selfdev-test@invalid.local")
     target = canonical / "bounded.txt"
     target.write_text("stable\n", encoding="utf-8")

@@ -46,7 +46,7 @@ export function AppNavigation({ active, collapsed, mobileOpen, onNavigate, onCol
     <aside className={`app-sidebar ${collapsed ? 'is-collapsed' : ''} ${mobileOpen ? 'is-mobile-open' : ''}`}>
       <div className="sidebar-brand">
         <span className="brand-orbit" aria-hidden="true"><i/></span>
-        <span className="brand-copy"><strong>NYRA</strong><small>NEURAL OPERATIONS</small></span>
+        <span className="brand-copy"><strong>KAZUMI</strong><small>NEURAL OPERATIONS</small></span>
         <button className="sidebar-collapse" onClick={() => onCollapsed(!collapsed)} aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'} title={collapsed ? 'Expandir menu' : 'Recolher menu'}>{collapsed ? '›' : '‹'}</button>
       </div>
 

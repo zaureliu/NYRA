@@ -3,7 +3,7 @@ capabilities with ACT→VERIFY semantics and honest error codes.
 
 Mutations that Windows gates behind admin rights are routed through the
 legitimate Elevated Broker (UAC consent) after a single-use approval record;
-no bypass, no credential handling (prompt8 §137-§146). NYRA's own components
+no bypass, no credential handling (prompt8 §137-§146). KAZUMI's own components
 are protected from indiscriminate stops (§281-§285).
 """
 
@@ -25,11 +25,11 @@ from app.events import EventBus, EventType
 from app.tools.elevated_broker import run_elevated, is_access_denied_output
 from app.tools.shell_approval import ShellApprovalGate
 
-logger = logging.getLogger("nyra.operator")
+logger = logging.getLogger("kazumi.operator")
 
 _MAX_LIST = 400
 _MAX_READ_BYTES = 256_000
-_PROTECTED_NAMES = {"nyra-backend", "nyra-desktop", "nyra-frontend"}
+_PROTECTED_NAMES = {"kazumi-backend", "kazumi-desktop", "kazumi-frontend"}
 
 
 def _is_protected_process(process: psutil.Process) -> bool:
@@ -38,7 +38,7 @@ def _is_protected_process(process: psutil.Process) -> bool:
         exe = (process.exe() or "").casefold()
     except Exception:  # noqa: BLE001
         return False
-    if "nyra" in name or "nyra" in exe:
+    if "kazumi" in name or "kazumi" in exe:
         return True
     try:
         parent = psutil.Process(os.getpid()).parent()
@@ -421,7 +421,7 @@ class OperatorController:
         if _is_protected_process(process):
             return operation_result(app="process", action="stop", duration_ms=(time.perf_counter() - started) * 1000,
                                     success=False, error_code="PROTECTED_PROCESS",
-                                    message=f"'{process.name()}' é componente da própria NYRA; parada bloqueada. Peça explicitamente ao operador um fluxo administrativo.",
+                                    message=f"'{process.name()}' é componente da própria KAZUMI; parada bloqueada. Peça explicitamente ao operador um fluxo administrativo.",
                                     execution_success=False)
         identity = {"pid": process.pid, "name": process.name()}
         granted, error = await self._approval(
@@ -651,7 +651,7 @@ class OperatorController:
             "registry": ["read", "set"],
             "scheduled_tasks": ["list", "run", "delete"],
             "power": ["lock", "sleep", "logoff", "restart", "shutdown"],
-            "protected": "componentes NYRA não podem ser parados por tools automáticas",
+            "protected": "componentes KAZUMI não podem ser parados por tools automáticas",
         }
 
     # ------------------------------------------------------------------ scheduled tasks

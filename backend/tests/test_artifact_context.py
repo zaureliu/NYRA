@@ -383,13 +383,13 @@ async def test_structured_tool_result_registers_real_artifact(tmp_path):
 def test_assistant_only_remote_claim_is_not_verified():
     context = ArtifactContextService(memory=RecentArtifactMemory())
     context.observe_assistant_response(
-        "Gerei /var/log/nyra/current.log.",
+        "Gerei /var/log/kazumi/current.log.",
         conversation_id="claims",
         turn_id="turn_claim",
         grounded=False,
     )
     artifact = context.memory.items[0]
-    assert artifact.path == "/var/log/nyra/current.log"
+    assert artifact.path == "/var/log/kazumi/current.log"
     assert artifact.exists_state == "planned"
     assert artifact.source_type == "assistant_mention"
 
@@ -412,7 +412,7 @@ def test_remote_tool_host_is_kept_when_path_appears_only_in_response():
         "turn_host",
     )
     context.observe_assistant_response(
-        "O arquivo está em /var/log/nyra/current.log.",
+        "O arquivo está em /var/log/kazumi/current.log.",
         conversation_id="host-context",
         turn_id="turn_host",
         grounded=True,

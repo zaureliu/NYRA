@@ -6,7 +6,7 @@
 // one native receiver without a sidecar process or a second taskbar window.
 extern "C" {
 
-struct NyraSpoutStatus {
+struct KazumiSpoutStatus {
     int32_t state;
     int32_t alpha;
     int32_t adapter_match;
@@ -25,14 +25,14 @@ struct NyraSpoutStatus {
     char error[128];
 };
 
-bool nyra_spout_start(void* owner_hwnd);
-void nyra_spout_stop();
-void nyra_spout_configure(
+bool kazumi_spout_start(void* owner_hwnd);
+void kazumi_spout_stop();
+void kazumi_spout_configure(
     const char* sender,
     float scale,
     float offset_x,
     float offset_y,
     uint32_t watchdog_seconds);
-void nyra_spout_get_status(NyraSpoutStatus* status);
+void kazumi_spout_get_status(KazumiSpoutStatus* status);
 
 }

@@ -1,13 +1,13 @@
-r"""Central path resolution for NYRA (dev repo vs installed/frozen layout).
+r"""Central path resolution for KAZUMI (dev repo vs installed/frozen layout).
 
 Dev mode: source lives in the repository while mutable runtime state lives in
-``%LOCALAPPDATA%\\NYRA`` (or ``NYRA_DATA_HOME``).
+``%LOCALAPPDATA%\\KAZUMI`` (or ``KAZUMI_DATA_HOME``).
 
-Installed mode (PyInstaller ``nyra-backend.exe`` spawned by the Tauri shell):
+Installed mode (PyInstaller ``kazumi-backend.exe`` spawned by the Tauri shell):
 
     * read-only assets shipped inside the bundle  -> ``RESOURCE_ROOT``
       (``sys._MEIPASS`` of the onedir build; config/identity templates);
-    * writable state                              -> ``%LOCALAPPDATA%\NYRA``
+    * writable state                              -> ``%LOCALAPPDATA%\KAZUMI``
       (``PROJECT_ROOT``/``CONFIG_ROOT``/``DATA_ROOT``/``LOG_ROOT`` plus the
       cache/backups/workflows subfolders).
 
@@ -24,22 +24,23 @@ import shutil
 import sys
 from pathlib import Path
 
-logger = logging.getLogger("nyra.paths")
+logger = logging.getLogger("kazumi.paths")
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _is_frozen() -> bool:
-    return bool(getattr(sys, "frozen", False)) or os.environ.get("NYRA_FROZEN") == "1"
+    return bool(getattr(sys, "frozen", False)) or os.environ.get("KAZUMI_FROZEN") == "1"
 
 
 def _installed_root() -> Path:
-    override = os.environ.get("NYRA_DATA_HOME")
+    override = os.environ.get("KAZUMI_DATA_HOME")
     if override:
         return Path(override)
     local_app_data = os.environ.get("LOCALAPPDATA")
     base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
-    return base / "NYRA"
+    from app.product_migration import default_runtime_root
+    return default_runtime_root(base)
 
 
 FROZEN = _is_frozen()
@@ -117,7 +118,7 @@ def ensure_runtime_directories() -> None:
                 (PROJECT_ROOT / name).mkdir(parents=True, exist_ok=True)
             except OSError as error:
                 logger.warning("installed_dir_failed dir=%s error=%s", name, type(error).__name__)
-        # Configs: template embutido -> %LOCALAPPDATA%\NYRA\config (só ausentes).
+        # Configs: template embutido -> %LOCALAPPDATA%\KAZUMI\config (só ausentes).
         bundled_config = RESOURCE_ROOT / "config"
         if bundled_config.is_dir():
             for name in _CONFIG_TEMPLATE_FILES:

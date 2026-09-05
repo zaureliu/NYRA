@@ -10,9 +10,9 @@ if str(BACKEND) not in sys.path:
 
 # Contract/unit tests exercise these lifecycles explicitly. Generic TestClient
 # lifespans must not load real Ollama or Faster-Whisper models as side effects.
-os.environ.setdefault("NYRA_OLLAMA_PRELOAD", "false")
-os.environ.setdefault("NYRA_CONVERSATION_ENGINE", "false")
-os.environ.setdefault("NYRA_TESTING", "true")
+os.environ.setdefault("KAZUMI_OLLAMA_PRELOAD", "false")
+os.environ.setdefault("KAZUMI_CONVERSATION_ENGINE", "false")
+os.environ.setdefault("KAZUMI_TESTING", "true")
 
 # ---------------------------------------------------------------------------
 # Hermetic suite (final release closure): operator-persisted UI state in
@@ -20,27 +20,27 @@ os.environ.setdefault("NYRA_TESTING", "true")
 # flags have contract defaults ("default OFF"); tests that need them enabled
 # pass explicit Settings.from_sources(...) overrides, which win over env.
 # ---------------------------------------------------------------------------
-os.environ.setdefault("NYRA_AGENT_READ_ONLY", "false")
-os.environ.setdefault("NYRA_PROACTIVE_OPERATOR_ENABLED", "false")
-_TEST_SESSION_ROOT = Path(tempfile.gettempdir()) / "nyra-pytest"
-os.environ.setdefault("NYRA_DATA_HOME", str(_TEST_SESSION_ROOT / "runtime"))
+os.environ.setdefault("KAZUMI_AGENT_READ_ONLY", "false")
+os.environ.setdefault("KAZUMI_PROACTIVE_OPERATOR_ENABLED", "false")
+_TEST_SESSION_ROOT = Path(tempfile.gettempdir()) / "kazumi-pytest"
+os.environ.setdefault("KAZUMI_DATA_HOME", str(_TEST_SESSION_ROOT / "runtime"))
 os.environ.setdefault(
-    "NYRA_SELFDEV_WORKSPACE",
+    "KAZUMI_SELFDEV_WORKSPACE",
     str(_TEST_SESSION_ROOT / "selfdev" / "workspace"),
 )
 os.environ.setdefault(
-    "NYRA_PUBLIC_SNAPSHOT",
+    "KAZUMI_PUBLIC_SNAPSHOT",
     str(_TEST_SESSION_ROOT / "selfdev" / "public"),
 )
 
 # ---------------------------------------------------------------------------
-# Controlled basetemp under the hermetic NYRA test runtime. Generic
+# Controlled basetemp under the hermetic KAZUMI test runtime. Generic
 # %TEMP%\pytest-* can hit Access Denied on Windows shell operations (Explorer
 # window verification), but mutable test state must never live in the source
 # repository. Grant only the current user access to this dedicated directory.
 # ---------------------------------------------------------------------------
 
-_TEST_TEMP_ROOT = Path(os.environ["NYRA_DATA_HOME"]) / "tmp" / "pytest-root"
+_TEST_TEMP_ROOT = Path(os.environ["KAZUMI_DATA_HOME"]) / "tmp" / "pytest-root"
 
 
 def _grant_current_user_acl(directory: Path) -> bool:

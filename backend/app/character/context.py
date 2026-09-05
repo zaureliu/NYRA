@@ -53,7 +53,7 @@ Hosts SSH confiáveis:
 
 
 _STANDALONE_GREETING = re.compile(
-    r"(?i)^\s*(?:(?:ei|ol[aá]|oi|opa)|(?:bom\s+dia|boa\s+tarde|boa\s+noite))(?:[,!?.\s]+nyra)?[,!?.\s]*$"
+    r"(?i)^\s*(?:(?:ei|ol[aá]|oi|opa)|(?:bom\s+dia|boa\s+tarde|boa\s+noite))(?:[,!?.\s]+kazumi)?[,!?.\s]*$"
 )
 _CASUAL_SECTION = re.compile(
     r"\nVERDADE E CONTEXTO\n.*?(?=\nCONVERSA\n)",
@@ -67,10 +67,10 @@ def is_standalone_greeting(value: str) -> bool:
 
 _SIMPLE_CONVERSATION = re.compile(
     r"(?i)^\s*(?:"
-    r"(?:ei|ol[aá]|oi|opa)(?:[,!.\s]+(?:tudo\s+(?:bem|bom|certo)|(?:tudo\s+)?beleza|e\s+a[ií]|como\s+vai|[aé]\s+a[ií]))?[?,!.\s]*(?:nyra)?[?,!.\s]*"
+    r"(?:ei|ol[aá]|oi|opa)(?:[,!.\s]+(?:tudo\s+(?:bem|bom|certo)|(?:tudo\s+)?beleza|e\s+a[ií]|como\s+vai|[aé]\s+a[ií]))?[?,!.\s]*(?:kazumi)?[?,!.\s]*"
     r"|(?:bom\s+dia|boa\s+tarde|boa\s+noite|(?:muito\s+)?obrigad[oa]|valeu|brigad[oa]|"
     r"de\s+nada|por\s+nada|sem\s+problemas|tudo\s+bom|tudo\s+[oó]timo|comigo\s+tudo\s+bem|legal|show|perfeito|"
-    r"entendi|entendo|certo|ok|okay|blz|haha+|rs+|kkk+|boa!?|isso\s+memo|isso\s+a[ií])[.,!?\s]*(?:nyra)?[.,!?\s]*"
+    r"entendi|entendo|certo|ok|okay|blz|haha+|rs+|kkk+|boa!?|isso\s+memo|isso\s+a[ií])[.,!?\s]*(?:kazumi)?[.,!?\s]*"
     r"|como\s+(?:você|vc)\s+est[aá][?!,.]*|como\s+vai[?!,.]*|e\s+a[ií][?!,.]*|tudo\s+bem[?!,.]*|tudo\s+certo[?!,.]*|beleza[?!,.]*|de\s+boa[?!,.]*"
     r"|me\s+(?:explica|explicar|conta|conte|fala)\s+(?:mais|melhor)?\s*(?:disso|isso)[.,!?\s]*"
     r")\s*$"

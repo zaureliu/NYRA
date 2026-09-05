@@ -267,7 +267,7 @@ async def test_process_health_matches_tokens():
     spec = build_spec(health={"kind": "PROCESS", "process_match": ["python"], "timeout_seconds": 2})
     result = await run_health_check(spec, {})
     assert result and result.healthy
-    miss = build_spec(health={"kind": "PROCESS", "process_match": ["nyra_definitely_absent_token"], "timeout_seconds": 2})
+    miss = build_spec(health={"kind": "PROCESS", "process_match": ["kazumi_definitely_absent_token"], "timeout_seconds": 2})
     assert not (await run_health_check(miss, {})).healthy
 
 

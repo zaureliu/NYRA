@@ -6,7 +6,7 @@ fn main() {
             .file("src/spout_presence.cpp")
             .flag_if_supported("/std:c++17")
             .flag_if_supported("/EHsc")
-            .compile("nyra_spout_presence");
+            .compile("kazumi_spout_presence");
         for library in ["d3d11", "dxgi", "d2d1", "dcomp", "ole32"] {
             println!("cargo:rustc-link-lib={library}");
         }

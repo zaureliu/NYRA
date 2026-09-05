@@ -1,6 +1,6 @@
-# NYRA Runtime Supervisor V1
+# KAZUMI Runtime Supervisor V1
 
-Gerenciamento estruturado de processos e serviços persistentes conhecidos pela NYRA,
+Gerenciamento estruturado de processos e serviços persistentes conhecidos pela KAZUMI,
 distinto do shell arbitrário (`system_shell` continua disponível para diagnóstico finito).
 
 ## Arquitetura
@@ -38,11 +38,11 @@ Structured Result (grounding: execution_success / effect_verified / verification
 
 | id | type | ownership | start mechanism | health | readiness | capabilities | auto-recovery |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `nyra_backend` | PROCESS | OWNED | `python -m uvicorn app.main:app --port 8000` | HTTP `/api/health` | HEALTH_PASS | status/health/start/logs (stop/restart **desabilitados**: self-restart exige supervisor externo) | off |
-| `nyra_frontend_dev` | PROCESS | OWNED | `node vite.js` (dev; produção via Tauri não depende disso) | TCP 5173 | HEALTH_PASS | todas | off |
+| `kazumi_backend` | PROCESS | OWNED | `python -m uvicorn app.main:app --port 8000` | HTTP `/api/health` | HEALTH_PASS | status/health/start/logs (stop/restart **desabilitados**: self-restart exige supervisor externo) | off |
+| `kazumi_frontend_dev` | PROCESS | OWNED | `node vite.js` (dev; produção via Tauri não depende disso) | TCP 5173 | HEALTH_PASS | todas | off |
 | `ollama` | EXTERNAL_SERVICE | EXTERNAL | instalação própria (nunca iniciar segunda instância) | WARM_MANAGER hook | OLLAMA_WARM (critério do Warm Manager existente) | status/health | off |
 | `utamo_sentinel` | EXTERNAL_SERVICE | EXTERNAL | bridge Sentinel existente | SENTINEL hook | HEALTH_PASS | status/health | off |
-| `nyra_test_service` | PROCESS | OWNED | `scripts/runtime_test_service.py` (HTTP 18765/health) | HTTP | HEALTH_PASS | todas | off |
+| `kazumi_test_service` | PROCESS | OWNED | `scripts/runtime_test_service.py` (HTTP 18765/health) | HTTP | HEALTH_PASS | todas | off |
 
 Tokens do registry: `{python}` e `{repo_root}`.
 
@@ -92,11 +92,11 @@ alimentam o grounding (nenhum valor inventado; VERIFIED só com check real).
 ## Self-restart (limitação declarada)
 
 Reiniciar o próprio backend exige mecanismo externo (watchdog/launcher/service).
-Não existe ainda — `runtime_restart(nyra_backend)` retorna
+Não existe ainda — `runtime_restart(kazumi_backend)` retorna
 `SELF_RESTART_UNSUPPORTED` em vez de fingir. Start pós-crash permanece possível
 (spawn de nova instância quando nada está escutando).
 
-## Configuração (Settings, env prefix NYRA_)
+## Configuração (Settings, env prefix KAZUMI_)
 
 ```text
 RUNTIME_SUPERVISOR_ENABLED=true

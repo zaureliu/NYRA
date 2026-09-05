@@ -1,6 +1,6 @@
 # USB Device Monitor & Registry V1
 
-O monitor USB inicia com a NYRA e usa `CM_Register_Notification` (ConfigMgr)
+O monitor USB inicia com a KAZUMI e usa `CM_Register_Notification` (ConfigMgr)
 para receber mudanças Plug and Play. Cada hint nativo entra em uma fila limitada,
 passa por debounce e dispara uma reconciliação SetupAPI. Uma reconciliação leve a
 cada 30 segundos funciona como fallback e heartbeat; não há PowerShell recorrente.
@@ -11,7 +11,7 @@ Fluxo lógico:
 
 O baseline do startup é persistido como `PRESENT_AT_STARTUP`, sem emitir alertas
 de conexão. O registry e o histórico SQLite (máximo de 1000 eventos) ficam em
-`%LOCALAPPDATA%\NYRA\usb-devices\registry.db`, nunca no repositório.
+`%LOCALAPPDATA%\KAZUMI\usb-devices\registry.db`, nunca no repositório.
 
 A identidade usa, em ordem, serial USB, Container ID, Device Instance ID e um
 composto de VID/PID/fabricante/produto. VID/PID sozinho nunca identifica uma

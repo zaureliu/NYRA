@@ -1,10 +1,10 @@
 {
   "version": 4,
-  "profile": "NYRA_VOICE",
+  "profile": "KAZUMI_VOICE",
   "description": "Substituições exclusivas para speech_text em português brasileiro. display_text nunca é alterado.",
   "terms": {
-    "NYRA": "Naira",
-    "Nyra": "Naira",
+    "KAZUMI": "Kazumi",
+    "Kazumi": "Kazumi",
     "Utamo": "Utâmo",
     "Utamo Sentinel": "Utâmo Sentinél",
     "Sentinel": "Sentinél",

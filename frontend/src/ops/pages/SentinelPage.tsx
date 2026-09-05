@@ -53,7 +53,7 @@ export function SentinelPage() {
         <div>
           <h1 className="ops-page-title">UTAMO Sentinel</h1>
           <p className="ops-page-subtitle">
-            Sentinel = percepção de rede. NYRA = raciocínio e ação.
+            Sentinel = percepção de rede. KAZUMI = raciocínio e ação.
             Nenhum scanner duplicado; apenas a bridge oficial é consumida.
           </p>
         </div>
@@ -68,7 +68,7 @@ export function SentinelPage() {
       )}
 
       <div className="ops-grid-2">
-        <Card title="Conexão" sub="Bridge Socket.IO /integrations/nyra">
+        <Card title="Conexão" sub="Bridge Socket.IO /integrations/kazumi">
           <dl className="ops-kv">
             <dt>Estado</dt><dd>{status.data?.state ?? '—'}</dd>
             <dt>Host</dt><dd>{status.data?.host ?? '—'}</dd>

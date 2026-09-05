@@ -73,7 +73,7 @@ def windows_ocr_available() -> bool:
 
 
 def run_windows_ocr(png_path: str, timeout_seconds: float = 30.0) -> dict:
-    script = Path(tempfile.gettempdir()) / f"nyra-ocr-{abs(hash(png_path)) % 99999}.ps1"
+    script = Path(tempfile.gettempdir()) / f"kazumi-ocr-{abs(hash(png_path)) % 99999}.ps1"
     script.write_text(_SCRIPT_TEMPLATE, encoding="utf-8-sig")
     try:
         completed = subprocess.run(  # noqa: S603

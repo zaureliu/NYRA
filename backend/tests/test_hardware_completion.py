@@ -174,7 +174,7 @@ async def test_general_compiler_api_repair_revises_remaining_plan(tmp_path):
         calls.append(recipe)
         if len(calls) == 1:
             return {'success': False, 'stdout': "src/main.cpp:3:1: error: 'obsoleteTimer' was not declared"}
-        binary = workspace/'.pio/build/nyra/firmware.hex'
+        binary = workspace/'.pio/build/kazumi/firmware.hex'
         binary.parent.mkdir(parents=True)
         binary.write_text('SIMULATED, NOT PHYSICAL FIRMWARE')
         return {'success': True}
@@ -210,7 +210,7 @@ async def test_three_turns_general_edits_same_workspace_memory_artifacts_and_blo
     engine.projects.checkpoint(meta)
     async def run(recipe, workspace):
         assert recipe == 'build'
-        binary = workspace/'.pio/build/nyra/firmware.hex'
+        binary = workspace/'.pio/build/kazumi/firmware.hex'
         binary.parent.mkdir(parents=True, exist_ok=True)
         binary.write_text('SIMULATED BUILD ARTIFACT')
         return {'success': True}

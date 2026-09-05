@@ -21,7 +21,7 @@ from app.tools.redaction import redact_secrets
 from app.intelligence.budget import ActionBudget, BudgetExceeded, BudgetLimits
 
 
-logger = logging.getLogger("nyra.agent")
+logger = logging.getLogger("kazumi.agent")
 
 
 def _persistent_fingerprint_arguments(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -252,7 +252,7 @@ class AgentController:
             if remote_target:
                 runtime.required_remote_host = remote_target["host"]
                 runtime.required_remote_address = remote_target["address"]
-        if re.search(r"(?i)(?:backend[^\n]{0,40}nyra|nyra[^\n]{0,40}backend)", goal):
+        if re.search(r"(?i)(?:backend[^\n]{0,40}kazumi|kazumi[^\n]{0,40}backend)", goal):
             runtime.required_local_backend = True
             runtime.local_backend_port = self.settings.backend_port
             runtime.local_backend_root = str(self.settings.shell_default_working_directory)

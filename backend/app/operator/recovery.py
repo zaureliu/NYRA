@@ -65,7 +65,7 @@ class RecoveryEngine:
     def __init__(self, approvals=None, event_bus=None, *, database_path: Path | None = None) -> None:
         self.approvals = approvals
         self.event_bus = event_bus
-        self.database_path = database_path or (DATA_ROOT / "nyra.db")
+        self.database_path = database_path or (DATA_ROOT / "kazumi.db")
         self._transactions: dict[str, dict[str, Any]] = {}
         self._lock = asyncio.Lock()
 

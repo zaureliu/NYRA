@@ -28,7 +28,7 @@ class ReactionEngine:
             await self._cursor_attention()
             return
         if event.type in {EventType.USER_SPEECH_STARTED, EventType.USER_SPEECH_RECEIVED}:
-            await self._react("USER_CALLED_NYRA", visual="listening", expression="neutral", speak=False)
+            await self._react("USER_CALLED_KAZUMI", visual="listening", expression="neutral", speak=False)
         elif event.type == EventType.LLM_STREAM_STARTED:
             await self._react("THINKING", visual="thinking", expression="focused", speak=False)
         elif event.type == EventType.PC_ACTIVE_WINDOW_CHANGED:

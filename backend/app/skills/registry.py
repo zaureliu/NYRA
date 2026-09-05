@@ -141,11 +141,11 @@ def create_skill_registry(*, event_bus: EventBus, cooldowns: CooldownManager, to
     registry.register(SkillDefinition(name="get_idle_time", description="Lê o tempo de inatividade local atual."), idle)
     registry.register(SkillDefinition(name="get_system_load", description="Lê CPU, RAM e disco atuais."), load)
     registry.register(SkillDefinition(name="sentinel_status", description="Lê o estado atual do Utamo Sentinel."), sentinel_status)
-    registry.register(SkillDefinition(name="memory_search", description="Pesquisa memória explícita da NYRA.", cooldown_seconds=.5), memory_search)
-    for name, command in (("open_nyra_dashboard", "open_dashboard"), ("show_nyra", "show"), ("hide_nyra", "hide")):
+    registry.register(SkillDefinition(name="memory_search", description="Pesquisa memória explícita da KAZUMI.", cooldown_seconds=.5), memory_search)
+    for name, command in (("open_kazumi_dashboard", "open_dashboard"), ("show_kazumi", "show"), ("hide_kazumi", "hide")):
         registry.register(SkillDefinition(name=name, description=f"Solicita à interface local: {command}."), lambda payload, selected=command: ui(selected, payload))
-    registry.register(SkillDefinition(name="mute_nyra", description="Silencia a escuta local da NYRA."), lambda payload: mute(True, payload))
-    registry.register(SkillDefinition(name="unmute_nyra", description="Reativa a escuta local da NYRA."), lambda payload: mute(False, payload))
+    registry.register(SkillDefinition(name="mute_kazumi", description="Silencia a escuta local da KAZUMI."), lambda payload: mute(True, payload))
+    registry.register(SkillDefinition(name="unmute_kazumi", description="Reativa a escuta local da KAZUMI."), lambda payload: mute(False, payload))
     registry.register(
         SkillDefinition(name="open_application", description="Abre somente aplicativo cadastrado em allowlist explícita.", permission=SkillPermission.CONFIRM_REQUIRED, enabled=False, available=False, metadata={"allowlist": []}),
         lambda _: _unavailable(),

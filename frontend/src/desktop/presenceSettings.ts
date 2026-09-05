@@ -7,9 +7,9 @@ export interface PresenceSettings {
   clickThrough: boolean
 }
 
-export const PRESENCE_SETTINGS_KEY = 'nyra-vts-presence'
-const LEGACY_VISUAL_SETTINGS_KEY = 'nyra-visual-avatar-v2'
-const PRESENCE_SETTINGS_EVENT = 'nyra-presence-settings'
+export const PRESENCE_SETTINGS_KEY = 'kazumi-vts-presence'
+const LEGACY_VISUAL_SETTINGS_KEY = 'kazumi-visual-avatar-v2'
+const PRESENCE_SETTINGS_EVENT = 'kazumi-presence-settings'
 
 export const DEFAULT_PRESENCE_SETTINGS: PresenceSettings = {
   overlayScale: 1,

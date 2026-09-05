@@ -84,7 +84,7 @@ class EvaluationSuite:
         temporary.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temporary.replace(target)
         markdown = self.report_root / f"{report['run_id']}.md"
-        lines = [f"# NYRA Evaluation {report['run_id']}", "", "| Scenario | Status | Validation | Latency ms |", "|---|---:|---:|---:|"]
+        lines = [f"# KAZUMI Evaluation {report['run_id']}", "", "| Scenario | Status | Validation | Latency ms |", "|---|---:|---:|---:|"]
         lines.extend(f"| {r['name']} | {r['status']} | {r['validation']} | {r['latency_ms']} |" for r in report["results"])
         markdown.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

@@ -16,7 +16,7 @@ Pontuações automáticas são apenas triagem. Tool use é validado pela execuç
 
 O 9B tem throughput 22% maior depois do primeiro token, mas first-token aquecido cerca de 4,8× pior. Também foi mais verboso e atribuiu perda/latência a cabo, aquecimento ou hardware sem evidência. O 8B foi mais curto, embora também tenha listado hipóteses no alerta Sentinel.
 
-Validações funcionais do 8B: memória temporária `Orion` recuperada corretamente e removida; `Nyra, verifica como está minha conexão` executou a skill allowlisted `network_status`. Score técnico humano aproximado:
+Validações funcionais do 8B: memória temporária `Orion` recuperada corretamente e removida; `Kazumi, verifica como está minha conexão` executou a skill allowlisted `network_status`. Score técnico humano aproximado:
 
 | Critério | 8B | 9B |
 |---|---:|---:|

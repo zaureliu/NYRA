@@ -19,7 +19,7 @@ Todo JavaScript arbitrário no navegador exige approval. O fingerprint inclui o 
 
 Credenciais configuradas pela interface vivem no Credential Broker do Windows. Excluir/desconectar exige approval e grava um tombstone que impede fallback silencioso para valores legados de `.env` ou arquivos antigos. Tokens de Home Assistant e pares de API Token do Proxmox são vinculados à origem configurada: mudar scheme, host ou porta invalida a credencial anterior, salvo quando um novo par Proxmox é fornecido atomicamente na mesma atualização.
 
-Tokens HTTP só podem ser enviados a um IP loopback literal. Home Assistant, Sentinel e Proxmox exigem HTTPS fora de loopback. O Sentinel aceita somente IP local literal no host manual. O Proxmox exige validação TLS ativa; para certificados internos, a CA deve ser instalada no repositório de confiança do host NYRA.
+Tokens HTTP só podem ser enviados a um IP loopback literal. Home Assistant, Sentinel e Proxmox exigem HTTPS fora de loopback. O Sentinel aceita somente IP local literal no host manual. O Proxmox exige validação TLS ativa; para certificados internos, a CA deve ser instalada no repositório de confiança do host KAZUMI.
 
 Secrets, `.env`, bancos, áudio privado, logs, modelos e estado de runtime são ignorados pelo Git e não entram no snapshot público.
 

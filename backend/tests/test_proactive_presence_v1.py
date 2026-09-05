@@ -60,8 +60,8 @@ class FakeOpenLoops:
 class ReadyProvider:
     name = "fake-local"
     active_provider = "fake-local"
-    active_voice = "NYRA_FIXED_VOICE"
-    default_voice = "NYRA_FIXED_VOICE"
+    active_voice = "KAZUMI_FIXED_VOICE"
+    default_voice = "KAZUMI_FIXED_VOICE"
 
     async def health(self) -> bool:
         return True
@@ -105,7 +105,7 @@ def runtime_settings(**overrides):
 
 async def build_service(tmp_path: Path, *, world=None, loops=(), settings=None,
                         clock=None, voice=False, emotional=False):
-    store = IntelligenceStore(tmp_path / "nyra.db")
+    store = IntelligenceStore(tmp_path / "kazumi.db")
     await store.initialize()
     bus = EventBus(history_size=500)
     provider = ReadyProvider()
@@ -496,7 +496,7 @@ async def test_settings_change_is_persisted_and_refreshable(tmp_path: Path, monk
 
 @pytest.mark.asyncio
 async def test_artifact_selfdev_and_operator_sources_are_audited(tmp_path: Path):
-    artifact = SimpleNamespace(artifact_id="art-1", path="E:/nyra/report.pdf")
+    artifact = SimpleNamespace(artifact_id="art-1", path="E:/kazumi/report.pdf")
     loop = SimpleNamespace(
         id="loop_report", title="Gerar relatório", goal="goal_report", state="ACTIVE",
         waiting_for=None, related_monitor=[], related_task=[], related_artifact=[artifact],
@@ -504,7 +504,7 @@ async def test_artifact_selfdev_and_operator_sources_are_audited(tmp_path: Path)
     service, _bus, _speech, _store = await build_service(tmp_path, loops=[loop])
     ready = await service.evaluate_event(event(
         EventType.ARTIFACT_CONTEXT_UPDATED,
-        artifact={"artifact_id": "art-1", "path": "E:/nyra/report.pdf"}, verified=True,
+        artifact={"artifact_id": "art-1", "path": "E:/kazumi/report.pdf"}, verified=True,
     ))
     service.clock.advance(181)
     selfdev = await service.evaluate_event(event(

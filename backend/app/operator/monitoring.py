@@ -27,7 +27,7 @@ from app.tools.models import RiskLevel
 from app.tools.redaction import redact_secrets
 
 
-logger = logging.getLogger("nyra.operator.monitoring")
+logger = logging.getLogger("kazumi.operator.monitoring")
 _HISTORY_LIMIT = 12
 _TERMINAL = {"COMPLETED", "FAILED", "CANCELLED"}
 _PATH_PART = re.compile(r"([^.[\]]+)|\[(\d+)\]")
@@ -175,7 +175,7 @@ class MonitorJobManager:
                  clock=time.time) -> None:
         self.registry = registry
         self.event_bus = event_bus
-        self.database_path = database_path or (DATA_ROOT / "nyra.db")
+        self.database_path = database_path or (DATA_ROOT / "kazumi.db")
         self.clock = clock
         self._jobs: dict[str, MonitorJob] = {}
         self._runner: asyncio.Task[None] | None = None
@@ -199,7 +199,7 @@ class MonitorJobManager:
 
     def start(self) -> None:
         if self._runner is None or self._runner.done():
-            self._runner = asyncio.create_task(self._run_loop(), name="nyra-monitor-jobs")
+            self._runner = asyncio.create_task(self._run_loop(), name="kazumi-monitor-jobs")
 
     async def shutdown(self) -> None:
         if self._runner and not self._runner.done():
@@ -669,7 +669,7 @@ class ProactiveMonitorNotifications:
 
         if event.type != EventType.MONITOR_NOTIFICATION or not event.payload.get("voice"):
             return
-        task = asyncio.create_task(self._speak(event.payload), name="nyra-monitor-notification-voice")
+        task = asyncio.create_task(self._speak(event.payload), name="kazumi-monitor-notification-voice")
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 

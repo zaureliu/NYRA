@@ -78,7 +78,7 @@ class SecurityScanner:
     TEST_PLACEHOLDER = re.compile(
         r"(?i)(?:abcdefghijklmnopqrstuvwxyz|NYRA_SECRET_LEAK_TEST|legacy-functional-token|"
         r"tok-abcdef-123456|monitor-tok-9876|ha-live-token-9f2c|supersecrettokenvalue1234|"
-        r"token-super-secreto-da-api-9876|s3cret-NYRA-openwrt-PW)"
+        r"token-super-secreto-da-api-9876|s3cret-KAZUMI-openwrt-PW)"
     )
     BINARY_SUFFIXES = {".exe", ".msi", ".pdb", ".dmp", ".dll", ".so", ".bin"}
     RUNTIME_PARTS = {

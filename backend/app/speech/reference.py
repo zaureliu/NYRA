@@ -6,7 +6,7 @@ import numpy as np
 
 from app.core.paths import DATA_ROOT
 
-REFERENCE_PATH = DATA_ROOT / "voices" / "nyra_reference.wav"
+REFERENCE_PATH = DATA_ROOT / "voices" / "kazumi_reference.wav"
 RECOMMENDATIONS = [
     "português brasileiro, uma única pessoa, ambiente silencioso",
     "aproximadamente 10–20 segundos (sem exigir duração exata)",
@@ -16,7 +16,7 @@ RECOMMENDATIONS = [
 
 
 def inspect_reference(path: Path = REFERENCE_PATH) -> dict:
-    result = {"present": path.is_file(), "valid": False, "path": "data/voices/nyra_reference.wav", "recommendations": RECOMMENDATIONS}
+    result = {"present": path.is_file(), "valid": False, "path": "data/voices/kazumi_reference.wav", "recommendations": RECOMMENDATIONS}
     if not path.is_file():
         return result
     try:

@@ -88,7 +88,7 @@ class Services:
     operator: "OperatorController | None"
     operator_v2: "OperatorV2Service | None"
     turns: TurnRegistry
-    # nyra-7c: camadas de autonomia do computador (pipeline unificado).
+    # kazumi-7c: camadas de autonomia do computador (pipeline unificado).
     computer: Any = None
     computer_state: Any = None
     computer_perception: Any = None

@@ -1,4 +1,4 @@
-"""Regression Gate / Release Health da NYRA (spec Parte BE §248-§250, BF).
+"""Regression Gate / Release Health da KAZUMI (spec Parte BE §248-§250, BF).
 
 Executa a bateria local e classifica o build:
 

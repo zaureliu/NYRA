@@ -3,7 +3,7 @@ import { ConversationPanel } from './components/ConversationPanel'
 import { useAlwaysListening, type AlwaysListeningResult } from './hooks/useAlwaysListening'
 import { useAudioSettings } from './hooks/useAudioSettings'
 import { useAudioLipSync } from './hooks/useAudioLipSync'
-import { useNyraSocket } from './hooks/useNyraSocket'
+import { useKazumiSocket } from './hooks/useKazumiSocket'
 import { usePushToTalk } from './hooks/usePushToTalk'
 import type { STTResult } from './runtime/stt'
 import { useStreamingAudioQueue } from './hooks/useStreamingAudioQueue'
@@ -34,7 +34,7 @@ import { AboutPage } from './ops/pages/AboutPage'
 const readInitialView = (): OpsView => {
   const hash = window.location.hash.slice(1) as OpsView
   if (OPS_VIEWS.includes(hash)) return hash
-  const saved = localStorage.getItem('nyra-active-view') as OpsView | null
+  const saved = localStorage.getItem('kazumi-active-view') as OpsView | null
   return saved && OPS_VIEWS.includes(saved) ? saved : 'overview'
 }
 
@@ -72,7 +72,7 @@ export default function App() {
   const microphone = audio.settings.microphone
   const speaker = audio.settings.speaker
   const [view, setView] = useState<OpsView>(readInitialView)
-  const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('nyra-nav-collapsed') === 'true')
+  const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('kazumi-nav-collapsed') === 'true')
   const [feed, setFeed] = useState<FeedItem[]>([])
   const lipSyncSent = useRef(0)
   const chooseMicrophone = useCallback((id: string) => { void audio.patch({ microphone: id }) }, [audio.patch])
@@ -152,7 +152,7 @@ export default function App() {
     }
     const assistantId = responseId ? `assistant-${responseId}` : eventTurnId ? `assistant-${eventTurnId}` : ''
     if (event.type === 'LLM_TOKEN_RECEIVED' && !turnFilter.current.accept(eventTurnId)) return
-    if (event.type === 'NYRA_RESPONSE' && !turnFilter.current.accept(eventTurnId)) return
+    if (event.type === 'KAZUMI_RESPONSE' && !turnFilter.current.accept(eventTurnId)) return
     if (event.type === 'LLM_TOKEN_RECEIVED' && assistantId) {
       const delta = String(event.payload.delta ?? '')
       setMessages((current) => {
@@ -161,7 +161,7 @@ export default function App() {
         return current.map((message) => message.id === assistantId ? { ...message, content: message.content + delta } : message)
       })
     }
-    if (event.type === 'NYRA_RESPONSE' && assistantId) {
+    if (event.type === 'KAZUMI_RESPONSE' && assistantId) {
       const content = String(event.payload.display_text ?? event.payload.text ?? '')
       setMessages((current) => current.some((message) => message.id === assistantId)
         ? current.map((message) => message.id === assistantId ? { ...message, content, status: 'complete' } : message)
@@ -241,7 +241,7 @@ export default function App() {
     }
   }, [streaming, pushFeed, playResponse])
 
-  useNyraSocket({
+  useKazumiSocket({
     setStatus: useCallback((value) => setStatus(value), []),
     setState: useCallback((value) => setState(value), []),
     setConnected: useCallback((value) => setConnected(value), []),
@@ -353,12 +353,12 @@ export default function App() {
 
   const navigate = useCallback((next: OpsView) => {
     setView(next)
-    localStorage.setItem('nyra-active-view', next)
+    localStorage.setItem('kazumi-active-view', next)
     window.location.hash = next
   }, [])
   const toggleCollapse = useCallback(() => {
     setNavCollapsed((current) => {
-      localStorage.setItem('nyra-nav-collapsed', String(!current))
+      localStorage.setItem('kazumi-nav-collapsed', String(!current))
       return !current
     })
   }, [])

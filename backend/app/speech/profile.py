@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 
 from app.core.paths import IDENTITY_ROOT, RESOURCE_ROOT
 from app.speech.emotion import EmotionPlan, VoiceEmotion
-from app.speech.tts_identity import NYRA_VOICE_ID
+from app.speech.tts_identity import KAZUMI_VOICE_ID
 
 
 class VoiceSynthesisOptions(BaseModel):
     provider: Literal["chatterbox", "chatterbox_multilingual_v3", "chatterbox_ptbr", "kokoro", "edge_tts"] | None = None
-    voice: str = NYRA_VOICE_ID
+    voice: str = KAZUMI_VOICE_ID
     speaking_rate: float = Field(0.97, ge=0.7, le=1.3)
     temperature: float = Field(0.8, ge=0.05, le=5)
     exaggeration: float = Field(0.5, ge=0.25, le=2)
@@ -86,6 +86,8 @@ class VoiceSynthesisOptions(BaseModel):
 def load_voice_profile(path: Path | None = None) -> tuple[dict, VoiceSynthesisOptions]:
     profile_path = path or IDENTITY_ROOT / "voice_profile.json"
     raw = json.loads(profile_path.read_text(encoding="utf-8"))
+    from app.brand_compat import preferences
+    raw = preferences(raw)
     # Installed releases keep operator choices in LocalAppData. Merge those
     # choices over the bundled schema so new V2 emotion definitions reach an
     # existing installation without overwriting its selected provider/voice.
@@ -108,7 +110,7 @@ def load_voice_profile(path: Path | None = None) -> tuple[dict, VoiceSynthesisOp
             # defaults in installed profiles while preserving operator prosody.
             for key in ("profile_id", "model", "edge_pitch", "paragraph_pause_ms"):
                 raw[key] = template[key]
-            if raw.get("voice") in {"pf_dora", "nyra_voice_v2"}:
+            if raw.get("voice") in {"pf_dora", "kazumi_voice_v2"}:
                 raw["voice"] = template["voice"]
                 raw["provider"] = template["provider"]
             raw["selection"] = dict(template.get("selection") or {})

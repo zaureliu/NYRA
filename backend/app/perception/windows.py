@@ -20,7 +20,7 @@ APP_CLASSES = {
     "cmd.exe": "Terminal",
     "discord.exe": "Discord",
     "utamosentinel.exe": "Utamo Sentinel",
-    "nyra-desktop.exe": "NYRA",
+    "kazumi-desktop.exe": "KAZUMI",
 }
 
 

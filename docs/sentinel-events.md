@@ -1,14 +1,14 @@
 # Sentinel Events
 
-O transporte escolhido é o Flask-SocketIO já existente no Sentinel, no namespace `/integrations/nyra`. O evento é `sentinel_event`. A versão atual do protocolo é 1. No servidor Werkzeug/threading atual, o cliente fixa Engine.IO long-polling porque o upgrade WebSocket fecha com erro no stack instalado; isso preserva push em tempo real e heartbeat sem reexecutar discovery. Uma implantação Socket.IO com servidor WebSocket compatível poderá habilitar upgrade futuramente.
+O transporte escolhido é o Flask-SocketIO já existente no Sentinel, no namespace `/integrations/kazumi`. O evento é `sentinel_event`. A versão atual do protocolo é 1. No servidor Werkzeug/threading atual, o cliente fixa Engine.IO long-polling porque o upgrade WebSocket fecha com erro no stack instalado; isso preserva push em tempo real e heartbeat sem reexecutar discovery. Uma implantação Socket.IO com servidor WebSocket compatível poderá habilitar upgrade futuramente.
 
 ```text
 Sentinel alert/broadcast
-  -> NyraEventAdapter (allowlist + schema v1)
-  -> Socket.IO /integrations/nyra
+  -> KazumiEventAdapter (allowlist + schema v1)
+  -> Socket.IO /integrations/kazumi
   -> SentinelConnector
   -> schema validation + size limit + dedupe
-  -> SQLite sentinel_events + NYRA Event Bus
+  -> SQLite sentinel_events + KAZUMI Event Bus
   -> dashboard / desktop bubble / proactive decision
   -> pronunciation engine -> SpeechQueue -> TTS
 ```
@@ -19,4 +19,4 @@ Severity: `info`, `warning`, `critical`, `recovery`. Info é normalmente visual;
 
 Eventos continuam no histórico mesmo quando cooldown, Critical Only ou Quiet Mode suprimem a fala. O overlay recebe apenas balão temporário; não ganha card permanente.
 
-Limite atual: o Sentinel conserva replay em memória de até 500 eventos da sessão. A NYRA persiste até a retenção configurada, padrão 30 dias.
+Limite atual: o Sentinel conserva replay em memória de até 500 eventos da sessão. A KAZUMI persiste até a retenção configurada, padrão 30 dias.

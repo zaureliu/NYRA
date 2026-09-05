@@ -25,7 +25,7 @@ from typing import Any
 
 from app.core.paths import DATA_ROOT, LOG_ROOT, PROJECT_ROOT
 
-logger = logging.getLogger("nyra.lifecycle")
+logger = logging.getLogger("kazumi.lifecycle")
 
 WATCHDOG_REQUESTS_DIR = DATA_ROOT / "watchdog-requests"
 INTENTIONAL_SHUTDOWN_FLAG = DATA_ROOT / "runtime-intentional-shutdown.json"
@@ -88,7 +88,7 @@ def peek_intentional_flag() -> dict[str, Any] | None:
 def _is_frozen() -> bool:
     import sys
 
-    return bool(getattr(sys, "frozen", False)) or os.environ.get("NYRA_FROZEN") == "1"
+    return bool(getattr(sys, "frozen", False)) or os.environ.get("KAZUMI_FROZEN") == "1"
 
 
 def disarm_watchdog(reason: str) -> bool:
@@ -114,7 +114,7 @@ def trigger_server_exit() -> None:
         except (OSError, ValueError):
             os._exit(0)
 
-    threading.Thread(target=_raise, name="nyra-power-exit", daemon=True).start()
+    threading.Thread(target=_raise, name="kazumi-power-exit", daemon=True).start()
 
 
 def parent_disappeared_shutdown() -> None:
@@ -151,19 +151,19 @@ def spawn_restart_launcher(timeout_seconds: int = 120) -> bool:
     """Agenda a nova sessão DEPOIS da saída desta (§13): porta livre → launcher.
 
     O script detached espera a porta 8000 liberar antes de chamar o launcher
-    oficial (start-nyra.ps1), que gera nova runtime_session_id.
+    oficial (start-kazumi.ps1), que gera nova runtime_session_id.
     """
     import subprocess
 
     if not RESTART_LAUNCHER.is_file():
-        # Fallback direto: PowerShell embutido espera porta livre e chama start-nyra.ps1.
+        # Fallback direto: PowerShell embutido espera porta livre e chama start-kazumi.ps1.
         command = [
             "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
             f"$deadline=(Get-Date).AddSeconds({timeout_seconds});"
             "while((Get-Date) -lt $deadline){"
             "if(-not (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)){break}"
             "Start-Sleep -Milliseconds 800};"
-            f"& '{PROJECT_ROOT / 'scripts' / 'start-nyra.ps1'}'",
+            f"& '{PROJECT_ROOT / 'scripts' / 'start-kazumi.ps1'}'",
         ]
     else:
         command = [

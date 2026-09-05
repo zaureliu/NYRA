@@ -1,4 +1,4 @@
-"""NYRA Emotional Presence Synchronization V1."""
+"""KAZUMI Emotional Presence Synchronization V1."""
 
 from app.emotional_presence.coordinator import EmotionPresentationCoordinator
 from app.emotional_presence.models import (

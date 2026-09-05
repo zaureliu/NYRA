@@ -4,22 +4,22 @@ import { invoke } from '@tauri-apps/api/core'
 import type { ActivityStatus, EmotionalState } from '../types'
 import { isTauriRuntime } from '../runtime/backend'
 
-export interface NyraEvent { type: string; payload: Record<string, unknown> }
+export interface KazumiEvent { type: string; payload: Record<string, unknown> }
 interface SocketHandlers {
   setStatus: (status: ActivityStatus) => void
   setState: (state: EmotionalState) => void
   setConnected: (connected: boolean) => void
   url?: string
-  onEvent?: (event: NyraEvent) => void
+  onEvent?: (event: KazumiEvent) => void
 }
 
 export const reconnectDelay = (attempt: number) => Math.min(30000, 1000 * (2 ** Math.min(attempt, 5)))
 
-export function useNyraSocket({ setStatus, setState, setConnected, url, onEvent }: SocketHandlers) {
+export function useKazumiSocket({ setStatus, setState, setConnected, url, onEvent }: SocketHandlers) {
   const reconnectRef = useRef<number | undefined>(undefined)
   const eventRef = useRef(onEvent); eventRef.current = onEvent
   useEffect(() => {
-    const handleEvent = (event: NyraEvent) => {
+    const handleEvent = (event: KazumiEvent) => {
       if (event.type === 'USER_SPEECH_RECEIVED') setStatus('LISTENING')
       if (event.type === 'USER_SPEECH_STARTED' || event.type === 'USER_SPEECH_PARTIAL') setStatus('LISTENING')
       if (event.type === 'USER_SPEECH_FINAL' || event.type === 'STT_STARTED') setStatus('TRANSCRIBING')
@@ -33,8 +33,8 @@ export function useNyraSocket({ setStatus, setState, setConnected, url, onEvent 
       if (event.type === 'REALTIME_STATUS_CHANGED' && event.payload.status && event.payload.status !== 'IDLE') setStatus(event.payload.status as ActivityStatus)
       if (event.type === 'CONVERSATION_STATE_CHANGED' && event.payload.state) setStatus(event.payload.state as ActivityStatus)
       if (event.type === 'STATE_CHANGED') setState(event.payload.current as EmotionalState)
-      if (event.type === 'NYRA_EMOTION_CHANGED' && event.payload.emotion) setState(event.payload.emotion as EmotionalState)
-      if (event.type === 'NYRA_RESPONSE' && event.payload.state) setState(event.payload.state as EmotionalState)
+      if (event.type === 'KAZUMI_EMOTION_CHANGED' && event.payload.emotion) setState(event.payload.emotion as EmotionalState)
+      if (event.type === 'KAZUMI_RESPONSE' && event.payload.state) setState(event.payload.state as EmotionalState)
       eventRef.current?.(event)
     }
 
@@ -44,8 +44,8 @@ export function useNyraSocket({ setStatus, setState, setConnected, url, onEvent 
       let disposeConnection = () => {}
       const setup = async () => {
         const disposers = await Promise.all([
-          listen<NyraEvent>('nyra-backend-event', (event) => handleEvent(event.payload)),
-          listen<boolean>('nyra-backend-connection', (event) => {
+          listen<KazumiEvent>('kazumi-backend-event', (event) => handleEvent(event.payload)),
+          listen<boolean>('kazumi-backend-connection', (event) => {
             if (stopped) return
             setConnected(event.payload)
             setStatus(event.payload ? 'IDLE' : 'OFFLINE')
@@ -84,7 +84,7 @@ export function useNyraSocket({ setStatus, setState, setConnected, url, onEvent 
       socket.onerror = () => socket?.close()
       socket.onmessage = (message) => {
         try {
-          handleEvent(JSON.parse(message.data) as NyraEvent)
+          handleEvent(JSON.parse(message.data) as KazumiEvent)
         } catch { /* eventos inválidos não derrubam a presença */ }
       }
     }

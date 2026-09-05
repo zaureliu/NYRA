@@ -1,4 +1,4 @@
-"""NYRA Desktop Application Control V1."""
+"""KAZUMI Desktop Application Control V1."""
 
 from app.desktop.apps import DesktopAppsRegistry, load_desktop_apps
 from app.desktop.control import DesktopController

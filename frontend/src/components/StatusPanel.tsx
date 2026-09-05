@@ -12,7 +12,7 @@ export function StatusPanel({ health, connected, status, state }: Props) {
   return (
     <section className="panel status-panel">
       <header className="panel-header"><span>SISTEMA</span><small>{health?.model ?? '—'}</small></header>
-      <div className="identity-status"><div><h1>NYRA</h1><p>HOMELAB INTELLIGENCE</p></div><span className={`online-pill ${connected ? '' : 'offline'}`}>{connected ? 'ONLINE' : 'OFFLINE'}</span></div>
+      <div className="identity-status"><div><h1>KAZUMI</h1><p>HOMELAB INTELLIGENCE</p></div><span className={`online-pill ${connected ? '' : 'offline'}`}>{connected ? 'ONLINE' : 'OFFLINE'}</span></div>
       <div className="state-grid"><div><label>ATIVIDADE</label><strong>{status}</strong></div><div><label>ESTADO</label><strong>{state.toUpperCase()}</strong></div></div>
       <ul className="service-list">{checks.map(([name, ok, override]) => <li key={name}><span>{name}</span><i className={ok ? 'ok' : 'fail'} />{override ?? (ok ? 'ATIVO' : 'INDISPONÍVEL')}</li>)}</ul>
     </section>

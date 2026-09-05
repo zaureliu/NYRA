@@ -56,7 +56,7 @@ def ha_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod, "PROFILES_PATH", tmp_path / "ha-profiles.json")
     monkeypatch.setattr(mod, "SECRETS_DIR", tmp_path / "secrets")
-    monkeypatch.delenv("NYRA_HOME_ASSISTANT_TOKEN", raising=False)
+    monkeypatch.delenv("KAZUMI_HOME_ASSISTANT_TOKEN", raising=False)
     broker = StubBroker()
     monkeypatch.setattr(mod, "_broker", lambda: broker)
     yield mod, broker, tmp_path
@@ -121,7 +121,7 @@ class TestHomeAssistantClientAuth:
         assert payload["state"] == "RUNNING"
         assert recorder[0]["path"] == "/api/config"
         assert recorder[0]["auth"] == "Bearer tok-1234567890"
-        assert recorder[0]["ua"] == "NYRA-Homelab/1.0"
+        assert recorder[0]["ua"] == "KAZUMI-Homelab/1.0"
 
     async def test_no_token_blocks_authenticated_endpoint(self, monkeypatch):
         """§9: sem token, /api/ não é contatado — erro local AUTH_MISSING."""
@@ -174,7 +174,7 @@ class TestHAProfilesRegression:
         mod, broker, _ = ha_env
         store = mod.HAProfileSecretStore("ha-vm")
         store.save("broker-token-1234567890")
-        monkeypatch.setenv("NYRA_HOME_ASSISTANT_TOKEN", "env-legacy-token")
+        monkeypatch.setenv("KAZUMI_HOME_ASSISTANT_TOKEN", "env-legacy-token")
         store.clear()
         settings = Settings(home_assistant_token="settings-legacy-token")
         assert store.load() == ""
@@ -260,7 +260,7 @@ class TestHAProfilesRegression:
         assert len(recorder) == 3  # /api/, /api/config, /api/states
         for item in recorder:
             assert item["auth"] == "Bearer tok-abcdef-123456"
-            assert item["ua"] == "NYRA-Homelab/1.0"  # nunca python-httpx default
+            assert item["ua"] == "KAZUMI-Homelab/1.0"  # nunca python-httpx default
 
     async def test_test_profile_auth_failed_on_401(self, ha_env, monkeypatch):
         mod, broker, _ = ha_env
@@ -304,7 +304,7 @@ class TestHAProfilesRegression:
     def test_settings_only_token_resolves(self, ha_env):
         """§7: token legado via .env/pydantic (só em settings) resolve.
 
-        Regressão real: pydantic carrega NYRA_HOME_ASSISTANT_TOKEN para
+        Regressão real: pydantic carrega KAZUMI_HOME_ASSISTANT_TOKEN para
         settings.home_assistant_token sem exportar para os.environ — a
         resolução precisa consultar settings como último recurso.
         """
@@ -469,7 +469,7 @@ class TestHomelabMonitorAuthorization:
             homelab_registry_path=tmp_path / "registry.yaml",
             homelab_default_timeout_seconds=2.0,
             homelab_overview_cache_seconds=0,
-            database_path=tmp_path / "nyra-test.db",
+            database_path=tmp_path / "kazumi-test.db",
             home_assistant_enabled=True,
             home_assistant_url="https://192.168.1.200",
             home_assistant_token=token,
@@ -506,7 +506,7 @@ class TestHomelabMonitorAuthorization:
 
         assert recorder, "monitor deveria ter feito requests"
         assert all(item["auth"] == "Bearer monitor-tok-9876" for item in recorder)
-        assert all(item["ua"] == "NYRA-Homelab/1.0" for item in recorder)
+        assert all(item["ua"] == "KAZUMI-Homelab/1.0" for item in recorder)
         assert health.integration_state.value in {"ONLINE"}
 
     async def test_monitor_without_token_makes_zero_ha_requests(self, monkeypatch, tmp_path):
@@ -692,7 +692,7 @@ class TestProxmoxConfig:
         assert status["state"] == "UNCONFIGURED"
 
         # 2) Credencial configurada, teste ainda não feito: DEGRADED.
-        broker.store["proxmox_api_token_id"] = "nyra@pve!ui"
+        broker.store["proxmox_api_token_id"] = "kazumi@pve!ui"
         broker.store["proxmox_api_token_secret"] = "NYRA_SECRET_LEAK_TEST_pmx"
         status = mod.public_status(services)
         assert status["state"] == "DEGRADED"
@@ -700,7 +700,7 @@ class TestProxmoxConfig:
     async def test_full_ready_flow(self, pm_env):
         mod, broker, _ = pm_env
         mod.save_config({"url": "https://192.168.1.2:8006", "enabled": True})
-        broker.store["proxmox_api_token_id"] = "nyra@pve!ui"
+        broker.store["proxmox_api_token_id"] = "kazumi@pve!ui"
         broker.store["proxmox_api_token_secret"] = "secret-value-ui"
         settings = Settings(proxmox_enabled=True)
         client = StubProxmoxRuntime()
@@ -714,7 +714,7 @@ class TestProxmoxConfig:
     async def test_test_connection_success_and_inventory_counts(self, pm_env):
         mod, broker, _ = pm_env
         mod.save_config({"url": "https://192.168.1.2:8006", "enabled": True})
-        broker.store["proxmox_api_token_id"] = "nyra@pve!ui"
+        broker.store["proxmox_api_token_id"] = "kazumi@pve!ui"
         broker.store["proxmox_api_token_secret"] = "secret-value-ui"
         settings = Settings(proxmox_enabled=True)
         client = StubProxmoxRuntime()
@@ -735,7 +735,7 @@ class TestProxmoxConfig:
     async def test_test_connection_auth_failed_recorded(self, pm_env):
         mod, broker, _ = pm_env
         mod.save_config({"url": "https://192.168.1.2:8006", "enabled": True})
-        broker.store["proxmox_api_token_id"] = "nyra@pve!ui"
+        broker.store["proxmox_api_token_id"] = "kazumi@pve!ui"
         broker.store["proxmox_api_token_secret"] = "wrong-secret"
         settings = Settings(proxmox_enabled=True)
         client = StubProxmoxRuntime()

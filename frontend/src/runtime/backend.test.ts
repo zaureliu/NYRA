@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }))
 
-import { backendPath, nyraFetch } from './backend'
+import { backendPath, kazumiFetch } from './backend'
 
 const tauriWindow = {
   __TAURI_INTERNALS__: {},
@@ -25,7 +25,7 @@ describe('transporte HTTP oficial da release', () => {
       body: Array.from(new TextEncoder().encode('{"detail":"busy"}')),
     })
 
-    const response = await nyraFetch('/api/tasks?limit=5', {
+    const response = await kazumiFetch('/api/tasks?limit=5', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: true }),
@@ -46,12 +46,12 @@ describe('transporte HTTP oficial da release', () => {
   it('não encaminha URL externa para a ponte Tauri', async () => {
     const native = vi.fn().mockResolvedValue(new Response('external'))
     vi.stubGlobal('fetch', native)
-    await nyraFetch('https://example.com/value')
+    await kazumiFetch('https://example.com/value')
     expect(native).toHaveBeenCalledOnce()
     expect(mocks.invoke).not.toHaveBeenCalled()
   })
 
-  it('reconhece somente rotas internas da NYRA', () => {
+  it('reconhece somente rotas internas da KAZUMI', () => {
     expect(backendPath('http://127.0.0.1:8000/api/health')).toBe('/api/health')
     expect(backendPath('/api/network-watch/metrics?minutes=5')).toBe('/api/network-watch/metrics?minutes=5')
     expect(backendPath('https://example.com/api/health')).toBeNull()

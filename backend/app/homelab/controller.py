@@ -49,7 +49,7 @@ from app.tools.shell_models import ShellRiskLevel
 from app.tools.remote_shell import RemoteShellService
 
 
-logger = logging.getLogger("nyra.homelab")
+logger = logging.getLogger("kazumi.homelab")
 
 _PROXMOX_PREFIX = "PROXMOX"
 
@@ -109,7 +109,7 @@ class HomelabControlPlane:
             return
         if self._loop_task is None or self._loop_task.done():
             self._stop.clear()
-            self._loop_task = asyncio.create_task(self._health_loop(), name="nyra-homelab-control-plane")
+            self._loop_task = asyncio.create_task(self._health_loop(), name="kazumi-homelab-control-plane")
 
     async def stop(self) -> None:
         self._stop.set()

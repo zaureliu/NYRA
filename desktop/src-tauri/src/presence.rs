@@ -1,6 +1,6 @@
 //! Desktop Presence lifecycle: deterministic visibility, off-screen protection.
 //!
-//! Presence is NYRA's avatar on the desktop, not a hidden tray utility. The
+//! Presence is KAZUMI's avatar on the desktop, not a hidden tray utility. The
 //! window-state plugin must never restore a hidden/off-screen state over a
 //! deliberate app launch, and every visibility transition flows through one
 //! state machine so the backend/UI always agree.
@@ -54,7 +54,7 @@ pub fn clamp_position_into_work_area(
 }
 
 pub fn show_on_start_enabled() -> bool {
-    std::env::var("NYRA_DESKTOP_PRESENCE_SHOW_ON_START")
+    std::env::var("KAZUMI_DESKTOP_PRESENCE_SHOW_ON_START")
         .map(|value| {
             !matches!(
                 value.trim().to_ascii_lowercase().as_str(),
@@ -106,7 +106,7 @@ mod tests {
     fn show_on_start_defaults_to_true_and_honors_false() {
         // O ambiente de teste pode ou não definir a variável; ambos os caminhos
         // precisam ser coerentes com o valor presente.
-        match std::env::var("NYRA_DESKTOP_PRESENCE_SHOW_ON_START") {
+        match std::env::var("KAZUMI_DESKTOP_PRESENCE_SHOW_ON_START") {
             Ok(value) => {
                 let enabled = show_on_start_enabled();
                 assert_eq!(

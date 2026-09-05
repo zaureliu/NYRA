@@ -3,7 +3,7 @@ host: 127.0.0.1
 backend_port: 8000
 frontend_port: 5173
 log_level: INFO
-database_path: data/nyra.db
+database_path: data/kazumi.db
 llm_provider: ollama
 llm_model: qwen3:8b
 ollama_url: http://127.0.0.1:11434
@@ -57,7 +57,7 @@ tts_speaking_rate: 0.97
 tts_fallback_provider: pyttsx3
 chatterbox_python: .venv-chatterbox/Scripts/python.exe
 chatterbox_device: cpu
-chatterbox_reference: data/voices/nyra_reference.wav
+chatterbox_reference: data/voices/kazumi_reference.wav
 microphone: default
 speaker: default
 audio_volume: 0.9
@@ -74,7 +74,7 @@ vad_speech_pad_ms: 250
 keep_debug_audio: false
 always_listening_enabled: true
 listening_mode: hands_free
-wake_word: Nyra
+wake_word: Kazumi
 hands_free_timeout_seconds: 120
 listening_guard_ms: 400
 listening_privacy_indicator: true
@@ -128,9 +128,9 @@ agent_max_identical_repeats: 2
 agent_max_consecutive_failures: 3
 selfdev_mode: AUTONOMOUS_SAFE
 selfdev_model: qwen3:8b
-selfdev_workspace: ../Nyra-Auto-Code
+selfdev_workspace: ../Kazumi-Auto-Code
 selfdev_canonical_root: .
-selfdev_public_snapshot: ../NYRA-GitHub-Public
+selfdev_public_snapshot: ../KAZUMI-GitHub-Public
 selfdev_run_when_idle: true
 selfdev_auto_publish_github: false
 selfdev_max_auto_promotions_per_day: 3

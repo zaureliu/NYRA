@@ -1,4 +1,4 @@
-# NYRA — Autonomous Computer Operator V2
+# KAZUMI — Autonomous Computer Operator V2
 
 Fase implementada sobre o estado validado do prompt8 (spec:
 `prompt9_autonomous_computer_operator_v2.md`). O Agent Controller continua
@@ -12,7 +12,7 @@ USER / VOICE
       ↓
 TURN CONTEXT
       ↓
-NYRA AGENT
+KAZUMI AGENT
       ↓
 OPERATOR V2 (backend/app/operator/)
       ├── vision.py            Screen Understanding (UIA-first, OCR fallback)
@@ -38,18 +38,18 @@ GROUNDING → VERIFY → REPORT
 
 | Env | Default | Consumer |
 |---|---|---|
-| `NYRA_VISION_ENABLED` | true | `OperatorV2Service` (vision tools/API) |
-| `NYRA_VISION_FRAME_TTL_SECONDS` | 45 | `FrameStore` |
-| `NYRA_VISION_DEBUG_KEEP_FRAMES` | false | persistência opt-in de PNG |
-| `NYRA_BROWSER_CONTROL_ENABLED` | true | browser v2 + adapters chrome/edge |
-| `NYRA_CREDENTIAL_BROKER_ENABLED` | true | broker + endpoints `/api/credentials` |
-| `NYRA_PERSISTENT_JOBS_ENABLED` | true | job manager + monitor |
-| `NYRA_WORKFLOW_ENGINE_ENABLED` | true | workflow engine/tools |
-| `NYRA_DESKTOP_WATCHER_ENABLED` | true | watcher |
-| `NYRA_WATCH_DEFAULT_TTL_SECONDS` | 300 | TTL default de watches |
-| `NYRA_WATCHDOG_ENABLED` | true | leitura do heartbeat no backend |
-| `NYRA_PROACTIVE_OPERATOR_ENABLED` | **false** | ProactiveOperator |
-| `NYRA_ELEVATED_SESSION_DEFAULT_TTL_SECONDS` | 300 | ElevatedSessionManager |
+| `KAZUMI_VISION_ENABLED` | true | `OperatorV2Service` (vision tools/API) |
+| `KAZUMI_VISION_FRAME_TTL_SECONDS` | 45 | `FrameStore` |
+| `KAZUMI_VISION_DEBUG_KEEP_FRAMES` | false | persistência opt-in de PNG |
+| `KAZUMI_BROWSER_CONTROL_ENABLED` | true | browser v2 + adapters chrome/edge |
+| `KAZUMI_CREDENTIAL_BROKER_ENABLED` | true | broker + endpoints `/api/credentials` |
+| `KAZUMI_PERSISTENT_JOBS_ENABLED` | true | job manager + monitor |
+| `KAZUMI_WORKFLOW_ENGINE_ENABLED` | true | workflow engine/tools |
+| `KAZUMI_DESKTOP_WATCHER_ENABLED` | true | watcher |
+| `KAZUMI_WATCH_DEFAULT_TTL_SECONDS` | 300 | TTL default de watches |
+| `KAZUMI_WATCHDOG_ENABLED` | true | leitura do heartbeat no backend |
+| `KAZUMI_PROACTIVE_OPERATOR_ENABLED` | **false** | ProactiveOperator |
+| `KAZUMI_ELEVATED_SESSION_DEFAULT_TTL_SECONDS` | 300 | ElevatedSessionManager |
 
 ## Ferramentas novas (LLM)
 
@@ -78,12 +78,12 @@ Workflows: `workflow_create/run/dry_run/list/delete`.
 
 ## Watchdog externo (Parte L)
 
-`watchdog/nyra_watchdog.py` — stdlib pura, sem Ollama. Checks: backend HTTP,
+`watchdog/kazumi_watchdog.py` — stdlib pura, sem Ollama. Checks: backend HTTP,
 frontend TCP, Ollama HTTP, processo desktop. Restart com limite por janela
 (crash-loop protection), heartbeat em `data/watchdog-heartbeat.json`
 (lido por `/api/watchdog/status`) e canal one-shot `data/watchdog-requests/`
 consumido pelo bridge do Runtime Supervisor. Log separado em
-`logs/watchdog.log`. Rodar com: `python watchdog\nyra_watchdog.py`.
+`logs/watchdog.log`. Rodar com: `python watchdog\kazumi_watchdog.py`.
 
 ## Garantias preservadas
 
@@ -92,4 +92,4 @@ classifier em todo comando, grounding ledger por task/turn, cross-context
 rejection, turn isolation intocado, redaction em toda saída, zero exposição
 de cookies/tokens/passwords ao LLM, nenhum conteúdo de clipboard em logs,
 eventos ou Agent Run (redigido antes do fingerprint persistente), componentes
-NYRA protegidos.
+KAZUMI protegidos.

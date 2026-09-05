@@ -1,4 +1,4 @@
-# AGENTS.md — Regras permanentes do NYRA
+# AGENTS.md — Regras permanentes do KAZUMI
 
 - Preserve a arquitetura modular: identidade, LLM, memória, eventos, voz, ferramentas, integrações e interface não devem ser fundidos em um arquivo monolítico.
 - O sistema é local-first. Serviços externos e envio de dados para nuvem são sempre opt-in.
@@ -7,7 +7,7 @@
 - Ferramentas têm schemas Pydantic explícitos e nível de risco. `system_shell` classifica cada comando como `READ_ONLY`, `LOW_RISK`, `ELEVATED`, `DESTRUCTIVE` ou `CRITICAL`; executáveis desconhecidos não são presumidos seguros.
 - Ações sensíveis exigem confirmação inequívoca do operador por approval de uso único. Nenhum texto gerado pelo LLM concede aprovação, desativa UAC, altera host key ou autoriza SSH para endereço fora do Trusted Host Registry.
 - Agent Runs devem respeitar limites, cancelamento, locks por recurso, detecção de repetição e verificação read-only após mudanças. Não persistir chain-of-thought.
-- NYRA sabe que é uma IA; nunca deve afirmar ser humana ou inventar experiências físicas.
+- KAZUMI sabe que é uma IA; nunca deve afirmar ser humana ou inventar experiências físicas.
 - Preserve a identidade descrita em `identity/`; mudanças de comportamento devem atualizar o system prompt e as bíblias correspondentes.
 - Não registrar secrets. Mascarar valores sensíveis em exceções e logs.
 - Atualize a documentação quando a arquitetura, instalação, configuração ou segurança mudar.

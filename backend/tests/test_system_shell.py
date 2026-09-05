@@ -34,7 +34,7 @@ class FakeExecutor(ShellExecutor):
 
 def shell_settings(tmp_path: Path, **overrides) -> Settings:
     values = dict(
-        database_path=tmp_path / "nyra-shell.db",
+        database_path=tmp_path / "kazumi-shell.db",
         shell_enabled=True,
         shell_default="powershell",
         shell_timeout_seconds=3,
@@ -59,10 +59,10 @@ async def service(tmp_path: Path, executor: ShellExecutor | None = None, **setti
 @pytest.mark.asyncio
 async def test_powershell_captures_unicode_stdout_and_zero_exit(tmp_path: Path):
     shell = await service(tmp_path)
-    result = await shell.execute("Write-Output 'Olá, NYRA ✓'", reason="teste unicode")
+    result = await shell.execute("Write-Output 'Olá, KAZUMI ✓'", reason="teste unicode")
     assert result["success"] is True
     assert result["exit_code"] == 0
-    assert "Olá, NYRA" in result["stdout"]
+    assert "Olá, KAZUMI" in result["stdout"]
     assert result["shell"] == "powershell"
     assert result["risk_level"] == "READ_ONLY"
 
@@ -81,10 +81,10 @@ async def test_powershell_decodes_legacy_windows_native_output(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_cmd_captures_stdout(tmp_path: Path):
     shell = await service(tmp_path)
-    result = await shell.execute("echo NYRA-CMD", shell="cmd")
+    result = await shell.execute("echo KAZUMI-CMD", shell="cmd")
     assert result["success"] is True
     assert result["exit_code"] == 0
-    assert "NYRA-CMD" in result["stdout"]
+    assert "KAZUMI-CMD" in result["stdout"]
 
 
 @pytest.mark.skipif(os.name != "nt" or ShellExecutor().resolve_executable("powershell") is None, reason="PowerShell is required")
@@ -148,7 +148,7 @@ async def test_valid_cwd_and_output_truncation_preserve_head_and_tail(tmp_path: 
     assert output["approval_granted"] is True
     assert output["stdout_truncated"] is True
     assert "HEAD" in output["stdout"] and "TAIL" in output["stdout"]
-    assert "NYRA OUTPUT TRUNCATED" in output["stdout"]
+    assert "KAZUMI OUTPUT TRUNCATED" in output["stdout"]
     assert len(output["stdout"]) <= 1_000
 
 

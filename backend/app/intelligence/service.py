@@ -108,8 +108,8 @@ class IntelligencePlatform:
         self.capabilities.register("local_vision_model", "Modelo local opcional para screenshots.", self.vision.status, dependencies=("vision",))
 
     def _register_diagnostics(self) -> None:
-        self.diagnostics.register("nyra", "intelligence_store", self._store_check)
-        self.diagnostics.register("nyra", "capability_registry", self._capability_check)
+        self.diagnostics.register("kazumi", "intelligence_store", self._store_check)
+        self.diagnostics.register("kazumi", "capability_registry", self._capability_check)
         self.diagnostics.register("ollama", "brain_health", self._brain_check)
         self.diagnostics.register("memory", "database", self._store_check)
         self.diagnostics.register("rag", "index", self._rag_check)
@@ -121,7 +121,7 @@ class IntelligencePlatform:
 
     def _register_tasks(self) -> None:
         async def diagnostic(parameters: dict[str, Any]) -> dict[str, Any]:
-            result = await self.diagnostics.run(str(parameters.get("domain") or "nyra"))
+            result = await self.diagnostics.run(str(parameters.get("domain") or "kazumi"))
             return {"success": True, "effect_verified": True, "diagnosis": result.model_dump(mode="json")}
 
         async def rag_ingest(parameters: dict[str, Any]) -> dict[str, Any]:
@@ -143,7 +143,7 @@ class IntelligencePlatform:
 
         async def memory_cycle() -> dict[str, Any]:
             created = await self.memory.write(MemoryWrite(
-                kind=MemoryKind.EPISODIC, content="NYRA evaluation marker for selective memory",
+                kind=MemoryKind.EPISODIC, content="KAZUMI evaluation marker for selective memory",
                 source="evaluation", category="evaluation", confidence=.95, relevance=.95,
                 sensitivity=Sensitivity.INTERNAL,
                 expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),

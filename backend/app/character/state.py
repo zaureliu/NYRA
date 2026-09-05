@@ -5,7 +5,7 @@ from enum import StrEnum
 
 from app.events import EventBus, EventType
 from app.memory import MemoryRepository
-from app.persona_runtime.models import NyraEmotion
+from app.persona_runtime.models import KazumiEmotion
 from app.persona_runtime.policy import EmotionSignal
 
 
@@ -88,9 +88,9 @@ class StateMachine:
             # Legacy presentation-only states are mapped to the supported
             # runtime vocabulary rather than creating a competing ontology.
             if target == EmotionalState.TIRED:
-                mapped = NyraEmotion.NEUTRAL
+                mapped = KazumiEmotion.NEUTRAL
             else:
-                mapped = NyraEmotion(target.value)
+                mapped = KazumiEmotion(target.value)
             current = await self.persona_runtime.apply_signal(EmotionSignal(
                 mapped, intensity, confidence, priority, reason,
             ))

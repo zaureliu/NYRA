@@ -1,8 +1,8 @@
 {
-  "name": "nyra-local",
+  "name": "kazumi-local",
   "private": true,
-  "version": "0.5.0",
-  "description": "Entrypoint local da NYRA; dependencias permanecem isoladas em frontend e desktop.",
+  "version": "0.6.0",
+  "description": "Entrypoint local da KAZUMI; dependencias permanecem isoladas em frontend e desktop.",
   "scripts": {
     "dev": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/bootstrap.ps1 -Mode Development",
     "start": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/bootstrap.ps1 -Mode Release",

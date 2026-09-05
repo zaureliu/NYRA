@@ -13,9 +13,9 @@ from app.tools.password_ssh_executor import AsyncSSHPasswordExecutor  # noqa: E4
 
 
 async def main() -> int:
-    address = os.environ.get("NYRA_E2E_OPENWRT_ADDRESS", "").strip()
+    address = os.environ.get("KAZUMI_E2E_OPENWRT_ADDRESS", "").strip()
     if not address:
-        print("RESULT=SKIP (configure NYRA_E2E_OPENWRT_ADDRESS locally)")
+        print("RESULT=SKIP (configure KAZUMI_E2E_OPENWRT_ADDRESS locally)")
         return 0
     settings = get_settings()
     config = load_config(settings)
@@ -26,7 +26,7 @@ async def main() -> int:
         return 2
 
     executor = AsyncSSHPasswordExecutor()
-    for label, command in (("echo", "echo NYRA_SSH_OK"), ("ubus", "ubus call system info")):
+    for label, command in (("echo", "echo KAZUMI_SSH_OK"), ("ubus", "ubus call system info")):
         raw = await executor.execute(
             host_id="gateway",
             address=address,

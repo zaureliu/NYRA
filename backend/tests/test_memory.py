@@ -8,7 +8,7 @@ from app.memory.repository import MemoryRepository
 
 @pytest.mark.asyncio
 async def test_memory_persists_and_fts_searches(tmp_path: Path):
-    path = tmp_path / "nyra.db"
+    path = tmp_path / "kazumi.db"
     repository = MemoryRepository(path)
     await repository.initialize()
     created = await repository.add(MemoryCreate(category=MemoryCategory.SEMANTIC, content="O Proxmox hospeda as máquinas virtuais", importance=8))
@@ -22,7 +22,7 @@ async def test_memory_persists_and_fts_searches(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_memory_delete_and_importance(tmp_path: Path):
-    repository = MemoryRepository(tmp_path / "nyra.db")
+    repository = MemoryRepository(tmp_path / "kazumi.db")
     await repository.initialize()
     created = await repository.add(MemoryCreate(category=MemoryCategory.PREFERENCES, content="Prefere respostas objetivas"))
     assert await repository.set_importance(created.category, created.id, 9)

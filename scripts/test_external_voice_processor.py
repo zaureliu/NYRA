@@ -47,7 +47,7 @@ async def health() -> dict:
 
         return JSONResponse({"healthy": False}, status_code=500)
     return {
-        "name": "nyra-test-voice-processor",
+        "name": "kazumi-test-voice-processor",
         "version": "0.1.0",
         "healthy": True,
         "capabilities": {

@@ -120,7 +120,7 @@ try {
             $stderrText = $proc.StandardError.ReadToEnd()
           }
         } else {
-          $job = Start-Job -ScriptBlock ([scriptblock]::Create("Set-Location `$env:NYRA_SESSION_CWD; " + $command))
+          $job = Start-Job -ScriptBlock ([scriptblock]::Create("Set-Location `$env:KAZUMI_SESSION_CWD; " + $command))
           if (-not (Wait-Job $job -Timeout $timeoutSec)) {
             $timedOut = $true
             Stop-Job $job
@@ -208,9 +208,9 @@ class ElevatedSessionManager:
             return decision
         self._sweep()
         user = _current_user()
-        pipe_name = f"nyra-elevated-{secrets.token_hex(8)}"
+        pipe_name = f"kazumi-elevated-{secrets.token_hex(8)}"
         token = secrets.token_urlsafe(32)
-        script_path = Path(tempfile.gettempdir()) / f"nyra-elevated-host-{pipe_name[-8:]}.ps1"
+        script_path = Path(tempfile.gettempdir()) / f"kazumi-elevated-host-{pipe_name[-8:]}.ps1"
         script_path.write_text(_HOST_SCRIPT_TEMPLATE, encoding="utf-8-sig")
         launch_ps = (
             "$p = Start-Process -FilePath powershell.exe "

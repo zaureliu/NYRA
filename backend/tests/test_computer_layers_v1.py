@@ -1,4 +1,4 @@
-"""nyra-7c — testes das 7 camadas de autonomia do computador.
+"""kazumi-7c — testes das 7 camadas de autonomia do computador.
 
 Cobre §98: perception, computer state, freshness, context references,
 intent normalization, text/voice convergence, operator integration,
@@ -223,10 +223,10 @@ def test_reference_turn_isolation():
 def test_perception_refresh_populates_compact_world_state():
     state = ComputerStateService(clock=lambda: 10.0, idle_fn=lambda: 3.0)
     state.refresh_from_perception({
-        "foreground_window": {"hwnd": 7, "process": "code.exe", "title": "NYRA"},
+        "foreground_window": {"hwnd": 7, "process": "code.exe", "title": "KAZUMI"},
         "windows": [{"process": "code.exe"}, {"process": "explorer.exe"}],
         "clipboard": {"type": "text", "length": 4},
-        "recent_files": [{"path": r"C:\proj\nyra\README.md", "mtime": 9.0}],
+        "recent_files": [{"path": r"C:\proj\kazumi\README.md", "mtime": 9.0}],
         "browser": {"available": False},
         "homelab": {"enabled": True},
         "network": {"enabled": False},
@@ -284,7 +284,7 @@ def test_voice_channel_same_normalized_intent():
     state = make_state()
     svc = IntentUnderstandingService(state)
     typed = svc.resolve("abre o Code", channel="text")
-    spoken = svc.resolve("Nyra, abre o code", channel="voice")
+    spoken = svc.resolve("Kazumi, abre o code", channel="voice")
     assert typed is not None and spoken is not None
     assert (typed.action, typed.target.casefold()) == (spoken.action, spoken.target.casefold())
 
@@ -292,14 +292,14 @@ def test_voice_channel_same_normalized_intent():
 def test_multistep_plan_structure():
     svc = IntentUnderstandingService(make_state())
     intent = svc.resolve(
-        "abre o bloco de notas, escreve 'NYRA teste' e salva como plano.txt")
+        "abre o bloco de notas, escreve 'KAZUMI teste' e salva como plano.txt")
     assert intent is not None and intent.action == "PLAN"
     capabilities = [step.capability for step in intent.plan]
     assert capabilities[0] == "open_app" and "type_text" in capabilities
     assert any(step.capability == "verify_file" for step in intent.plan)
     assert "close_app" not in capabilities
     closing = svc.resolve(
-        "abre o bloco de notas, escreve ‘NYRA teste’ e salva na área de trabalho "
+        "abre o bloco de notas, escreve ‘KAZUMI teste’ e salva na área de trabalho "
         "como plano.txt e fecha")
     assert closing is not None
     assert closing.arguments["close_after"] == "true"
@@ -678,8 +678,8 @@ def test_skill_versioning_keeps_history(tmp_path):
 def test_usage_alias_threshold_and_correction(tmp_path):
     usage = UsageLearningService(base_dir=tmp_path / "us")
     for _ in range(3):
-        usage.learn_alias_success("meu projeto", r"C:\proj\nyra", kind="folder")
-    assert usage.resolve_alias("meu projeto", kind="folder") == r"C:\proj\nyra"
+        usage.learn_alias_success("meu projeto", r"C:\proj\kazumi", kind="folder")
+    assert usage.resolve_alias("meu projeto", kind="folder") == r"C:\proj\kazumi"
     stat = usage.learn_alias_correction("meu projeto", r"C:\proj\outro", kind="folder")
     assert usage.resolve_alias("meu projeto", kind="folder") is None or \
         stat.canonical == r"C:\proj\outro"
@@ -690,7 +690,7 @@ def test_usage_privacy_no_content_in_event(tmp_path):
     usage.record(UsageEvent(intent="PLAN", target="bloco de notas",
                             verified_result=True))
     raw = (tmp_path / "us2" / "usage-events.jsonl").read_text(encoding="utf-8")
-    assert "NYRA teste" not in raw          # texto digitado nunca persistido
+    assert "KAZUMI teste" not in raw          # texto digitado nunca persistido
     data = json.loads(raw.splitlines()[-1])
     assert "arguments" not in data
 
@@ -704,9 +704,9 @@ def test_effect_verification_file_process_browser_and_unknown(tmp_path):
     assert verifier.verify_file(str(target), content_contains="verificado").verified is True
     assert verifier.verify_file(str(tmp_path / "missing.txt")).verified is False
     assert verifier.verify_process(pid=os.getpid()).verified is True
-    assert verifier.verify_browser_tab("nyra").verified is None
+    assert verifier.verify_browser_tab("kazumi").verified is None
     assert verifier.verify_browser_tab(
-        "nyra", tabs_fn=lambda: [{"url": "http://localhost/nyra", "title": "NYRA"}]
+        "kazumi", tabs_fn=lambda: [{"url": "http://localhost/kazumi", "title": "KAZUMI"}]
     ).verified is True
     unknown = verifier.from_operation_result(
         {"success": True, "effect_verified": None, "message": "executado"})

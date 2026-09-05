@@ -40,7 +40,7 @@ class EventIntelligenceEngine:
     async def start(self) -> None:
         await self.event_bus.subscribe(self.observe)
         if self._worker is None or self._worker.done():
-            self._worker = asyncio.create_task(self._run(), name="nyra-event-intelligence")
+            self._worker = asyncio.create_task(self._run(), name="kazumi-event-intelligence")
 
     async def stop(self) -> None:
         await self.event_bus.unsubscribe(self.observe)

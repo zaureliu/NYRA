@@ -42,7 +42,7 @@ from app.selfdev.validation import SecurityScanner, TestSelector as SelfDevTestS
 
 @pytest.fixture
 async def stack(tmp_path):
-    store = IntelligenceStore(tmp_path / "nyra.db")
+    store = IntelligenceStore(tmp_path / "kazumi.db")
     await store.initialize()
     memory = MemoryV2Service(store)
     knowledge_root = tmp_path / "knowledge"
@@ -101,8 +101,8 @@ async def test_rag_incremental_provenance_retrieval_and_path_boundary(stack, tmp
     _store, _memory, knowledge, root = stack
     source = root / "architecture.md"
     source.write_text("# Context Engine\nO budget protege instruções de sistema e seleciona provenance.", encoding="utf-8")
-    first = await knowledge.ingest(source, metadata={"project": "nyra"})
-    second = await knowledge.ingest(source, metadata={"project": "nyra"})
+    first = await knowledge.ingest(source, metadata={"project": "kazumi"})
+    second = await knowledge.ingest(source, metadata={"project": "kazumi"})
     assert first["status"] == "INDEXED"
     assert second["status"] == "UNCHANGED"
     hits = await knowledge.retrieve("budget instruções provenance")

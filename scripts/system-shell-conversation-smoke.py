@@ -27,12 +27,12 @@ from app.tools.system_shell import SystemShellService
 
 
 PROMPTS = [
-    "Nyra, pinga o gateway.",
-    "Nyra, vê se o Proxmox está online.",
-    "Nyra, qual processo está usando a porta 5173?",
-    "Nyra, mostra minhas interfaces de rede.",
-    "Nyra, verifica o status do Git desse projeto.",
-    "Nyra, pinga o Proxmox.",
+    "Kazumi, pinga o gateway.",
+    "Kazumi, vê se o Proxmox está online.",
+    "Kazumi, qual processo está usando a porta 5173?",
+    "Kazumi, mostra minhas interfaces de rede.",
+    "Kazumi, verifica o status do Git desse projeto.",
+    "Kazumi, pinga o Proxmox.",
 ]
 
 
@@ -45,7 +45,7 @@ async def main() -> None:
     registry = create_tool_registry(shell)
     llm = BrainManager(settings.ollama_url, settings.llm_model, settings.llm_timeout_seconds)
     results = []
-    with tempfile.TemporaryDirectory(prefix="nyra-shell-conversation-") as directory:
+    with tempfile.TemporaryDirectory(prefix="kazumi-shell-conversation-") as directory:
         memory = MemoryRepository(Path(directory) / "conversation.db")
         await memory.initialize()
         context = ContextBuilder(memory)

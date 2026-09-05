@@ -38,7 +38,7 @@ from app.operator.monitoring import (
 )
 
 
-logger = logging.getLogger("nyra.realtime")
+logger = logging.getLogger("kazumi.realtime")
 
 
 class RealtimeOrchestrator(ChatOrchestrator):
@@ -74,7 +74,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
         self.emotional_presence = None
         self.usb_devices = None
         self.turns = turn_registry or TurnRegistry()
-        # Universal Operator (nyra-full): injetado pelo main quando disponível.
+        # Universal Operator (kazumi-full): injetado pelo main quando disponível.
         self.desktop = None
 
     async def converse(
@@ -250,7 +250,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
             cancelled = await self.monitor_jobs.cancel_from_text(clean_text)
             direct_response = str(cancelled.get("message") or "Não consegui cancelar o monitoramento.")
             route_to_agent = False
-        # UNIVERSAL OPERATOR fast path (nyra-full §25/§41 / nyra-7c §75):
+        # UNIVERSAL OPERATOR fast path (kazumi-full §25/§41 / kazumi-7c §75):
         # pipeline unificado das 7 camadas quando presente; sem ele, o bloco
         # legacy abaixo mantém o comportamento anterior (compatibilidade).
         computer = getattr(self, "computer", None)
@@ -317,7 +317,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
             tool_context_ms = (time.perf_counter() - tools_started) * 1000
             self.telemetry.measure(response_id, "tools_ms", tool_context_ms)
         elif not fast_conversation:
-            if self.agent is not None and re.fullmatch(r"(?i)\s*(?:nyra[, ]+)?(?:para|pare|cancela|cancelar|interrompe|interromper)\s*[.!]?\s*", clean_text):
+            if self.agent is not None and re.fullmatch(r"(?i)\s*(?:kazumi[, ]+)?(?:para|pare|cancela|cancelar|interrompe|interromper)\s*[.!]?\s*", clean_text):
                 cancelled = await self.agent.cancel_active("operator_voice_or_chat")
                 direct_response = "Interrompi o Agent Run ativo." if cancelled else "Não há Agent Run ativo para interromper."
             if self.shell is not None and turn.approval_capable:
@@ -376,7 +376,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
                         runtime_parts.append("SKILL_RESULT[network_status]=" + json.dumps(result.model_dump(mode="json"), ensure_ascii=False))
                     except (KeyError, RuntimeError, ValueError):
                         pass
-            # nyra-full §13: listar arquivos ≠ abrir pasta. Diretriz determinística
+            # kazumi-full §13: listar arquivos ≠ abrir pasta. Diretriz determinística
             # para o domínio LLM (filesystem_list_files), sem sequestrar o pipeline.
             elif re.search(r"\b(?:mostra|mostre|liste|lista|quais)\b.{0,60}\barquivos?\b",
                            clean_text, re.IGNORECASE):
@@ -424,7 +424,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
                 speech_degraded,
                 {"technical": bool(route_to_agent or not fast_conversation)},
             ),
-            name=f"nyra-speech-stream-{response_id[:8]}",
+            name=f"kazumi-speech-stream-{response_id[:8]}",
         ) if synthesize and await self.tts.health() else None
         sentence_index = 0
         first_token = True
@@ -551,7 +551,7 @@ class RealtimeOrchestrator(ChatOrchestrator):
             ) if persona_runtime is not None else None
         )
         await self.event_bus.publish(
-            EventType.NYRA_RESPONSE, response_id=response_id, turn_id=turn_id, text=response,
+            EventType.KAZUMI_RESPONSE, response_id=response_id, turn_id=turn_id, text=response,
             display_text=prepared.display_text, speech_text=prepared.speech_text, state=state.value,
             emotion_intensity=emotion_plan.intensity,
             emotion_engine_supported=bool(getattr(provider_capabilities, "supports_emotion", False)),

@@ -1,4 +1,4 @@
-"""nyra-full V3 — regressão targeted do Universal Operator no runtime real.
+"""kazumi-full V3 — regressão targeted do Universal Operator no runtime real.
 
 Cobre:
   * §4   intents obrigatórias (open/close/minimize/maximize/restore/focus/switch,
@@ -108,7 +108,7 @@ def explorer_window(title: str = "Downloads", hwnd: int = 111) -> WindowInfo:
         ("abre Imagens", UniversalAction.OPEN_FOLDER, "imagens"),
         ("abre as músicas", UniversalAction.OPEN_FOLDER, "músicas"),
         ("abre o arquivo relatorio.pdf", UniversalAction.OPEN_FILE, "relatorio.pdf"),
-        ("abre nyra-open-test.txt", UniversalAction.OPEN_FILE, "nyra-open-test.txt"),
+        ("abre kazumi-open-test.txt", UniversalAction.OPEN_FILE, "kazumi-open-test.txt"),
         ("alterna para o code", UniversalAction.SWITCH_APP, "code"),
         ("alterna pro code", UniversalAction.SWITCH_APP, "code"),
         ("troca para a calculadora", UniversalAction.SWITCH_APP, "calculadora"),
@@ -163,7 +163,7 @@ FAST_PATH_COMMANDS = [
     "abre a pasta Downloads",
     "abre Documentos",
     "abre Imagens",
-    "abre o arquivo nyra-open-test.txt",
+    "abre o arquivo kazumi-open-test.txt",
 ]
 
 
@@ -266,7 +266,7 @@ async def test_open_file_resolves_and_verifies(controller: DesktopController, la
     from app.core.paths import DATA_ROOT
 
     fixture_dir = DATA_ROOT
-    fixture = fixture_dir / "nyra-open-test.txt"
+    fixture = fixture_dir / "kazumi-open-test.txt"
     if not fixture.is_file():
         fixture_dir.mkdir(parents=True, exist_ok=True)
         fixture.write_text("fixture", encoding="utf-8")
@@ -275,18 +275,18 @@ async def test_open_file_resolves_and_verifies(controller: DesktopController, la
 
         async def fake_open_file(path: str, *, app: str = ""):
             opened.append(path)
-            layer.add(WindowInfo(hwnd=222, pid=777, title="nyra-open-test - Bloco de notas",
+            layer.add(WindowInfo(hwnd=222, pid=777, title="kazumi-open-test - Bloco de notas",
                                  visible=True, process_name="notepad.exe"))
             return {"success": True, "message": "ok"}
 
         monkeypatch.setattr(controller, "open_file", fake_open_file)
         handled, reply = await controller.handle_universal(
-            parse_universal_intent("abre o arquivo nyra-open-test.txt"), turn_id="t-file"
+            parse_universal_intent("abre o arquivo kazumi-open-test.txt"), turn_id="t-file"
         )
 
         assert handled
         assert len(opened) == 1
-        assert Path(opened[0]).name == "nyra-open-test.txt"
+        assert Path(opened[0]).name == "kazumi-open-test.txt"
         assert "aberto no notepad" in reply
         assert controller.last_controlled is not None
         assert controller.last_controlled["kind"] == "file"

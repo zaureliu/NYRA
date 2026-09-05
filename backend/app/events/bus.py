@@ -11,6 +11,13 @@ from pydantic import BaseModel, Field
 
 
 class EventType(StrEnum):
+    @classmethod
+    def _missing_(cls, value):
+        # Persisted/legacy clients can send old names; only new names are emitted.
+        if isinstance(value, str) and value.startswith("NYRA_"):
+            return cls._value2member_map_.get("KAZUMI_" + value[5:])
+        return None
+
     USER_SPEECH_STARTED = "USER_SPEECH_STARTED"
     USER_SPEECH_PARTIAL = "USER_SPEECH_PARTIAL"
     USER_SPEECH_FINAL = "USER_SPEECH_FINAL"
@@ -22,7 +29,7 @@ class EventType(StrEnum):
     LLM_STREAM_STARTED = "LLM_STREAM_STARTED"
     LLM_TOKEN_RECEIVED = "LLM_TOKEN_RECEIVED"
     SENTENCE_READY = "SENTENCE_READY"
-    NYRA_RESPONSE = "NYRA_RESPONSE"
+    KAZUMI_RESPONSE = "KAZUMI_RESPONSE"
     TTS_STARTED = "TTS_STARTED"
     TTS_FINISHED = "TTS_FINISHED"
     TTS_CHUNK_STARTED = "TTS_CHUNK_STARTED"
@@ -117,10 +124,14 @@ class EventType(StrEnum):
     MEMORY_CREATED = "MEMORY_CREATED"
     STATE_CHANGED = "STATE_CHANGED"
     # Persona & Emotional Runtime V1: provider-neutral presentation state.
-    NYRA_EMOTION_CHANGED = "NYRA_EMOTION_CHANGED"
+    KAZUMI_EMOTION_CHANGED = "KAZUMI_EMOTION_CHANGED"
     # Emotional Presence Sync V1: presentation result only. Persona Runtime
     # remains the sole producer of emotional truth.
-    NYRA_EMOTIONAL_PRESENCE_SYNCED = "NYRA_EMOTIONAL_PRESENCE_SYNCED"
+    KAZUMI_EMOTIONAL_PRESENCE_SYNCED = "KAZUMI_EMOTIONAL_PRESENCE_SYNCED"
+    # One-release source aliases; values serialize with Kazumi branding.
+    NYRA_RESPONSE = KAZUMI_RESPONSE
+    NYRA_EMOTION_CHANGED = KAZUMI_EMOTION_CHANGED
+    NYRA_EMOTIONAL_PRESENCE_SYNCED = KAZUMI_EMOTIONAL_PRESENCE_SYNCED
     ERROR = "ERROR"
     # Operator V2 (prompt9)
     DESKTOP_EVENT = "DESKTOP_EVENT"
@@ -171,7 +182,7 @@ class EventType(StrEnum):
     USB_RESOLVER_FAILURE = "usb_resolver_failure"
     USB_EVENT_DUPLICATE_RATE = "usb_event_duplicate_rate"
     USB_UNKNOWN_RESOLUTION_FAILURE = "usb_unknown_resolution_failure"
-    # nyra-7c §16/§79: eventos normalizados das camadas de autonomia
+    # kazumi-7c §16/§79: eventos normalizados das camadas de autonomia
     COMPUTER_WINDOW_FOREGROUND_CHANGED = "computer.window.foreground_changed"
     COMPUTER_WINDOW_OPENED = "computer.window.opened"
     COMPUTER_WINDOW_CLOSED = "computer.window.closed"
@@ -194,7 +205,7 @@ class EventType(StrEnum):
     SKILL_LEARNED = "skill.learned"
     SKILL_EXECUTED = "skill.executed"
     SKILL_DEGRADED = "skill.degraded"
-    # nyra-7c §103: sinais passivos para um Self-Development futuro. Estes
+    # kazumi-7c §103: sinais passivos para um Self-Development futuro. Estes
     # eventos não disparam correção, patch ou execução; são só telemetria.
     COMPUTER_PERCEPTION_FAILURE = "perception_failure"
     COMPUTER_INTENT_RESOLUTION_FAILURE = "intent_resolution_failure"

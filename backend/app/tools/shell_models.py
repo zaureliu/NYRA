@@ -50,7 +50,7 @@ class ShellExecuteInput(BaseModel):
     working_directory: str | None = Field(
         default=None,
         max_length=2_048,
-        description="Diretório local existente. O padrão é a raiz do projeto NYRA.",
+        description="Diretório local existente. O padrão é a raiz do projeto KAZUMI.",
     )
     approval_id: str | None = Field(
         default=None,
@@ -63,7 +63,7 @@ class ShellExecuteInput(BaseModel):
         description=(
             "Quando true, reenvia o comando já aprovado através do Elevated Operations Broker "
             "com -Verb RunAs. O Windows exibe o consentimento UAC ao operador; nenhuma senha é "
-            "coletada ou armazenada pela NYRA."
+            "coletada ou armazenada pela KAZUMI."
         ),
     )
     reason: str = Field(

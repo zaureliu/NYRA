@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 import yaml
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, EnvSettingsSource, DotEnvSettingsSource
 
 from app.core.paths import CONFIG_ROOT, DATA_ROOT, PROJECT_ROOT, resolve_packaged_path
 from app.speech.recognition.models import STTSettings
@@ -31,8 +31,15 @@ def _yaml_defaults() -> dict[str, Any]:
 
 
 class Settings(BaseSettings):
+    @classmethod
+    def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
+        # Legacy configuration remains readable for one migration release.
+        return (init_settings, env_settings, dotenv_settings,
+                EnvSettingsSource(settings_cls, env_prefix="NYRA_"),
+                DotEnvSettingsSource(settings_cls, env_prefix="NYRA_"), file_secret_settings)
+
     model_config = SettingsConfigDict(
-        env_prefix="NYRA_",
+        env_prefix="KAZUMI_",
         env_file=str(PROJECT_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
@@ -43,7 +50,7 @@ class Settings(BaseSettings):
     backend_port: int = Field(8000, ge=1, le=65535)
     frontend_port: int = Field(5173, ge=1, le=65535)
     log_level: str = "INFO"
-    database_path: Path = Path("data/nyra.db")
+    database_path: Path = Path("data/kazumi.db")
 
     llm_provider: Literal["ollama", "mock"] = "ollama"
     llm_model: str = "qwen3:8b"
@@ -91,7 +98,7 @@ class Settings(BaseSettings):
     tts_fallback_provider: Literal["pyttsx3", "edge_tts", "disabled"] = "pyttsx3"
     chatterbox_python: Path = Path(".venv-chatterbox/Scripts/python.exe")
     chatterbox_device: Literal["cpu", "cuda", "mps"] = "cpu"
-    chatterbox_reference: Path = Path("data/voices/nyra_reference.wav")
+    chatterbox_reference: Path = Path("data/voices/kazumi_reference.wav")
     chatterbox_model_id: str = "ResembleAI/chatterbox"
     chatterbox_ptbr_model_id: str = "ResembleAI/Chatterbox-Multilingual-pt-br"
     chatterbox_resident: bool = True
@@ -125,7 +132,12 @@ class Settings(BaseSettings):
 
     always_listening_enabled: bool = True
     listening_mode: Literal["push_to_talk", "wake_word", "hands_free"] = "hands_free"
-    wake_word: str = "Nyra"
+    wake_word: str = "kazumi"
+
+    @field_validator("wake_word", mode="before")
+    @classmethod
+    def migrate_default_wake_word(cls, value):
+        return "kazumi" if isinstance(value, str) and value.strip().casefold() == "nyra" else value
     hands_free_timeout_seconds: int = Field(120, ge=15, le=3600)
     listening_guard_ms: int = Field(400, ge=100, le=3000)
     listening_privacy_indicator: bool = True
@@ -194,9 +206,9 @@ class Settings(BaseSettings):
     # Self-Development Engine. Publicação automática permanece opt-in.
     selfdev_mode: Literal["OFF", "OBSERVE_ONLY", "AUTONOMOUS_SAFE", "AUTONOMOUS_ADVANCED"] = "AUTONOMOUS_SAFE"
     selfdev_model: str = "qwen3:8b"
-    selfdev_workspace: Path = PROJECT_ROOT.parent / "Nyra-Auto-Code"
+    selfdev_workspace: Path = PROJECT_ROOT.parent / "Kazumi-Auto-Code"
     selfdev_canonical_root: Path = PROJECT_ROOT
-    selfdev_public_snapshot: Path = PROJECT_ROOT.parent / "NYRA-GitHub-Public"
+    selfdev_public_snapshot: Path = PROJECT_ROOT.parent / "KAZUMI-GitHub-Public"
     selfdev_run_when_idle: bool = True
     selfdev_auto_publish_github: bool = False
     selfdev_max_auto_promotions_per_day: int = Field(3, ge=0, le=20)
@@ -400,22 +412,24 @@ class Settings(BaseSettings):
                 "tts_voice": "en-US-AvaMultilingualNeural",
                 "tts_voice_identity_version": "ava-v1",
             })
+        from app.brand_compat import preferences
+        values = preferences(values)
         values.update(overrides)
         # Deployment environment (.env/process) wins over persisted UI choices,
         # which win over YAML.  Removing those keys lets BaseSettings parse and
-        # validate NYRA_* values instead of silently masking them with kwargs.
+        # validate KAZUMI_* values instead of silently masking them with kwargs.
         env_names = {name.casefold() for name in os.environ}
         env_path = PROJECT_ROOT / ".env"
         if env_path.is_file():
             try:
                 for line in env_path.read_text(encoding="utf-8-sig").splitlines():
-                    match = re.match(r"\s*(?:export\s+)?(NYRA_[A-Za-z0-9_]+)\s*=", line)
+                    match = re.match(r"\s*(?:export\s+)?((?:KAZUMI|NYRA)_[A-Za-z0-9_]+)\s*=", line)
                     if match:
                         env_names.add(match.group(1).casefold())
             except OSError:
                 pass
         for key in tuple(values):
-            if key not in overrides and f"NYRA_{key}".casefold() in env_names:
+            if key not in overrides and ({f"KAZUMI_{key}".casefold(), f"NYRA_{key}".casefold()} & env_names):
                 values.pop(key, None)
         return cls(**values)
 

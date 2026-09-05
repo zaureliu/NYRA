@@ -10,13 +10,13 @@ Resolução de credencial ÚNICA (prompt11_1 §6/§7): o fluxo autoritativo é
 
     perfil ativo → credential_id → Credential Broker → Bearer
 
-com migração silenciosa de configuração legada (.env ``NYRA_HOME_ASSISTANT_TOKEN``
+com migração silenciosa de configuração legada (.env ``KAZUMI_HOME_ASSISTANT_TOKEN``
 e arquivo por-perfil em ``data/secrets``): o valor funcional é reutilizado,
 nunca apagado, nunca impresso e nunca gerado automaticamente.
 
 Regressão corrigida (§4-§16): probes NUNCA contatam endpoints autenticados sem
 Bearer; sem token o estado é UNCONFIGURED; 401/403 viram AUTH_FAILED; o User-Agent
-padrão ``python-httpx`` foi substituído pelo UA identificado da NYRA em todas as
+padrão ``python-httpx`` foi substituído pelo UA identificado da KAZUMI em todas as
 chamadas. ``READY`` exige reachable + authenticated validados por teste real.
 """
 
@@ -35,15 +35,15 @@ import httpx
 from app.core.paths import DATA_ROOT
 from app.integrations.base import IntegrationError, require_secure_credential_transport
 
-logger = logging.getLogger("nyra.ha_profiles")
+logger = logging.getLogger("kazumi.ha_profiles")
 
 PROFILES_PATH = DATA_ROOT / "ha-profiles.json"
 SECRETS_DIR = DATA_ROOT / "secrets"
 
-USER_AGENT = "NYRA-Homelab/1.0"
+USER_AGENT = "KAZUMI-Homelab/1.0"
 _BROKER_CREDENTIAL_PREFIX = "homeassistant_token_"
 # Janela após a qual um último sucesso deixa de ser considerado fresco (STALE).
-_STALE_AFTER_SECONDS = float(os.environ.get("NYRA_HA_STATE_STALE_SECONDS", "900"))
+_STALE_AFTER_SECONDS = float(os.environ.get("KAZUMI_HA_STATE_STALE_SECONDS", "900"))
 
 DEFAULT_PROFILES: list[dict[str, Any]] = [
     {
@@ -141,7 +141,7 @@ class HAProfileSecretStore:
     def load(self) -> str:
         if self._tombstone_path().is_file():
             return ""
-        env_value = (os.environ.get("NYRA_HOME_ASSISTANT_TOKEN") or "").strip()
+        env_value = (os.environ.get("KAZUMI_HOME_ASSISTANT_TOKEN") or "").strip()
         if env_value:
             return env_value
         try:
@@ -466,7 +466,7 @@ def set_profile_token(services: Any, profile_id: str, token: str) -> dict[str, A
 
 # ---------------------------------------------------------------------------
 # Test de conexão (§21/§82): API / Core version / state / entity count / latency
-# Regressão §5/§8: UA identificado da NYRA em TODAS as chamadas; sem token,
+# Regressão §5/§8: UA identificado da KAZUMI em TODAS as chamadas; sem token,
 # endpoints autenticados NÃO são contatados (estado UNCONFIGURED, §9).
 # ---------------------------------------------------------------------------
 

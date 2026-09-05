@@ -94,14 +94,14 @@ class TestOpenWrtConfigPersistence:
     def test_persistence_survives_restart(self, ow_env):
         """§59: campos não secretos persistem e são recarregados."""
         mod, _, _ = ow_env
-        mod.save_config({"url": "http://192.168.1.1", "username": "nyra"})
+        mod.save_config({"url": "http://192.168.1.1", "username": "kazumi"})
         config = mod.load_config(Settings(openwrt_url="", openwrt_username=""))
         assert config["url"] == "http://192.168.1.1"
-        assert config["username"] == "nyra"
+        assert config["username"] == "kazumi"
 
     def test_partial_save_never_wipes_saved_fields(self, ow_env):
         mod, _, _ = ow_env
-        mod.save_config({"url": "http://192.168.1.1", "username": "nyra"})
+        mod.save_config({"url": "http://192.168.1.1", "username": "kazumi"})
         mod.save_config({"username": "root"})
         config = mod.load_config(Settings())
         assert config["url"] == "http://192.168.1.1"  # preservado
@@ -215,13 +215,13 @@ class TestOpenWrtStates:
 
     def test_apply_to_runtime_mirrors_attributes(self, ow_env):
         mod, broker, _ = ow_env
-        mod.save_config({"url": "http://192.168.9.9", "username": "nyra"})
+        mod.save_config({"url": "http://192.168.9.9", "username": "kazumi"})
         broker.store["openwrt_ssh_password"] = "s3cret!"
         settings = Settings()
         summary = mod.apply_to_runtime(make_ow_services(settings))
         assert summary["applied"] is True
         assert settings.openwrt_url == "http://192.168.9.9"
-        assert settings.openwrt_username == "nyra"
+        assert settings.openwrt_username == "kazumi"
         assert settings.openwrt_password == "s3cret!"
 
 

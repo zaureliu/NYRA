@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class NyraAppWindowCapture {
+public static class KazumiAppWindowCapture {
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
@@ -19,11 +19,11 @@ Add-Type -AssemblyName System.Drawing
 
 $process = Get-Process -Name $ProcessName -ErrorAction Stop | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
 if (-not $process) { throw "Janela do processo $ProcessName nao encontrada." }
-[void][NyraAppWindowCapture]::ShowWindow($process.MainWindowHandle, 9)
-[void][NyraAppWindowCapture]::SetForegroundWindow($process.MainWindowHandle)
+[void][KazumiAppWindowCapture]::ShowWindow($process.MainWindowHandle, 9)
+[void][KazumiAppWindowCapture]::SetForegroundWindow($process.MainWindowHandle)
 Start-Sleep -Milliseconds 350
-$rect = New-Object NyraAppWindowCapture+Rect
-if (-not [NyraAppWindowCapture]::GetWindowRect($process.MainWindowHandle, [ref]$rect)) { throw 'Nao foi possivel obter os limites da janela.' }
+$rect = New-Object KazumiAppWindowCapture+Rect
+if (-not [KazumiAppWindowCapture]::GetWindowRect($process.MainWindowHandle, [ref]$rect)) { throw 'Nao foi possivel obter os limites da janela.' }
 $width = $rect.Right - $rect.Left; $height = $rect.Bottom - $rect.Top
 if ($width -lt 1 -or $height -lt 1) { throw 'Janela sem area visivel.' }
 $directory = Split-Path -Parent $Output

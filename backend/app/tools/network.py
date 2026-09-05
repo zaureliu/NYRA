@@ -106,7 +106,7 @@ async def check_http_service(url: str, timeout_seconds: float) -> dict[str, Any]
     started = time.perf_counter()
     async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
         try:
-            response = await client.get(url, headers={"User-Agent": "NYRA-Homelab-Monitor/0.1"})
+            response = await client.get(url, headers={"User-Agent": "KAZUMI-Homelab-Monitor/0.1"})
             return {
                 "url": url,
                 "online": response.status_code < 500,

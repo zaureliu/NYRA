@@ -12,7 +12,7 @@ Coleta: 2026-08-19.
 | VTube Studio | instalado oficialmente via Steam |
 | API local 8001 no checkpoint | fechada; permaneceu fechada durante teste real com VTS aberto, indicando `Allow Plugin API access` desativado |
 | Live2D Cubism Editor | não detectado |
-| PSD NYRA | ausente |
+| PSD KAZUMI | ausente |
 | Assets atuais | PNG/SVG achatados |
 | Classificação | `FLATTENED_ONLY` / `WAITING_FOR_LAYERED_ART` |
 

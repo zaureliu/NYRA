@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::{backend_manager, spout_presence, stop_global_cursor_tracker};
 
-pub const TRAY_ID: &str = "nyra-tray";
+pub const TRAY_ID: &str = "kazumi-tray";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShutdownReason {
@@ -50,7 +50,7 @@ pub fn request_app_shutdown(app: AppHandle, reason: ShutdownReason) -> bool {
 
     let shutdown_app = app.clone();
     let spawned = std::thread::Builder::new()
-        .name("nyra-shutdown".into())
+        .name("kazumi-shutdown".into())
         .spawn(move || {
             stop_global_cursor_tracker();
             shutdown_app.state::<crate::stt_transport::SttBridge>().stop();

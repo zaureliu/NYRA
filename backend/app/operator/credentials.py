@@ -30,11 +30,12 @@ from app.core.paths import DATA_ROOT
 from app.tools.redaction import redact_secrets  # noqa: F401 - reexportado para consumidores do broker
 from app.tools.shell_models import ShellRiskLevel
 
-logger = logging.getLogger("nyra.operator.credentials")
+logger = logging.getLogger("kazumi.operator.credentials")
 
 _CRED_TYPE_GENERIC = 1
 _CRED_PERSIST_LOCAL_MACHINE = 2
-_TARGET_PREFIX = "NYRA_CRED:"
+_TARGET_PREFIX = "KAZUMI_CRED:"
+_LEGACY_TARGET_PREFIX = "NYRA_CRED:"  # one-release WinCred migration compatibility
 _VAULT_FILE = DATA_ROOT / "credentials-vault.bin"
 _DPAPI_ENTROPY = b"NYRA::operator::credential-broker::v2"
 
@@ -91,7 +92,7 @@ def _cred_write(target: str, secret: bytes, comment: str, username: str) -> None
         AttributeCount=0,
         Attributes=None,
         TargetAlias=None,
-        UserName=username or "nyra",
+        UserName=username or "kazumi",
     )
     advapi32 = ctypes.windll.advapi32
     if not advapi32.CredWriteW(ctypes.byref(credential), 0):
@@ -132,7 +133,7 @@ def _dpapi_protect(data: bytes) -> bytes:
     out = _CRYPT_DATA_BLOB()
     ok = crypt32.CryptProtectData(
         ctypes.byref(_CRYPT_DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data, len(data)), ctypes.POINTER(ctypes.c_byte)))),
-        "nyra-credential",
+        "kazumi-credential",
         ctypes.byref(entropy_blob),
         None,
         None,
@@ -180,7 +181,7 @@ class CredentialVault:
         target = f"{_TARGET_PREFIX}{credential_id}"
         if self.backend == "windows_credential_manager":
             try:
-                _cred_write(target, payload, f"NYRA broker ({metadata.get('kind', 'generic')})", "nyra")
+                _cred_write(target, payload, f"KAZUMI broker ({metadata.get('kind', 'generic')})", "kazumi")
                 return
             except OSError as exc:
                 logger.warning("wincred write failed, falling back to DPAPI file: %s", exc)
@@ -192,6 +193,15 @@ class CredentialVault:
         raw: bytes | None = None
         if self.backend == "windows_credential_manager":
             raw = _cred_read(f"{_TARGET_PREFIX}{credential_id}")
+            if raw is None:
+                legacy = _cred_read(f"{_LEGACY_TARGET_PREFIX}{credential_id}")
+                if legacy is not None:
+                    # Copy inside the OS vault, verify bytes, retain legacy for
+                    # rollback. No plaintext export and no credential logging.
+                    _cred_write(f"{_TARGET_PREFIX}{credential_id}", legacy, "Kazumi migrated credential", "kazumi")
+                    raw = _cred_read(f"{_TARGET_PREFIX}{credential_id}")
+                    if raw != legacy:
+                        raise CredentialError("MIGRATION_VERIFY_FAILED", "Credential migration verification failed")
         if raw is None and _VAULT_FILE.exists():
             raw = self._read_dpapi(credential_id)
         if raw is None:
@@ -208,6 +218,7 @@ class CredentialVault:
         removed = False
         if self.backend == "windows_credential_manager":
             removed = _cred_delete(f"{_TARGET_PREFIX}{credential_id}")
+            removed = _cred_delete(f"{_LEGACY_TARGET_PREFIX}{credential_id}") or removed
         if _VAULT_FILE.exists():
             entries = self._load_dpapi_store()
             if credential_id in entries:

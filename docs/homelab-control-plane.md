@@ -1,4 +1,4 @@
-# NYRA Homelab Control Plane V1
+# KAZUMI Homelab Control Plane V1
 
 Camada central para **observar, diagnosticar e controlar** o homelab real como recursos estruturados — não mais como IPs onde se executa comandos soltos.
 
@@ -7,7 +7,7 @@ Camada central para **observar, diagnosticar e controlar** o homelab real como r
 ```text
                     USER
                       ↓
-                   NYRA LLM
+                   KAZUMI LLM
                       ↓
               AGENT CONTROLLER (existente)
                       ↓
@@ -21,7 +21,7 @@ Camada central para **observar, diagnosticar e controlar** o homelab real como r
         ├─ Home Assistant  REST API (long-lived token)
         ├─ OpenWrt ....... Trusted SSH (remote_shell existente)
         ├─ Linux ......... Trusted SSH
-        └─ Windows ....... método remoto declarado (ssh/winrm/NYRA Remote Node)
+        └─ Windows ....... método remoto declarado (ssh/winrm/KAZUMI Remote Node)
 
  Ações: ACT → VERIFY → REPORT  (grounding obrigatório)
 ```
@@ -45,7 +45,7 @@ O Control Plane **não é um segundo agente**: o AgentController continua decidi
 
 ## Unified Host Registry
 
-Fonte única: arquivo local definido por `NYRA_HOMELAB_REGISTRY_PATH` (default: `config/homelab_hosts.local.yaml`). O template público é `config/homelab_hosts.example.yaml`.
+Fonte única: arquivo local definido por `KAZUMI_HOMELAB_REGISTRY_PATH` (default: `config/homelab_hosts.local.yaml`). O template público é `config/homelab_hosts.example.yaml`.
 
 - Aliases centralizados, case-insensitive (`roteador` → openwrt; `ha` → home_assistant).
 - **Nenhuma credencial no registry**: `credentials_profile` aponta para settings (`settings.proxmox_token`, `settings.home_assistant_token`) ou para o Trusted Host Registry SSH local.
@@ -63,7 +63,7 @@ O probe de reachability de hosts com API usa o mesmo token da integração via `
 
 Read-only: `homelab_overview`, `homelab_list_hosts`, `homelab_host_status`, `proxmox_node_status`, `proxmox_list_vms`, `proxmox_vm_status`, `proxmox_storage_status`, `proxmox_cluster_status`, `proxmox_recent_tasks`, `ha_status`, `ha_list_entities`, `ha_get_state`, `openwrt_status`, `openwrt_interfaces`, `openwrt_wifi_status`, `openwrt_logs`, `host_metrics`, `host_services`.
 
-Ações de homelab ficam desabilitadas por padrão (`NYRA_HOMELAB_MUTATIONS_ENABLED=false`). Após opt-in explícito, toda mutação — inclusive `proxmox_vm_start` e chamadas de serviço do Home Assistant — exige approval de uso único vinculado ao recurso e à ação.
+Ações de homelab ficam desabilitadas por padrão (`KAZUMI_HOMELAB_MUTATIONS_ENABLED=false`). Após opt-in explícito, toda mutação — inclusive `proxmox_vm_start` e chamadas de serviço do Home Assistant — exige approval de uso único vinculado ao recurso e à ação.
 
 - Toda mutação retorna `effect_verified` após reconsultar o recurso.
 - Approval usa o mesmo `ShellApprovalGate` único (`APPROVAL_REQUIRED` + `approval_id`; o run do Agent pausa em WAITING_APPROVAL).
@@ -79,7 +79,7 @@ Ações de homelab ficam desabilitadas por padrão (`NYRA_HOMELAB_MUTATIONS_ENAB
 
 ## Eventos
 
-`HOMELAB_HOST_ONLINE/OFFLINE/DEGRADED`, `PROXMOX_VM_CHANGED`, `PROXMOX_TASK_COMPLETED/FAILED`, `HOME_ASSISTANT_ACTION_VERIFIED` — publicados apenas em transição de estado, com cooldown (`NYRA_EVENT_COOLDOWN_SECONDS`). O loop interno roda a cada `NYRA_HOMELAB_POLL_INTERVAL` (≥30s), sem LLM.
+`HOMELAB_HOST_ONLINE/OFFLINE/DEGRADED`, `PROXMOX_VM_CHANGED`, `PROXMOX_TASK_COMPLETED/FAILED`, `HOME_ASSISTANT_ACTION_VERIFIED` — publicados apenas em transição de estado, com cooldown (`KAZUMI_EVENT_COOLDOWN_SECONDS`). O loop interno roda a cada `KAZUMI_HOMELAB_POLL_INTERVAL` (≥30s), sem LLM.
 
 ## API HTTP
 
@@ -100,19 +100,19 @@ Painel enxuto `HomelabPanel` (dashboard/integrações): estado dos 4 hosts com c
 ## Configuração
 
 ```env
-NYRA_HOMELAB_ENABLED=true
-NYRA_HOMELAB_MUTATIONS_ENABLED=false
-NYRA_HOMELAB_REGISTRY_PATH=config/homelab_hosts.local.yaml
-NYRA_HOMELAB_DEFAULT_TIMEOUT_SECONDS=5
-NYRA_HOMELAB_OVERVIEW_CACHE_SECONDS=5
-NYRA_HOMELAB_OFFLINE_FAILURE_THRESHOLD=2
-NYRA_PROXMOX_ENABLED=true
-NYRA_PROXMOX_URL=https://proxmox.example.invalid:8006
-NYRA_PROXMOX_VERIFY_SSL=true
-NYRA_HOME_ASSISTANT_URL=https://home-assistant.local   # HTTP com Bearer só em loopback
+KAZUMI_HOMELAB_ENABLED=true
+KAZUMI_HOMELAB_MUTATIONS_ENABLED=false
+KAZUMI_HOMELAB_REGISTRY_PATH=config/homelab_hosts.local.yaml
+KAZUMI_HOMELAB_DEFAULT_TIMEOUT_SECONDS=5
+KAZUMI_HOMELAB_OVERVIEW_CACHE_SECONDS=5
+KAZUMI_HOMELAB_OFFLINE_FAILURE_THRESHOLD=2
+KAZUMI_PROXMOX_ENABLED=true
+KAZUMI_PROXMOX_URL=https://proxmox.example.invalid:8006
+KAZUMI_PROXMOX_VERIFY_SSL=true
+KAZUMI_HOME_ASSISTANT_URL=https://home-assistant.local   # HTTP com Bearer só em loopback
 ```
 
-Secrets separados (`NYRA_PROXMOX_TOKEN_ID/SECRET`, `NYRA_HOME_ASSISTANT_TOKEN`) — mascarados em `/api/settings` e nunca logados.
+Secrets separados (`KAZUMI_PROXMOX_TOKEN_ID/SECRET`, `KAZUMI_HOME_ASSISTANT_TOKEN`) — mascarados em `/api/settings` e nunca logados.
 
 ## OpenWrt
 
@@ -120,4 +120,4 @@ Reutiliza o Trusted SSH existente (`remote_shell`): mesmos known_hosts, usuário
 
 ## Windows / DC1
 
-Sem método remoto configurado, o DC1 é tratado honestamente como *network-reachable host* (`CAPABILITY_UNAVAILABLE` ao pedir métricas). Nada de WinRM/firewall/TrustedHosts é alterado automaticamente. Métodos futuros: `ssh`, `winrm`, `nyra_remote_node` (campo `metadata.remote_method`).
+Sem método remoto configurado, o DC1 é tratado honestamente como *network-reachable host* (`CAPABILITY_UNAVAILABLE` ao pedir métricas). Nada de WinRM/firewall/TrustedHosts é alterado automaticamente. Métodos futuros: `ssh`, `winrm`, `kazumi_remote_node` (campo `metadata.remote_method`).

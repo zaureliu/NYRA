@@ -1,4 +1,4 @@
-﻿"""Selector real de modelo Ollama (ConfiguraÃ§Ãµes â†’ IA).
+"""Selector real de modelo Ollama (ConfiguraÃ§Ãµes â†’ IA).
 
 Cobre: discovery SEM lista hardcoded (todos os modelos de /api/tags com
 metadata honesta), validaÃ§Ã£o contra o Ollama REAL, load com warm-up isolado

@@ -1,4 +1,4 @@
-"""NYRA E2E Turn Isolation — real backend, UI HTTP/WS channels, real desktop.
+"""KAZUMI E2E Turn Isolation — real backend, UI HTTP/WS channels, real desktop.
 
 Runs the mandated acceptance sequence over the same channels the operator uses:
   POST /api/chat (HTTP) while listening to /api/ws for turn-tagged events.
@@ -33,7 +33,7 @@ ensure_script_directories()
 import httpx  # noqa: E402
 
 
-TURN_REQUIRED_EVENTS = {"USER_TEXT_RECEIVED", "NYRA_RESPONSE"}
+TURN_REQUIRED_EVENTS = {"USER_TEXT_RECEIVED", "KAZUMI_RESPONSE"}
 
 
 def ws_collect(base_url: str) -> tuple[list[dict], Callable[[], None]]:
@@ -207,7 +207,7 @@ async def main_async(args: argparse.Namespace) -> int:
                 "seconds": elapsed,
             }
             report["sequence"].append(entry)
-            print(f"\n[{index + 1}/{len(sequence)}] '{message}' -> ({status}, {elapsed}s, {turn_id})\n  NYRA: {answer[:200]}")
+            print(f"\n[{index + 1}/{len(sequence)}] '{message}' -> ({status}, {elapsed}s, {turn_id})\n  KAZUMI: {answer[:200]}")
 
             if not turn_id.startswith("turn_"):
                 problems.append(f"resposta sem turn_id válido: {result}")
@@ -234,11 +234,11 @@ async def main_async(args: argparse.Namespace) -> int:
             missing_events = TURN_REQUIRED_EVENTS - event_types
             if missing_events:
                 problems.append(f"[{turn_id}] eventos WebSocket ausentes: {sorted(missing_events)}")
-            response_events = [event for event in turn_events if event.get("type") == "NYRA_RESPONSE"]
+            response_events = [event for event in turn_events if event.get("type") == "KAZUMI_RESPONSE"]
             if response_events:
                 ws_text = str(response_events[-1].get("payload", {}).get("text") or "")
                 if ws_text != answer:
-                    problems.append(f"[{turn_id}] NYRA_RESPONSE WS diverge da resposta HTTP")
+                    problems.append(f"[{turn_id}] KAZUMI_RESPONSE WS diverge da resposta HTTP")
 
             # Cada 'oi' não pode conter NENHUMA resposta operacional anterior.
             if message == "oi":
@@ -338,7 +338,7 @@ async def main_async(args: argparse.Namespace) -> int:
         fs_root = (TEMP_ROOT / f"e2e-fs-{time.time_ns()}").as_posix()
         fs_ops = [
             (f"New-Item -ItemType Directory -Path {fs_root}", True),
-            (f"Set-Content -Path {fs_root}/probe.txt -Value 'nyra-e2e'", True),
+            (f"Set-Content -Path {fs_root}/probe.txt -Value 'kazumi-e2e'", True),
             (f"Get-Content {fs_root}/probe.txt", True),
             (f"Rename-Item {fs_root}/probe.txt probe2.txt", True),
         ]

@@ -34,7 +34,7 @@ CHECKS = [
 
 
 async def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="nyra-remote-smoke-") as directory:
+    with tempfile.TemporaryDirectory(prefix="kazumi-remote-smoke-") as directory:
         settings = Settings.from_sources(database_path=Path(directory) / "smoke.db")
         bus = EventBus(history_size=500)
         local = SystemShellService(settings, bus)

@@ -136,7 +136,7 @@ class OperatorTaskManager:
         self.jobs = jobs
         self.recovery = recovery
         self.event_bus = event_bus
-        self.database_path = database_path or (DATA_ROOT / "nyra.db")
+        self.database_path = database_path or (DATA_ROOT / "kazumi.db")
         self.max_steps = max_steps
         self._tasks: dict[str, OperatorTask] = {}
         self._runners: dict[str, asyncio.Task] = {}

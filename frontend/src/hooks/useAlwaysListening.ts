@@ -57,7 +57,7 @@ interface Options {
 interface AudioChunk { samples: Float32Array; capturedAt: number }
 
 const createClientId = () => {
-  const key = 'nyra-listening-client-id'
+  const key = 'kazumi-listening-client-id'
   const existing = sessionStorage.getItem(key)
   if (existing) return existing
   const value = `client_${crypto.randomUUID().replaceAll('-', '')}`

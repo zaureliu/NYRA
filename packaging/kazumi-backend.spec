@@ -51,13 +51,13 @@ def _package_dir(name: str) -> Path:
 
 
 def _runtime_root() -> Path:
-    configured = os.environ.get("NYRA_DATA_HOME")
+    configured = os.environ.get("KAZUMI_DATA_HOME")
     if configured:
         return Path(configured).resolve()
     local = os.environ.get("LOCALAPPDATA")
     if local:
-        return (Path(local) / "NYRA").resolve()
-    return (Path.home() / "AppData" / "Local" / "NYRA").resolve()
+        return (Path(local) / "KAZUMI").resolve()
+    return (Path.home() / "AppData" / "Local" / "KAZUMI").resolve()
 
 
 model_dir = _runtime_root() / "data" / "models"
@@ -101,12 +101,12 @@ a = Analysis(
 a.datas += public_asset_toc(REPO)
 pyz = PYZ(a.pure)
 exe = EXE(
-    pyz, a.scripts, [], exclude_binaries=True, name="nyra-backend",
+    pyz, a.scripts, [], exclude_binaries=True, name="kazumi-backend",
     debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
     console=True, disable_windowed_traceback=False, argv_emulation=False,
     target_arch=None, codesign_identity=None, entitlements_file=None,
 )
 coll = COLLECT(
     exe, a.binaries, a.datas, strip=False, upx=False, upx_exclude=[],
-    name="nyra-backend",
+    name="kazumi-backend",
 )

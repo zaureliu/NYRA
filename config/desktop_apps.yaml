@@ -1,4 +1,4 @@
-# NYRA Desktop Application Control V1 — registry de aplicativos desktop.
+# KAZUMI Desktop Application Control V1 — registry de aplicativos desktop.
 # IDs válidos existem somente aqui; tools desktop_* rejeitam qualquer outro valor.
 # `executable` pode ser caminho absoluto ou nome resolvido via PATH (shutil.which).
 apps:

@@ -70,7 +70,7 @@ class SpeechQueue:
 
     def start(self) -> None:
         if self._worker is None or self._worker.done():
-            self._worker = asyncio.create_task(self._run(), name="nyra-speech-queue")
+            self._worker = asyncio.create_task(self._run(), name="kazumi-speech-queue")
 
     async def stop(self) -> None:
         await self.clear(cancel_active=True)
@@ -252,7 +252,7 @@ class SpeechQueue:
                     if item.options is not None
                     else item.provider.synthesize(item.text, item.state)
                 )
-                self._active = asyncio.create_task(synthesis, name="nyra-tts-synthesis")
+                self._active = asyncio.create_task(synthesis, name="kazumi-tts-synthesis")
                 raw_output = await self._active
                 if item.on_audio:
                     if not item.result.done():

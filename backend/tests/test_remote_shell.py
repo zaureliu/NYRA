@@ -42,7 +42,7 @@ def registry_file(tmp_path: Path) -> tuple[Path, Path]:
         {
             "id": "proxmox", "address": "192.168.1.2", "aliases": ["proxmox", "servidor"],
             "remote_shell": {
-                "enabled": True, "port": 22, "username": "nyra", "platform": "linux",
+                "enabled": True, "port": 22, "username": "kazumi", "platform": "linux",
                 "capabilities": ["diagnostics", "logs", "network", "service_management", "containers", "virtualization", "storage"],
                 "known_hosts_path": str(known_hosts), "use_ssh_agent": True,
                 "auto_remediation_actions": [], "managed_resources": {},
@@ -51,7 +51,7 @@ def registry_file(tmp_path: Path) -> tuple[Path, Path]:
         {
             "id": "openwrt", "address": "192.168.1.1", "aliases": ["gateway", "roteador"],
             "remote_shell": {
-                "enabled": True, "username": "nyra", "platform": "openwrt",
+                "enabled": True, "username": "kazumi", "platform": "openwrt",
                 "capabilities": ["diagnostics", "logs", "network", "service_management"],
                 "known_hosts_path": str(known_hosts), "use_ssh_agent": True,
             },
@@ -63,7 +63,7 @@ def registry_file(tmp_path: Path) -> tuple[Path, Path]:
         {
             "id": "noauth", "address": "192.168.1.9", "aliases": ["sem credencial"],
             "remote_shell": {
-                "enabled": True, "username": "nyra", "platform": "linux", "capabilities": ["diagnostics"],
+                "enabled": True, "username": "kazumi", "platform": "linux", "capabilities": ["diagnostics"],
                 "known_hosts_path": str(known_hosts), "use_ssh_agent": False,
             },
         },

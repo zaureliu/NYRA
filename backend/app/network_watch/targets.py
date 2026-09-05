@@ -152,7 +152,7 @@ async def http_probe(timeout_seconds: float = 4) -> tuple[bool, float | None]:
         async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=False) as client:
             response = await client.get(
                 "http://www.msftconnecttest.com/connecttest.txt",
-                headers={"User-Agent": "NYRA-Network-Watch/3.3"},
+                headers={"User-Agent": "KAZUMI-Network-Watch/3.3"},
             )
         return response.status_code < 500, round((time.perf_counter() - started) * 1000, 2)
     except httpx.HTTPError:

@@ -114,8 +114,8 @@ class DesktopWatcher:
         if self._running:
             return
         self._running = True
-        self._tasks.append(asyncio.create_task(self._sweep_loop(), name="nyra-watch-sweep"))
-        self._tasks.append(asyncio.create_task(self._dispatch_loop(), name="nyra-watch-dispatch"))
+        self._tasks.append(asyncio.create_task(self._sweep_loop(), name="kazumi-watch-sweep"))
+        self._tasks.append(asyncio.create_task(self._dispatch_loop(), name="kazumi-watch-dispatch"))
         self._ensure_win_event_hook()
 
     async def stop(self) -> None:

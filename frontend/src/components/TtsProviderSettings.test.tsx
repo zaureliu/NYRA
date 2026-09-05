@@ -6,9 +6,9 @@ import { CustomTtsProfiles, emptyProfile, UniversalSettings } from './CustomTtsP
 const providers: ProviderState['providers'] = [
   {
     id: 'local', display_name: 'Local', configured: true, selected: true,
-    status: 'LOCAL_READY', model: 'kokoro', voice: 'nyra-local',
+    status: 'LOCAL_READY', model: 'kokoro', voice: 'kazumi-local',
     models: [{ id: 'kokoro', name: 'Kokoro' }],
-    voices: [{ id: 'nyra-local', name: 'Nyra local' }],
+    voices: [{ id: 'kazumi-local', name: 'Kazumi local' }],
     capabilities: { offline: true },
   },
   {
@@ -69,7 +69,7 @@ describe('TtsProviderSettings', () => {
 
     expect(html).toContain('Enable Online Voice Providers')
     expect(html).toContain('LOCAL_READY')
-    expect(html).toContain('nyra-local')
+    expect(html).toContain('kazumi-local')
     expect(html).not.toContain('API Key')
     expect(html).not.toContain('TEST PROVIDER')
   })

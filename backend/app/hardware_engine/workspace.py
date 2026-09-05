@@ -8,7 +8,7 @@ async def open_workspace(projects, project_id, desktop):
     root = projects.path(project_id)
     # The registry operator opens a real workspace file; code is still written
     # by filesystem, never keyboard paste. VS Code remains operator-owned.
-    path = projects.write(project_id, 'nyra.code-workspace', json.dumps({
+    path = projects.write(project_id, 'kazumi.code-workspace', json.dumps({
         'folders': [{'path': '.'}], 'settings': {'task.allowAutomaticTasks': 'off'},
     }))
     result = await desktop.open_file(path, app='vscode')
@@ -18,7 +18,7 @@ async def open_workspace(projects, project_id, desktop):
     for _ in range(12):
         windows = await asyncio.to_thread(list_visible_windows)
         matched = [w for w in windows if 'visual studio code' in w.title.lower()
-                   and (root.name.lower() in w.title.lower() or 'nyra (workspace)' in w.title.lower())
+                   and (root.name.lower() in w.title.lower() or 'kazumi (workspace)' in w.title.lower())
                    and getattr(w, 'visible', True)]
         if matched:
             return {'success': True, 'effect_verified': True, 'source': 'desktop_window',

@@ -40,7 +40,7 @@ class AutonomousTaskEngine:
             await db.execute("UPDATE autonomous_tasks_v2 SET state='QUEUED' WHERE state='RUNNING'")
             await db.commit()
         if self._runner is None or self._runner.done():
-            self._runner = asyncio.create_task(self._loop(), name="nyra-autonomous-tasks-v2")
+            self._runner = asyncio.create_task(self._loop(), name="kazumi-autonomous-tasks-v2")
         if self.event_bus is not None:
             await self.event_bus.subscribe(self._on_event)
 
@@ -184,7 +184,7 @@ class AutonomousTaskEngine:
                     continue
                 if task.next_run and task.next_run > now:
                     continue
-                running = asyncio.create_task(self._execute(task), name=f"nyra-task-v2-{task.task_id[-8:]}")
+                running = asyncio.create_task(self._execute(task), name=f"kazumi-task-v2-{task.task_id[-8:]}")
                 self._active[task.task_id] = running
                 running.add_done_callback(lambda _, key=task.task_id: self._active.pop(key, None))
 

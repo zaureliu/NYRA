@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.0 — 2026-09-05
+
+### Added
+
+- Verified local migration of runtime data, configuration and project metadata.
+- Compatibility for legacy environment variables, events, firmware protocols and protected credentials.
+
+### Changed
+
+- NYRA is now **Kazumi**: assistant identity, interface, wake-word default, package names, launchers and executables.
+- Current documentation and repository links use the Kazumi name.
+
+### Fixed
+
+- Existing voice choices, custom wake words, memories and Open Loops survive the nominal migration.
+
+### Migration
+
+- See [the migration guide](docs/migration/nyra-to-kazumi.md) before upgrading an existing installation.
+- The legacy Tauri application identifier remains stable for upgrade and WebView storage compatibility.
+- Historical release names and persistence aliases are intentionally retained.
+
+### Known Limitations
+
+- Cloud STT/TTS requires separately configured provider credentials and may incur costs.
+- Hardware effects and VTube Studio expressions require compatible local devices/models; third-party models and private data are not distributed.
+- Customized external paths require explicit inventory and migration; conflicting data directories are never merged automatically.
+
+
+
 ## 0.5.0 — 2026-09-05
 
 ### Added

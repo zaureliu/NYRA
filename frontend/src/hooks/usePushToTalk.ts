@@ -53,7 +53,7 @@ export function usePushToTalk(
     try {
       await new Promise((resolve) => setTimeout(resolve, 100))
       release = await acquireMicrophone()
-      if (!release) throw new Error('Microfone em uso por outra janela NYRA')
+      if (!release) throw new Error('Microfone em uso por outra janela KAZUMI')
       if (released.current || disposed.current) { release(); setManualCapture(false, captureOwner.current); return }
       const audio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true,
         channelCount: 1, sampleRate: 48000, ...(deviceId === 'default' ? {} : { deviceId: { exact: deviceId } }) }

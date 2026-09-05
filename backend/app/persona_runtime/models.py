@@ -1,4 +1,4 @@
-"""Typed public contracts for NYRA's persistent persona runtime."""
+"""Typed public contracts for KAZUMI's persistent persona runtime."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class BehaviourLevel(StrEnum):
     HIGH = "high"
 
 
-class NyraEmotion(StrEnum):
+class KazumiEmotion(StrEnum):
     NEUTRAL = "neutral"
     FRIENDLY = "friendly"
     FOCUSED = "focused"
@@ -74,14 +74,14 @@ class PersonalityProfile(BaseModel):
     caution: BehaviourLevel = BehaviourLevel.MEDIUM_HIGH
 
 
-class NyraIdentity(BaseModel):
+class KazumiIdentity(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     identity_id: str = "nyra-core-v1"
-    name: str = "NYRA"
+    name: str = "Kazumi"
     nature: str = "local artificial intelligence"
     language: str = "pt-BR"
-    identity_version: int = 1
+    identity_version: int = 2
     personality: PersonalityProfile = Field(default_factory=PersonalityProfile)
     invariants: tuple[str, ...] = (
         "knows_it_is_ai",
@@ -123,7 +123,7 @@ class EmotionDecayPolicy(BaseModel):
 
 
 class EmotionalState(BaseModel):
-    primary: NyraEmotion = NyraEmotion.NEUTRAL
+    primary: KazumiEmotion = KazumiEmotion.NEUTRAL
     intensity: float = Field(default=0.0, ge=0.0, le=0.65)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     reason: str = Field(default="baseline", max_length=180)
@@ -143,7 +143,7 @@ class DialoguePolicy(BaseModel):
 
 
 class VoiceEmotionInterface(BaseModel):
-    emotion: NyraEmotion
+    emotion: KazumiEmotion
     intensity: float = Field(ge=0.0, le=0.65)
     style: str
     provider_supports_emotion: bool
@@ -153,7 +153,7 @@ class VoiceEmotionInterface(BaseModel):
 
 
 class PersonaSnapshot(BaseModel):
-    identity: NyraIdentity
+    identity: KazumiIdentity
     relationship: RelationshipState
     emotion: EmotionalState
     dialogue_policy: DialoguePolicy
@@ -172,3 +172,7 @@ class DriftDecision(BaseModel):
     drift_blocked: bool = False
     temporary_style: str | None = None
     reason: str
+
+# One-release compatibility for integrations using the previous class names.
+NyraEmotion = KazumiEmotion
+NyraIdentity = KazumiIdentity

@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.events import Event, EventType
-from app.persona_runtime.models import DialogueMode, DialoguePolicy, NyraEmotion
+from app.persona_runtime.models import DialogueMode, DialoguePolicy, KazumiEmotion
 
 
 @dataclass(frozen=True, slots=True)
 class EmotionSignal:
-    emotion: NyraEmotion
+    emotion: KazumiEmotion
     intensity: float
     confidence: float
     priority: int
@@ -37,7 +37,7 @@ _GREETING = re.compile(r"^\s*(?:oi|ol[aá]|opa|bom dia|boa tarde|boa noite)\b", 
 
 
 class DialoguePolicyEngine:
-    def for_turn(self, text: str, *, emotion: NyraEmotion = NyraEmotion.NEUTRAL) -> DialoguePolicy:
+    def for_turn(self, text: str, *, emotion: KazumiEmotion = KazumiEmotion.NEUTRAL) -> DialoguePolicy:
         value = text.strip()
         if _META_IDENTITY.search(value):
             return self._policy(DialogueMode.META_IDENTITY, "identity_question")
@@ -58,7 +58,7 @@ class DialoguePolicyEngine:
         if _TECHNICAL.search(value):
             return self._policy(DialogueMode.TECHNICAL_DIAGNOSIS, "technical_context", grounding=True)
         if _GREETING.search(value):
-            return self._policy(DialogueMode.CASUAL_CHAT, "casual_greeting", humor=emotion == NyraEmotion.AMUSED)
+            return self._policy(DialogueMode.CASUAL_CHAT, "casual_greeting", humor=emotion == KazumiEmotion.AMUSED)
         if value.endswith("?"):
             return self._policy(DialogueMode.ASK, "question")
         return self._policy(DialogueMode.INFORM, "ordinary_turn")
@@ -71,8 +71,8 @@ class DialoguePolicyEngine:
             return self._policy(DialogueMode.WARN, "critical_failure", grounding=True)
         if normalized == "TASK_FAILED":
             return self._policy(DialogueMode.WARN, "operation_failure", grounding=True)
-        if normalized == "NYRA_ERROR":
-            return self._policy(DialogueMode.APOLOGIZE, "nyra_error")
+        if normalized == "KAZUMI_ERROR":
+            return self._policy(DialogueMode.APOLOGIZE, "kazumi_error")
         if normalized in {"OPERATION_SUCCESS", "TASK_SUCCEEDED", "SYSTEM_RECOVERED"} or state in {"SUCCEEDED", "COMPLETED"}:
             return self._policy(DialogueMode.REPORT_RESULT, "verified_result", grounding=True)
         if state in {"FAILED", "BLOCKED", "ERROR"}:
@@ -92,14 +92,14 @@ class DialoguePolicyEngine:
 
 def user_emotion_signal(text: str) -> EmotionSignal:
     if _JOKE.search(text):
-        return EmotionSignal(NyraEmotion.AMUSED, .40, .88, 55, "USER_JOKING", 600, 3600)
+        return EmotionSignal(KazumiEmotion.AMUSED, .40, .88, 55, "USER_JOKING", 600, 3600)
     if _TECHNICAL.search(text):
-        return EmotionSignal(NyraEmotion.FOCUSED, .32, .82, 48, "TECHNICAL_CONTEXT", 1200, 21600)
+        return EmotionSignal(KazumiEmotion.FOCUSED, .32, .82, 48, "TECHNICAL_CONTEXT", 1200, 21600)
     if _GREETING.search(text):
-        return EmotionSignal(NyraEmotion.FRIENDLY, .26, .78, 25, "NORMAL_CHAT", 900, 7200)
+        return EmotionSignal(KazumiEmotion.FRIENDLY, .26, .78, 25, "NORMAL_CHAT", 900, 7200)
     if text.rstrip().endswith("?"):
-        return EmotionSignal(NyraEmotion.CURIOUS, .25, .68, 20, "QUESTION", 900, 7200)
-    return EmotionSignal(NyraEmotion.NEUTRAL, .16, .62, 10, "NORMAL_CHAT", 600, 3600)
+        return EmotionSignal(KazumiEmotion.CURIOUS, .25, .68, 20, "QUESTION", 900, 7200)
+    return EmotionSignal(KazumiEmotion.NEUTRAL, .16, .62, 10, "NORMAL_CHAT", 600, 3600)
 
 
 def event_emotion_signal(event: Event) -> EmotionSignal | None:
@@ -107,53 +107,53 @@ def event_emotion_signal(event: Event) -> EmotionSignal | None:
     state = str(payload.get("state") or payload.get("status") or payload.get("outcome") or "").upper()
 
     if event.type in {EventType.SHELL_APPROVAL_REQUIRED, EventType.REMOTE_SHELL_APPROVAL_REQUIRED}:
-        return EmotionSignal(NyraEmotion.WARNING, .55, .96, 100, "DANGEROUS_ACTION", 1200, 21600)
+        return EmotionSignal(KazumiEmotion.WARNING, .55, .96, 100, "DANGEROUS_ACTION", 1200, 21600)
     if event.type == EventType.ERROR:
         own_error = str(payload.get("operation") or "").casefold() in {"chat", "llm", "tts", "pipeline"}
-        emotion = NyraEmotion.APOLOGETIC if own_error else NyraEmotion.CONCERNED
-        return EmotionSignal(emotion, .42, .93, 95, "NYRA_ERROR" if own_error else "SYSTEM_ERROR", 1200, 21600)
+        emotion = KazumiEmotion.APOLOGETIC if own_error else KazumiEmotion.CONCERNED
+        return EmotionSignal(emotion, .42, .93, 95, "KAZUMI_ERROR" if own_error else "SYSTEM_ERROR", 1200, 21600)
     if event.type in {EventType.RUNTIME_CRASH_LOOP}:
-        return EmotionSignal(NyraEmotion.SERIOUS, .58, .98, 100, "CRITICAL_FAILURE", 1800, 21600)
+        return EmotionSignal(KazumiEmotion.SERIOUS, .58, .98, 100, "CRITICAL_FAILURE", 1800, 21600)
     if event.type in {EventType.RUNTIME_FAILED, EventType.PROXMOX_TASK_FAILED,
                       EventType.MONITOR_JOB_FAILED, EventType.SELFDEV_VALIDATION_FAIL,
                       EventType.COMPUTER_OPERATOR_FAILURE, EventType.COMPUTER_VERIFICATION_FAILURE}:
-        return EmotionSignal(NyraEmotion.CONCERNED, .43, .92, 85, "TASK_FAILED", 1500, 21600)
+        return EmotionSignal(KazumiEmotion.CONCERNED, .43, .92, 85, "TASK_FAILED", 1500, 21600)
     if event.type in {EventType.TASK_STATE_CHANGED, EventType.TASK_FINISHED,
                       EventType.AGENT_RUN_FINISHED, EventType.JOB_FINISHED,
                       EventType.WORKFLOW_FINISHED}:
         if state in {"FAILED", "BLOCKED", "ERROR"}:
-            return EmotionSignal(NyraEmotion.CONCERNED, .43, .92, 85, "TASK_FAILED", 1500, 21600)
+            return EmotionSignal(KazumiEmotion.CONCERNED, .43, .92, 85, "TASK_FAILED", 1500, 21600)
         if state in {"SUCCEEDED", "COMPLETED"}:
-            return EmotionSignal(NyraEmotion.CONFIDENT, .36, .92, 70, "TASK_SUCCEEDED", 1200, 21600)
+            return EmotionSignal(KazumiEmotion.CONFIDENT, .36, .92, 70, "TASK_SUCCEEDED", 1200, 21600)
     if event.type in {EventType.RUNTIME_RECOVERED, EventType.NETWORK_RECOVERED,
                       EventType.NETWORK_GATEWAY_RECOVERED, EventType.NETWORK_INTERNET_RECOVERED,
                       EventType.NETWORK_DNS_RECOVERED, EventType.NETWORK_LINK_UP,
                       EventType.HOMELAB_HOST_ONLINE, EventType.MONITOR_JOB_COMPLETED}:
-        return EmotionSignal(NyraEmotion.RELIEVED, .38, .90, 75, "SYSTEM_RECOVERED", 900, 7200)
+        return EmotionSignal(KazumiEmotion.RELIEVED, .38, .90, 75, "SYSTEM_RECOVERED", 900, 7200)
     if event.type in {EventType.PROXMOX_TASK_COMPLETED, EventType.SELFDEV_VALIDATION_PASS,
                       EventType.SELFDEV_POST_VALIDATION_PASS, EventType.COMPUTER_EFFECT_VERIFIED}:
-        return EmotionSignal(NyraEmotion.CONFIDENT, .34, .88, 68, "TASK_SUCCEEDED", 1200, 21600)
+        return EmotionSignal(KazumiEmotion.CONFIDENT, .34, .88, 68, "TASK_SUCCEEDED", 1200, 21600)
     if event.type in {EventType.SHELL_EXECUTION_FINISHED, EventType.REMOTE_SHELL_EXECUTION_FINISHED}:
         if payload.get("effect_verified") is True:
-            return EmotionSignal(NyraEmotion.CONFIDENT, .34, .9, 70, "TASK_SUCCEEDED", 1200, 21600)
+            return EmotionSignal(KazumiEmotion.CONFIDENT, .34, .9, 70, "TASK_SUCCEEDED", 1200, 21600)
         if payload.get("success") is False or payload.get("ok") is False:
-            return EmotionSignal(NyraEmotion.CONCERNED, .4, .88, 82, "TASK_FAILED", 1500, 21600)
+            return EmotionSignal(KazumiEmotion.CONCERNED, .4, .88, 82, "TASK_FAILED", 1500, 21600)
     if bool(payload.get("unexpected")):
-        return EmotionSignal(NyraEmotion.SURPRISED, .38, .80, 60, "UNEXPECTED_RESULT", 300, 1800)
+        return EmotionSignal(KazumiEmotion.SURPRISED, .38, .80, 60, "UNEXPECTED_RESULT", 300, 1800)
     return None
 
 
 def named_emotion_signal(event_name: str) -> EmotionSignal | None:
     """Canonical semantic mapping for producers that already normalized events."""
     return {
-        "TASK_SUCCEEDED": EmotionSignal(NyraEmotion.CONFIDENT, .36, .92, 70, "TASK_SUCCEEDED", 1200, 21600),
-        "TASK_FAILED": EmotionSignal(NyraEmotion.CONCERNED, .43, .92, 85, "TASK_FAILED", 1500, 21600),
-        "SYSTEM_RECOVERED": EmotionSignal(NyraEmotion.RELIEVED, .38, .90, 75, "SYSTEM_RECOVERED", 900, 7200),
-        "DANGEROUS_ACTION": EmotionSignal(NyraEmotion.WARNING, .55, .96, 100, "DANGEROUS_ACTION", 1200, 21600),
-        "UNEXPECTED_RESULT": EmotionSignal(NyraEmotion.SURPRISED, .38, .80, 60, "UNEXPECTED_RESULT", 300, 1800),
-        "USER_JOKING": EmotionSignal(NyraEmotion.AMUSED, .40, .88, 55, "USER_JOKING", 600, 3600),
-        "NYRA_ERROR": EmotionSignal(NyraEmotion.APOLOGETIC, .42, .93, 95, "NYRA_ERROR", 1200, 21600),
-        "NORMAL_CHAT": EmotionSignal(NyraEmotion.FRIENDLY, .26, .78, 25, "NORMAL_CHAT", 900, 7200),
-        "OPERATION_SUCCESS": EmotionSignal(NyraEmotion.CONFIDENT, .34, .90, 70, "TASK_SUCCEEDED", 1200, 21600),
-        "CRITICAL_FAILURE": EmotionSignal(NyraEmotion.SERIOUS, .58, .98, 100, "CRITICAL_FAILURE", 1800, 21600),
+        "TASK_SUCCEEDED": EmotionSignal(KazumiEmotion.CONFIDENT, .36, .92, 70, "TASK_SUCCEEDED", 1200, 21600),
+        "TASK_FAILED": EmotionSignal(KazumiEmotion.CONCERNED, .43, .92, 85, "TASK_FAILED", 1500, 21600),
+        "SYSTEM_RECOVERED": EmotionSignal(KazumiEmotion.RELIEVED, .38, .90, 75, "SYSTEM_RECOVERED", 900, 7200),
+        "DANGEROUS_ACTION": EmotionSignal(KazumiEmotion.WARNING, .55, .96, 100, "DANGEROUS_ACTION", 1200, 21600),
+        "UNEXPECTED_RESULT": EmotionSignal(KazumiEmotion.SURPRISED, .38, .80, 60, "UNEXPECTED_RESULT", 300, 1800),
+        "USER_JOKING": EmotionSignal(KazumiEmotion.AMUSED, .40, .88, 55, "USER_JOKING", 600, 3600),
+        "KAZUMI_ERROR": EmotionSignal(KazumiEmotion.APOLOGETIC, .42, .93, 95, "KAZUMI_ERROR", 1200, 21600),
+        "NORMAL_CHAT": EmotionSignal(KazumiEmotion.FRIENDLY, .26, .78, 25, "NORMAL_CHAT", 900, 7200),
+        "OPERATION_SUCCESS": EmotionSignal(KazumiEmotion.CONFIDENT, .34, .90, 70, "TASK_SUCCEEDED", 1200, 21600),
+        "CRITICAL_FAILURE": EmotionSignal(KazumiEmotion.SERIOUS, .58, .98, 100, "CRITICAL_FAILURE", 1800, 21600),
     }.get(event_name.upper())

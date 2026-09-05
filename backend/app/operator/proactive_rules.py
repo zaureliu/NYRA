@@ -1,6 +1,6 @@
 """Proactive Operator (spec Parte M §232-§239).
 
-DEFAULT IS OFF (§233: NYRA_PROACTIVE_OPERATOR_ENABLED=false). Only REGISTERED
+DEFAULT IS OFF (§233: KAZUMI_PROACTIVE_OPERATOR_ENABLED=false). Only REGISTERED
 rules fire (§234), each with an explicit trigger event, conditions and a
 restricted action template. Unsolicited DESTRUCTIVE actions are impossible
 (§239): the action allowlist below contains only notify/open-report/

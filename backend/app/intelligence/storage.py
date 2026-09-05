@@ -144,7 +144,7 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
 
 
 class IntelligenceStore:
-    """Versioned logical domains sharing NYRA's existing local SQLite file."""
+    """Versioned logical domains sharing KAZUMI's existing local SQLite file."""
 
     def __init__(self, database_path: Path) -> None:
         self.database_path = database_path

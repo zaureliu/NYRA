@@ -38,4 +38,4 @@ class PerceptionSnapshot(BaseModel):
     system: SystemSnapshot = Field(default_factory=SystemSnapshot)
     network: dict = Field(default_factory=dict)
     sentinel: dict = Field(default_factory=dict)
-    nyra_state: str = "IDLE"
+    kazumi_state: str = "IDLE"

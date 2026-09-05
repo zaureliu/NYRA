@@ -1,6 +1,6 @@
 #requires -version 5
 <#
-NYRA E2E Turn Isolation — executa a sequência obrigatória contra o backend REAL
+KAZUMI E2E Turn Isolation — executa a sequência obrigatória contra o backend REAL
 pela mesma interface usada pelo operador (POST /api/chat + WebSocket /api/ws),
 incluindo abertura física de aplicativos e verificação Win32 de janela.
 #>

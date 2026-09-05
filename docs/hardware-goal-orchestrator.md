@@ -27,7 +27,7 @@ Project identity/build state survives restart; serial handles and observed
 device presence do not. Interrupted goals require revalidation, not automatic
 flash replay. Shutdown cancels owned tasks, closes serial and research sockets,
 and delegates process-tree cleanup to SystemShell. The existing Tauri
-`quit_nyra`/Tray Exit coordinator and X-to-hide behavior remain unchanged.
+`quit_kazumi`/Tray Exit coordinator and X-to-hide behavior remain unchanged.
 
 ## Continuation and revisions
 

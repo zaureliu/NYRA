@@ -16,7 +16,7 @@ from app.speech.prosody import ProsodyProcessor
 from app.speech.queue import SpeechPriority, SpeechQueue
 
 
-logger = logging.getLogger("nyra.sentinel_bridge")
+logger = logging.getLogger("kazumi.sentinel_bridge")
 
 
 class ProactiveSentinelAlerts:
@@ -59,7 +59,7 @@ class ProactiveSentinelAlerts:
             return
         if event.type != EventType.SENTINEL_EVENT:
             return
-        task = asyncio.create_task(self._process(event), name="nyra-sentinel-alert")
+        task = asyncio.create_task(self._process(event), name="kazumi-sentinel-alert")
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
@@ -99,7 +99,7 @@ class ProactiveSentinelAlerts:
             "schema_version": 1,
             "event_id": f"integration-{event_type}-{time.time_ns()}",
             "source": "utamo-sentinel",
-            "instance_id": "nyra-integration-state",
+            "instance_id": "kazumi-integration-state",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "category": "integration",
             "type": event_type,
@@ -162,7 +162,7 @@ class ProactiveSentinelAlerts:
             self._voice_buffer.append((event, message, state))
             if self._voice_flush_task is None or self._voice_flush_task.done():
                 self._voice_flush_task = asyncio.create_task(
-                    self._flush_voice_buffer(), name="nyra-sentinel-voice-burst"
+                    self._flush_voice_buffer(), name="kazumi-sentinel-voice-burst"
                 )
 
     async def _flush_voice_buffer(self) -> None:
@@ -224,7 +224,7 @@ class ProactiveSentinelAlerts:
             if self.voice_processor and self.voice_processor.config.enabled:
                 output = await self.voice_processor.process(output, state.value)
             await self.event_bus.publish(
-                EventType.NYRA_RESPONSE, text=message, display_text=message,
+                EventType.KAZUMI_RESPONSE, text=message, display_text=message,
                 speech_text=prepared.speech_text, state=state.value, proactive=True, source="sentinel",
             )
             await self.event_bus.publish(

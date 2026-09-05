@@ -36,7 +36,7 @@ O FastAPI compõe serviços independentes no `lifespan`. `ChatOrchestrator` coor
 
 ### TTS Provider Layer V1
 
-`TtsProviderRegistry` separa o texto que a NYRA quer falar de quem gera o
+`TtsProviderRegistry` separa o texto que a KAZUMI quer falar de quem gera o
 áudio. O provider lógico `local` encapsula o engine local existente e permanece
 primário e fallback por padrão. OpenAI e ElevenLabs são adapters opcionais,
 lazy e desabilitados até opt-in + credencial + configuração válida. Todos
@@ -55,7 +55,7 @@ Estados: `neutral`, `happy`, `curious`, `focused`, `concerned`, `amused`, `tired
 
 ## Eventos
 
-O barramento assíncrono publica `USER_SPEECH_RECEIVED`, `USER_TEXT_RECEIVED`, `LLM_PROCESSING`, `NYRA_RESPONSE`, `TTS_STARTED`, `TTS_FINISHED`, `HOMELAB_EVENT`, `MEMORY_CREATED`, `STATE_CHANGED` e `ERROR`. WebSocket envia esses eventos ao frontend. Todo evento originado por um turno — inclusive agent run, shell local/remoto, runtime e desktop — transporta o mesmo `turn_id`; eventos globais de monitor podem usar `turn_id=null`. O frontend rejeita eventos tardios de turnos encerrados. `scripts/e2e_turn_isolation.py` cruza a resposta HTTP com `USER_TEXT_RECEIVED`/`NYRA_RESPONSE` no WebSocket e exige `DESKTOP_WINDOW_VERIFIED` no turno de abertura física.
+O barramento assíncrono publica `USER_SPEECH_RECEIVED`, `USER_TEXT_RECEIVED`, `LLM_PROCESSING`, `KAZUMI_RESPONSE`, `TTS_STARTED`, `TTS_FINISHED`, `HOMELAB_EVENT`, `MEMORY_CREATED`, `STATE_CHANGED` e `ERROR`. WebSocket envia esses eventos ao frontend. Todo evento originado por um turno — inclusive agent run, shell local/remoto, runtime e desktop — transporta o mesmo `turn_id`; eventos globais de monitor podem usar `turn_id=null`. O frontend rejeita eventos tardios de turnos encerrados. `scripts/e2e_turn_isolation.py` cruza a resposta HTTP com `USER_TEXT_RECEIVED`/`KAZUMI_RESPONSE` no WebSocket e exige `DESKTOP_WINDOW_VERIFIED` no turno de abertura física.
 
 ## Barge-in futuro
 
@@ -101,13 +101,13 @@ RealtimeOrchestrator → AgentController/run_id → Ollama tools schema → Tool
 
 ## Utamo Sentinel Bridge
 
-O módulo `app.integrations.sentinel` mantém discovery, autenticação, Socket.IO, validação, dedupe e histórico separados do Network Watch. O Sentinel continua responsável por detectar alertas. A NYRA consome somente o schema público v1 e emite `SENTINEL_STATUS_CHANGED`, `SENTINEL_EVENT` e `SENTINEL_ALERT` no Event Bus. O `ProactivePresenceService` centraliza a decisão de apresentação; voz, quando habilitada, usa a mesma Pronunciation Engine e SpeechQueue das conversas.
+O módulo `app.integrations.sentinel` mantém discovery, autenticação, Socket.IO, validação, dedupe e histórico separados do Network Watch. O Sentinel continua responsável por detectar alertas. A KAZUMI consome somente o schema público v1 e emite `SENTINEL_STATUS_CHANGED`, `SENTINEL_EVENT` e `SENTINEL_ALERT` no Event Bus. O `ProactivePresenceService` centraliza a decisão de apresentação; voz, quando habilitada, usa a mesma Pronunciation Engine e SpeechQueue das conversas.
 
 ## Operator V2 (operador autônomo)
 
-A camada 'app.operator/' acrescenta capabilities de operador autônomo sem criar um segundo cérebro: Screen Understanding (UIA-first, OCR fallback), App Adapters, Browser via CDP, clipboard local tipado (status metadata-only e write/clear verificados por Win32), Credential Broker (Credential Manager/DPAPI), sessões elevadas com TTL sobre UAC legítimo, jobs persistentes com reattach, Task Planner multi-step, Recovery Engine com rollback não-cego, Desktop Watcher event-driven (SetWinEventHook), Workflow Memory versionada, Proativo (default OFF) e contexts isolados (Task/Job/Watch/Workflow) com cross-context rejection. Watchdog externo independente vive em 'watchdog/nyra_watchdog.py'. Detalhes: docs/operator-v2.md.
+A camada 'app.operator/' acrescenta capabilities de operador autônomo sem criar um segundo cérebro: Screen Understanding (UIA-first, OCR fallback), App Adapters, Browser via CDP, clipboard local tipado (status metadata-only e write/clear verificados por Win32), Credential Broker (Credential Manager/DPAPI), sessões elevadas com TTL sobre UAC legítimo, jobs persistentes com reattach, Task Planner multi-step, Recovery Engine com rollback não-cego, Desktop Watcher event-driven (SetWinEventHook), Workflow Memory versionada, Proativo (default OFF) e contexts isolados (Task/Job/Watch/Workflow) com cross-context rejection. Watchdog externo independente vive em 'watchdog/kazumi_watchdog.py'. Detalhes: docs/operator-v2.md.
 
-## Autonomia local em sete camadas (NYRA-7c)
+## Autonomia local em sete camadas (KAZUMI-7c)
 
 ```text
 ComputerPerceptionService -> ComputerStateService -> IntentResolver
@@ -152,7 +152,7 @@ O módulo app.computer.artifacts mantém no máximo 50 itens recentes por contex
 
 `app.selfdev` permanece separado de identidade, LLM, memória, eventos, voz, ferramentas e UI. O fluxo é `RuntimeObserver → ImprovementDetector/Queue → SelfDevPlanner/RiskClassifier → WorktreeManager/CodeWorker → ValidationPipeline → PromotionManager → RestartValidator/RollbackManager`. O índice incremental persiste somente metadados e relações; código-fonte só é lido localmente durante planejamento. Toda execução de Git/test/build passa pelo `system_shell` e patches do modelo obedecem a um schema Pydantic, hashes e contenção de caminhos.
 
-O repositório estável, o workspace de candidatos e o snapshot público são roots configuráveis e separados. Estado mutável fica sob `%LOCALAPPDATA%\NYRA\selfdev` por padrão. `AUTONOMOUS_SAFE` promove apenas LOW_RISK; áreas de segurança/approval/credenciais/shell/publicação são HIGH_RISK. Auto Publish permanece OFF por padrão e nenhum texto gerado concede approval. Veja [self-development.md](self-development.md).
+O repositório estável, o workspace de candidatos e o snapshot público são roots configuráveis e separados. Estado mutável fica sob `%LOCALAPPDATA%\KAZUMI\selfdev` por padrão. `AUTONOMOUS_SAFE` promove apenas LOW_RISK; áreas de segurança/approval/credenciais/shell/publicação são HIGH_RISK. Auto Publish permanece OFF por padrão e nenhum texto gerado concede approval. Veja [self-development.md](self-development.md).
 
 ## Intelligence Platform V2
 
@@ -198,7 +198,7 @@ livre nunca pode alterar a identidade central nem autorizar execução. Consulte
 
 ## Emotional Presence Synchronization V1
 
-`PersonaRuntime` publica `NYRA_EMOTION_CHANGED`; o
+`PersonaRuntime` publica `KAZUMI_EMOTION_CHANGED`; o
 `EmotionPresentationCoordinator` distribui o mesmo estado e intensidade para o
 texto, o adapter provider-agnostic de voz, Desktop Presence e VTube Studio.
 Estados operacionais não substituem emoção, lip sync continua derivado do áudio

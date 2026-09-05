@@ -1,6 +1,6 @@
-# Contributing to NYRA
+# Contributing to KAZUMI
 
-NYRA is local-first and security-sensitive. Keep identity, LLM, memory, events, voice, tools, integrations and UI modular.
+KAZUMI is local-first and security-sensitive. Keep identity, LLM, memory, events, voice, tools, integrations and UI modular.
 
 Before opening a change:
 

@@ -56,7 +56,7 @@ fn show_dashboard(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     let window = WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::App("index.html".into()))
-        .title("NYRA")
+        .title("Kazumi")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 620.0)
         .center()
@@ -75,7 +75,7 @@ fn open_dashboard(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn quit_nyra(app: tauri::AppHandle) -> bool {
+fn quit_kazumi(app: tauri::AppHandle) -> bool {
     shutdown::request_app_shutdown(app, shutdown::ShutdownReason::UiExit)
 }
 
@@ -191,7 +191,7 @@ fn vts_presence_status(
 
 #[tauri::command]
 fn emit_presence_state(window: &tauri::WebviewWindow, state: &str) {
-    let _ = window.emit("nyra-presence", state);
+    let _ = window.emit("kazumi-presence", state);
 }
 
 #[tauri::command]
@@ -247,7 +247,7 @@ fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
         return;
     }
     let spawned = std::thread::Builder::new()
-        .name("nyra-global-cursor".into())
+        .name("kazumi-global-cursor".into())
         .spawn(move || {
             let mut unavailable_reported_at: Option<Instant> = None;
             let mut emit_error_reported = false;
@@ -267,7 +267,7 @@ fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
                             height: 0,
                         };
                         let _ = window.emit(
-                            "nyra-global-cursor",
+                            "kazumi-global-cursor",
                             GlobalCursorSample {
                                 available: false,
                                 cursor_x: 0,
@@ -286,7 +286,7 @@ fn start_global_cursor_tracker(window: tauri::WebviewWindow) {
                 let (normalized_x, normalized_y) =
                     normalize_virtual_cursor(cursor_x, cursor_y, virtual_desktop_bounds);
                 let emitted = window.emit(
-                    "nyra-global-cursor",
+                    "kazumi-global-cursor",
                     GlobalCursorSample {
                         available: true,
                         cursor_x,
@@ -338,7 +338,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_click_through,
             open_dashboard,
-            quit_nyra,
+            quit_kazumi,
             backend_request,
             start_conversation_bridge,
             stt_stream_open,
@@ -403,7 +403,7 @@ pub fn run() {
                             let _ = window.set_ignore_cursor_events(false);
                             let _ = window.show();
                             let _ = window.emit(
-                                "nyra-desktop",
+                                "kazumi-desktop",
                                 if event.state() == ShortcutState::Pressed {
                                     "talk-start"
                                 } else {
@@ -416,7 +416,7 @@ pub fn run() {
                             return;
                         }
                         if shortcut == &mute {
-                            let _ = window.emit("nyra-desktop", "mic-toggle");
+                            let _ = window.emit("kazumi-desktop", "mic-toggle");
                             return;
                         }
                         if shortcut == &show {
@@ -431,7 +431,7 @@ pub fn run() {
                             let ignored = !CLICK_THROUGH.fetch_xor(true, Ordering::SeqCst);
                             let _ = window.set_ignore_cursor_events(ignored);
                             let _ = window.emit(
-                                "nyra-desktop",
+                                "kazumi-desktop",
                                 if ignored {
                                     "click-through"
                                 } else {
@@ -459,14 +459,14 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let show = MenuItemBuilder::with_id("show", "Mostrar NYRA").build(app)?;
-            let hide = MenuItemBuilder::with_id("hide", "Ocultar NYRA").build(app)?;
+            let show = MenuItemBuilder::with_id("show", "Mostrar Kazumi").build(app)?;
+            let hide = MenuItemBuilder::with_id("hide", "Ocultar Kazumi").build(app)?;
             let interactive =
                 MenuItemBuilder::with_id("interactive", "Modo interativo").build(app)?;
             let click = MenuItemBuilder::with_id("click", "Click-through").build(app)?;
             let top = MenuItemBuilder::with_id("top", "Alternar always on top").build(app)?;
             let panel = MenuItemBuilder::with_id("panel", "Abrir painel").build(app)?;
-            let talk = MenuItemBuilder::with_id("talk", "Falar com NYRA").build(app)?;
+            let talk = MenuItemBuilder::with_id("talk", "Falar com Kazumi").build(app)?;
             let settings = MenuItemBuilder::with_id("settings", "Configurações").build(app)?;
             let listening =
                 MenuItemBuilder::with_id("listening", "Listening: ON/OFF").build(app)?;
@@ -481,7 +481,7 @@ pub fn run() {
             let quiet = MenuItemBuilder::with_id("quiet", "Quiet Mode").build(app)?;
             let reconnect =
                 MenuItemBuilder::with_id("reconnect", "Reiniciar conexão").build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Encerrar NYRA").build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Encerrar Kazumi").build(app)?;
             let menu = MenuBuilder::new(app)
                 .items(&[
                     &show,
@@ -526,12 +526,12 @@ pub fn run() {
                                 CLICK_THROUGH.store(false, Ordering::SeqCst);
                                 let _ = window.set_ignore_cursor_events(false);
                                 let _ = window.show();
-                                let _ = window.emit("nyra-desktop", "interactive");
+                                let _ = window.emit("kazumi-desktop", "interactive");
                             }
                             "click" => {
                                 CLICK_THROUGH.store(true, Ordering::SeqCst);
                                 let _ = window.set_ignore_cursor_events(true);
-                                let _ = window.emit("nyra-desktop", "click-through");
+                                let _ = window.emit("kazumi-desktop", "click-through");
                             }
                             "top" => {
                                 let next = !window.is_always_on_top().unwrap_or(true);
@@ -545,33 +545,33 @@ pub fn run() {
                             "talk" => {
                                 let _ = window.set_ignore_cursor_events(false);
                                 let _ = window.show();
-                                let _ = window.emit("nyra-desktop", "talk-menu");
+                                let _ = window.emit("kazumi-desktop", "talk-menu");
                             }
                             "listening" => {
-                                let _ = window.emit("nyra-desktop", "listening-toggle");
+                                let _ = window.emit("kazumi-desktop", "listening-toggle");
                             }
                             "network" => {
-                                let _ = window.emit("nyra-desktop", "network-toggle");
+                                let _ = window.emit("kazumi-desktop", "network-toggle");
                             }
                             "sentinel" => {
-                                let _ = window.emit("nyra-desktop", "sentinel-toggle");
+                                let _ = window.emit("kazumi-desktop", "sentinel-toggle");
                             }
                             "sentinel-reconnect" => {
-                                let _ = window.emit("nyra-desktop", "sentinel-reconnect");
+                                let _ = window.emit("kazumi-desktop", "sentinel-reconnect");
                             }
                             "sentinel-open" => {
-                                let _ = window.emit("nyra-desktop", "sentinel-open");
+                                let _ = window.emit("kazumi-desktop", "sentinel-open");
                             }
                             "quiet" => {
-                                let _ = window.emit("nyra-desktop", "quiet-toggle");
+                                let _ = window.emit("kazumi-desktop", "quiet-toggle");
                             }
                             "settings" => {
                                 let _ = window.set_ignore_cursor_events(false);
                                 let _ = window.show();
-                                let _ = window.emit("nyra-desktop", "settings");
+                                let _ = window.emit("kazumi-desktop", "settings");
                             }
                             "reconnect" => {
-                                let _ = window.emit("nyra-desktop", "reconnect");
+                                let _ = window.emit("kazumi-desktop", "reconnect");
                             }
                             _ => {}
                         }
@@ -592,7 +592,7 @@ pub fn run() {
                     let detail = error.to_string();
                     // "HotKey already registered" aqui é conflito de SO: outro
                     // aplicativo (ex.: Discord/Parsec) já reservou o atalho.
-                    // Não é inicialização duplicada da NYRA; registra como
+                    // Não é inicialização duplicada da KAZUMI; registra como
                     // conflito externo em vez de espalhar o erro bruto.
                     if detail.contains("already registered") {
                         log::info!("Atalho global em uso por outro aplicativo: {shortcut}");
@@ -617,7 +617,7 @@ pub fn run() {
                     app.path()
                         .temp_dir()
                         .ok()
-                        .map(|dir| dir.join("nyra-position-initialized"))
+                        .map(|dir| dir.join("kazumi-position-initialized"))
                         .unwrap_or_default()
                 }
             };
@@ -666,7 +666,7 @@ pub fn run() {
             if let Err(error) = show_dashboard(app.handle()) {
                 log::warn!("Falha ao abrir painel inicial empacotado: {error}");
             }
-            // §5: garante backend NYRA saudável (reuso, conflito ou spawn próprio).
+            // §5: garante backend KAZUMI saudável (reuso, conflito ou spawn próprio).
             backend_manager::spawn_supervisor(app.handle().clone());
             // A hidden launcher process can briefly propagate Windows'
             // minimized startup state after WebView creation. Restore once
@@ -685,7 +685,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("falha ao iniciar NYRA Desktop")
+        .expect("falha ao iniciar KAZUMI Desktop")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 if !app_handle

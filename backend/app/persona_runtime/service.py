@@ -17,8 +17,8 @@ from app.persona_runtime.models import (
     DriftDecision,
     EmotionDecayPolicy,
     EmotionalState,
-    NyraEmotion,
-    NyraIdentity,
+    KazumiEmotion,
+    KazumiIdentity,
     PersonaSnapshot,
     RelationshipEvidence,
     RelationshipState,
@@ -52,7 +52,7 @@ class PersonaRuntime:
         self.event_bus = event_bus
         self.world_state = world_state
         self.clock = clock
-        self.identity = NyraIdentity()
+        self.identity = KazumiIdentity()
         self.relationship = RelationshipState()
         self.emotion = EmotionalState()
         self.dialogue_policy = DialoguePolicy()
@@ -129,7 +129,7 @@ class PersonaRuntime:
         return value
 
     async def observe_event(self, event: Event) -> None:
-        if event.type == EventType.NYRA_EMOTION_CHANGED:
+        if event.type == EventType.KAZUMI_EMOTION_CHANGED:
             return
         signal = event_emotion_signal(event)
         if signal is None:
@@ -156,12 +156,12 @@ class PersonaRuntime:
             return await self.current_emotion()
         return await self.apply_signal(signal)
 
-    async def transition(self, emotion: NyraEmotion | str, *, intensity: float = .25,
+    async def transition(self, emotion: KazumiEmotion | str, *, intensity: float = .25,
                          confidence: float = .7, reason: str = "explicit_transition",
                          priority: int = 50, half_life_seconds: float = 900,
                          max_restore_age_seconds: float = 21600) -> EmotionalState:
         started = time.perf_counter()
-        target = NyraEmotion(str(getattr(emotion, "value", emotion)).casefold())
+        target = KazumiEmotion(str(getattr(emotion, "value", emotion)).casefold())
         now = datetime.fromtimestamp(self.clock(), tz=timezone.utc)
         async with self._lock:
             current = self._decayed(self.emotion, now=now)
@@ -172,14 +172,14 @@ class PersonaRuntime:
                 or (
                     reason == "TASK_SUCCEEDED"
                     and current.primary in {
-                        NyraEmotion.CONCERNED,
-                        NyraEmotion.WARNING,
-                        NyraEmotion.SERIOUS,
-                        NyraEmotion.FOCUSED,
-                        NyraEmotion.APOLOGETIC,
+                        KazumiEmotion.CONCERNED,
+                        KazumiEmotion.WARNING,
+                        KazumiEmotion.SERIOUS,
+                        KazumiEmotion.FOCUSED,
+                        KazumiEmotion.APOLOGETIC,
                     }
                 )
-                or target in {NyraEmotion.WARNING, NyraEmotion.SERIOUS, NyraEmotion.APOLOGETIC}
+                or target in {KazumiEmotion.WARNING, KazumiEmotion.SERIOUS, KazumiEmotion.APOLOGETIC}
             )
             if (
                 target != current.primary
@@ -192,7 +192,7 @@ class PersonaRuntime:
                 self._record_duration(started)
                 return current.model_copy(deep=True)
             bounded_intensity = min(.65, max(0.0, float(intensity)))
-            if target != current.primary and current.primary != NyraEmotion.NEUTRAL and not forced:
+            if target != current.primary and current.primary != KazumiEmotion.NEUTRAL and not forced:
                 bounded_intensity = min(bounded_intensity, current.intensity + .15)
             updated = EmotionalState(
                 primary=target,
@@ -274,10 +274,10 @@ class PersonaRuntime:
         return DriftDecision(reason="no_identity_drift_detected")
 
     def voice_interface(self, *, provider_supports_emotion: bool,
-                        emotion: NyraEmotion | str | None = None,
+                        emotion: KazumiEmotion | str | None = None,
                         intensity: float | None = None) -> VoiceEmotionInterface:
         current = self.emotion
-        selected = NyraEmotion(str(getattr(emotion, "value", emotion)).casefold()) if emotion is not None else current.primary
+        selected = KazumiEmotion(str(getattr(emotion, "value", emotion)).casefold()) if emotion is not None else current.primary
         selected_intensity = current.intensity if intensity is None else min(.65, max(0.0, float(intensity)))
         style = self._voice_style(selected)
         return VoiceEmotionInterface(
@@ -286,9 +286,9 @@ class PersonaRuntime:
             style=style,
             provider_supports_emotion=provider_supports_emotion,
             acoustic_emotion=selected.value if provider_supports_emotion else "neutral",
-            degraded=not provider_supports_emotion and selected != NyraEmotion.NEUTRAL,
+            degraded=not provider_supports_emotion and selected != KazumiEmotion.NEUTRAL,
             degradation_reason=(
-                None if provider_supports_emotion or selected == NyraEmotion.NEUTRAL
+                None if provider_supports_emotion or selected == KazumiEmotion.NEUTRAL
                 else "provider_has_no_native_emotion_capability"
             ),
         )
@@ -358,13 +358,13 @@ class PersonaRuntime:
         policy = state.decay_policy
         if total_age >= policy.max_restore_age_seconds:
             return EmotionalState(
-                primary=NyraEmotion.NEUTRAL, intensity=0.0, confidence=1.0,
+                primary=KazumiEmotion.NEUTRAL, intensity=0.0, confidence=1.0,
                 reason="context_expired", started_at=current, last_updated=current,
             )
         decayed = state.intensity * math.pow(.5, elapsed / policy.half_life_seconds)
         if decayed < policy.neutral_threshold:
             return EmotionalState(
-                primary=NyraEmotion.NEUTRAL, intensity=0.0,
+                primary=KazumiEmotion.NEUTRAL, intensity=0.0,
                 confidence=max(.5, state.confidence * .8), reason="decayed_to_neutral",
                 started_at=current, last_updated=current,
             )
@@ -377,7 +377,7 @@ class PersonaRuntime:
                                   reason: str) -> None:
         transition = f"{previous.primary.value}->{current.primary.value}"
         await self.event_bus.publish(
-            EventType.NYRA_EMOTION_CHANGED,
+            EventType.KAZUMI_EMOTION_CHANGED,
             emotion=current.primary.value,
             intensity=current.intensity,
             confidence=current.confidence,
@@ -392,15 +392,15 @@ class PersonaRuntime:
         self._durations_ms = [*self._durations_ms[-499:], value]
 
     @staticmethod
-    def _voice_style(emotion: NyraEmotion) -> str:
+    def _voice_style(emotion: KazumiEmotion) -> str:
         return {
-            NyraEmotion.FOCUSED: "objective_clear",
-            NyraEmotion.AMUSED: "light_subtle",
-            NyraEmotion.WARNING: "firm_controlled",
-            NyraEmotion.SERIOUS: "serious_controlled",
-            NyraEmotion.CONCERNED: "careful_precise",
-            NyraEmotion.EMPATHETIC: "gentle_considerate",
-            NyraEmotion.APOLOGETIC: "careful_sincere",
-            NyraEmotion.RELIEVED: "calm_relief",
-            NyraEmotion.CONFIDENT: "calm_confident",
+            KazumiEmotion.FOCUSED: "objective_clear",
+            KazumiEmotion.AMUSED: "light_subtle",
+            KazumiEmotion.WARNING: "firm_controlled",
+            KazumiEmotion.SERIOUS: "serious_controlled",
+            KazumiEmotion.CONCERNED: "careful_precise",
+            KazumiEmotion.EMPATHETIC: "gentle_considerate",
+            KazumiEmotion.APOLOGETIC: "careful_sincere",
+            KazumiEmotion.RELIEVED: "calm_relief",
+            KazumiEmotion.CONFIDENT: "calm_confident",
         }.get(emotion, "natural_consistent")

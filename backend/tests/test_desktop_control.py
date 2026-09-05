@@ -357,8 +357,8 @@ async def test_classic_uia_actuators_require_exact_one_use_approval(tmp_path, mo
 def test_dynamic_executable_target_expands_windows_environment(tmp_path, monkeypatch):
     executable = tmp_path / "probe.exe"
     executable.write_bytes(b"")
-    monkeypatch.setenv("NYRA_TEST_APP_ROOT", str(tmp_path))
-    raw_target = r"%NYRA_TEST_APP_ROOT%\probe.exe"
+    monkeypatch.setenv("KAZUMI_TEST_APP_ROOT", str(tmp_path))
+    raw_target = r"%KAZUMI_TEST_APP_ROOT%\probe.exe"
     candidate = ApplicationCandidate(
         id="probe",
         display_name="Probe",

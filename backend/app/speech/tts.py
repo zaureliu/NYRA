@@ -19,16 +19,16 @@ import numpy as np
 from app.core.paths import BACKEND_ROOT, DATA_ROOT, IDENTITY_ROOT, PROJECT_ROOT
 from app.speech.profile import VoiceSynthesisOptions, load_voice_profile
 from app.speech.tts_identity import (
-    NYRA_KOKORO_FALLBACK_VOICE,
-    NYRA_PRIMARY_ENGINE,
-    NYRA_VOICE_ID,
+    KAZUMI_KOKORO_FALLBACK_VOICE,
+    KAZUMI_PRIMARY_ENGINE,
+    KAZUMI_VOICE_ID,
 )
 
 
-logger = logging.getLogger("nyra.voice")
+logger = logging.getLogger("kazumi.voice")
 
-NYRA_EDGE_VOICE_ID = NYRA_VOICE_ID
-NYRA_KOKORO_VOICE_ID = NYRA_KOKORO_FALLBACK_VOICE
+KAZUMI_EDGE_VOICE_ID = KAZUMI_VOICE_ID
+KAZUMI_KOKORO_VOICE_ID = KAZUMI_KOKORO_FALLBACK_VOICE
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,12 +368,12 @@ class KokoroTTSProvider(TTSProvider):
         self,
         model_path: Path,
         voices_path: Path,
-        voice: str = NYRA_KOKORO_VOICE_ID,
+        voice: str = KAZUMI_KOKORO_VOICE_ID,
         speaking_rate: float = 0.97,
     ) -> None:
         self.model_path = model_path
         self.voices_path = voices_path
-        self.voice = NYRA_KOKORO_FALLBACK_VOICE
+        self.voice = KAZUMI_KOKORO_FALLBACK_VOICE
         self.speaking_rate = speaking_rate
         self.output_dir = DATA_ROOT / "audio"
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -440,7 +440,7 @@ class KokoroTTSProvider(TTSProvider):
     @staticmethod
     def _resolve_voice(_model, _voice: str) -> str:
         # The local contingency voice must never interpolate speaker embeddings.
-        return NYRA_KOKORO_FALLBACK_VOICE
+        return KAZUMI_KOKORO_FALLBACK_VOICE
 
     async def health(self) -> bool:
         if self._probe_ok is not None:
@@ -482,7 +482,7 @@ class KokoroTTSProvider(TTSProvider):
         model = await self._load()
         resolved_voice = self._resolve_voice(model, selected.voice)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        output = self.output_dir / f"nyra-{uuid4().hex}.wav"
+        output = self.output_dir / f"kazumi-{uuid4().hex}.wav"
         paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]
         if not paragraphs:
             raise ValueError("Texto vazio para síntese")
@@ -595,8 +595,8 @@ class ChatterboxTTSProvider(TTSProvider):
         ]
         if self.reference_path and self.reference_path.is_file():
             voices.append({
-                "id": "nyra_reference",
-                "name": "Referência autorizada da NYRA",
+                "id": "kazumi_reference",
+                "name": "Referência autorizada da KAZUMI",
                 "language": "pt-BR",
                 "gender": "reference",
             })
@@ -633,7 +633,7 @@ class ChatterboxTTSProvider(TTSProvider):
         state: str = "neutral",
         options: VoiceSynthesisOptions | None = None,
     ) -> Path:
-        """Use an explicitly license-approved candidate without changing NYRA_VOICE."""
+        """Use an explicitly license-approved candidate without changing KAZUMI_VOICE."""
         if not reference_path.is_file():
             raise ValueError("referência de candidata inexistente")
         return await self._synthesize(text, state, options, reference_path)
@@ -652,7 +652,7 @@ class ChatterboxTTSProvider(TTSProvider):
             return cached
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.request_dir.mkdir(parents=True, exist_ok=True)
-        output = self.output_dir / f"nyra-{uuid4().hex}.wav"
+        output = self.output_dir / f"kazumi-{uuid4().hex}.wav"
         request = self.request_dir / f"request-{uuid4().hex}.json"
         reference = reference_override or (self.reference_path if self.reference_path and self.reference_path.is_file() else None)
         payload = {
@@ -765,7 +765,7 @@ class EdgeTTSProvider(TTSProvider):
         locale: str = "pt-BR",
         gender: str = "Female",
         timeout_seconds: int = 30,
-        voice: str = NYRA_EDGE_VOICE_ID,
+        voice: str = KAZUMI_EDGE_VOICE_ID,
     ) -> None:
         self.locale = locale
         self.gender = gender
@@ -783,7 +783,7 @@ class EdgeTTSProvider(TTSProvider):
 
     @property
     def engine_id(self) -> str:
-        return NYRA_PRIMARY_ENGINE
+        return KAZUMI_PRIMARY_ENGINE
 
     @property
     def model_id(self) -> str:
@@ -850,8 +850,8 @@ class EdgeTTSProvider(TTSProvider):
             "voice": self.voice,
         })).for_state(state, profile)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        mp3_path = self.output_dir / f"nyra-edge-{uuid4().hex}.mp3"
-        output = self.output_dir / f"nyra-edge-{uuid4().hex}.wav"
+        mp3_path = self.output_dir / f"kazumi-edge-{uuid4().hex}.mp3"
+        output = self.output_dir / f"kazumi-edge-{uuid4().hex}.wav"
         import edge_tts
         communicate = edge_tts.Communicate(
             text[:6000],
@@ -920,7 +920,7 @@ class Pyttsx3TTS(TTSProvider):
         profile, defaults = load_voice_profile()
         selected = (options or defaults).for_state(state, profile)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        output = self.output_dir / f"nyra-{uuid4().hex}.wav"
+        output = self.output_dir / f"kazumi-{uuid4().hex}.wav"
         input_path = self.output_dir / f"tts-input-{uuid4().hex}.txt"
         input_path.write_text(text[:6000], encoding="utf-8")
         try:
@@ -957,7 +957,7 @@ class Pyttsx3TTS(TTSProvider):
 class XTTSTTS(TTSProvider):
     def __init__(self, language: str = "pt") -> None:
         self.language = language.split("-")[0].lower()
-        self.reference = IDENTITY_ROOT / "nyra_reference.wav"
+        self.reference = IDENTITY_ROOT / "kazumi_reference.wav"
 
     @property
     def name(self) -> str:
@@ -980,7 +980,7 @@ async def create_tts_provider(
     language: str,
     model_path: Path | None = None,
     voices_path: Path | None = None,
-    voice: str = NYRA_EDGE_VOICE_ID,
+    voice: str = KAZUMI_EDGE_VOICE_ID,
     chatterbox_python: Path | None = None,
     chatterbox_device: str = "cpu",
     chatterbox_reference: Path | None = None,
@@ -996,7 +996,7 @@ async def create_tts_provider(
     speaking_rate: float = 0.97,
 ) -> TTSProvider:
     kokoro = (
-        KokoroTTSProvider(model_path, voices_path, NYRA_KOKORO_FALLBACK_VOICE, speaking_rate)
+        KokoroTTSProvider(model_path, voices_path, KAZUMI_KOKORO_FALLBACK_VOICE, speaking_rate)
         if model_path is not None and voices_path is not None
         else None
     )
@@ -1093,7 +1093,7 @@ def tts_provider_catalog(
     providers: list[TTSProvider] = [
         ChatterboxTTSProvider(chatterbox_python, chatterbox_device, chatterbox_reference, chatterbox_model_id, "chatterbox_multilingual_v3", chatterbox_resident, chatterbox_timeout_seconds),
         ChatterboxTTSProvider(chatterbox_python, chatterbox_device, chatterbox_reference, chatterbox_ptbr_model_id, "chatterbox_ptbr", chatterbox_resident, chatterbox_timeout_seconds),
-        KokoroTTSProvider(model_path, voices_path, NYRA_KOKORO_FALLBACK_VOICE),
+        KokoroTTSProvider(model_path, voices_path, KAZUMI_KOKORO_FALLBACK_VOICE),
     ]
     if edge_tts_enabled:
         providers.append(EdgeTTSProvider(edge_tts_locale, edge_tts_gender, edge_tts_timeout_seconds, voice))

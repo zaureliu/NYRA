@@ -20,7 +20,7 @@ from typing import Any
 
 from app.core.paths import DATA_ROOT
 
-logger = logging.getLogger("nyra.daily_check")
+logger = logging.getLogger("kazumi.daily_check")
 
 HISTORY_PATH = DATA_ROOT / "daily-check-history.jsonl"
 MAX_HISTORY_LINES = 400
@@ -186,9 +186,9 @@ async def _check_filesystem_fixture(out: dict) -> None:
     """Fixture controlada em temp: mkdir/write/read/rename/copy/delete (§125)."""
     steps_done: list[str] = []
     try:
-        base = Path(tempfile.mkdtemp(prefix="nyra-daily-check-"))
+        base = Path(tempfile.mkdtemp(prefix="kazumi-daily-check-"))
         target = base / "fixture.txt"
-        target.write_text("nyra-daily-check", encoding="utf-8")
+        target.write_text("kazumi-daily-check", encoding="utf-8")
         steps_done.append("write")
         content = target.read_text(encoding="utf-8")
         steps_done.append("read")
@@ -198,7 +198,7 @@ async def _check_filesystem_fixture(out: dict) -> None:
         copied = base / "fixture-copy.txt"
         shutil.copy2(renamed, copied)
         steps_done.append("copy")
-        ok = content == "nyra-daily-check" and renamed.exists() and copied.exists()
+        ok = content == "kazumi-daily-check" and renamed.exists() and copied.exists()
         shutil.rmtree(base, ignore_errors=True)
         steps_done.append("delete")
         out["Filesystem"] = {
@@ -252,14 +252,14 @@ async def _check_workflows(services, out: dict) -> None:
         out["Workflows"] = {"result": SKIPPED,
                             "details": {"reason": "workflow engine desabilitada"}}
         return
-    plan = engine.dry_run("wf_check_nyra_health")
+    plan = engine.dry_run("wf_check_kazumi_health")
     if not plan.get("success"):
         seeded = engine.seed_templates()
-        plan = engine.dry_run("wf_check_nyra_health")
+        plan = engine.dry_run("wf_check_kazumi_health")
         if not plan.get("success"):
             out["Workflows"] = {
                 "result": FAIL if not seeded.get("success") else SKIPPED,
-                "details": {"reason": "template wf_check_nyra_health indisponível",
+                "details": {"reason": "template wf_check_kazumi_health indisponível",
                             "seed": seeded},
             }
             return

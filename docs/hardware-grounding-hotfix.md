@@ -58,7 +58,7 @@ and refresh, simulated data, failed enumeration, stale World State, fabricated
 effects, presenter enforcement and background tool-event isolation. Controlled
 fixtures prove those code paths only; they are not a physical-device test.
 The official no-device scenario must additionally run against the release
-launched by `NYRA.lnk`, using actual native enumeration. No private audio,
+launched by `KAZUMI.lnk`, using actual native enumeration. No private audio,
 operator database or runtime logs belong in this repository.
 
 ## Validation performed
@@ -67,7 +67,7 @@ operator database or runtime logs belong in this repository.
   USB, grounding, Agent Loop, World State and realtime integration tests).
 - Frontend: 15 targeted tests passed; frontend build, PyInstaller and Tauri
   release completed. Voice/STT implementation and settings were not changed.
-- Official `NYRA.lnk` runtime: native enumeration found four USB devices,
+- Official `KAZUMI.lnk` runtime: native enumeration found four USB devices,
   no COM interfaces and no identified ESP32. Both the original ESP32/LED request
   and the assertion "o ESP32 está conectado" triggered real `hardware_discover`
   executions. Both replies reported that no ESP32 was found on USB/serial,

@@ -7,10 +7,10 @@ from app.core.process_ownership import ParentProcessWatch, owned_parent_pid
 
 
 def test_owned_parent_pid_requires_explicit_owned_environment(monkeypatch):
-    monkeypatch.delenv("NYRA_BACKEND_OWNED", raising=False)
-    monkeypatch.setenv("NYRA_PARENT_PID", "42")
+    monkeypatch.delenv("KAZUMI_BACKEND_OWNED", raising=False)
+    monkeypatch.setenv("KAZUMI_PARENT_PID", "42")
     assert owned_parent_pid() is None
-    monkeypatch.setenv("NYRA_BACKEND_OWNED", "1")
+    monkeypatch.setenv("KAZUMI_BACKEND_OWNED", "1")
     assert owned_parent_pid() == 42
 
 

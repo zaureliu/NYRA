@@ -8,7 +8,7 @@ ou restauração de quarentena foi realizada.
 ## Evidência e classificação
 
 O histórico local contém `Trojan:Win32/Bearfoos.B!ml`, ThreatID `2147731849`,
-nos dois caminhos oficiais de `nyra-backend.exe`. Há ocorrências desde
+nos dois caminhos oficiais de `kazumi-backend.exe`. Há ocorrências desde
 2026-09-03 03:21:21 (horário local), anteriores ao Deepgram
 (`7655624108aa5b6caec600ffa19c62382a3ca3cc`, 2026-09-04 21:07).
 Os registros consultados apresentam ação bem-sucedida e ThreatStatusID 3.
@@ -39,7 +39,7 @@ Nenhuma alteração de bootloader, ofuscação ou tentativa de evasão foi feita
 ## Build, hooks e recursos
 
 Builder canônico: `packaging/build-backend.ps1`, chamado pelo bootstrap de
-`npm run build`; spec: `packaging/nyra-backend.spec`.
+`npm run build`; spec: `packaging/kazumi-backend.spec`.
 Python utilizado: `backend/.venv`, CPython 3.11.9 x64.
 PyInstaller 6.22.2; pyinstaller-hooks-contrib 2026.7.
 Modo `onedir`, console, `exclude_binaries=True`, `strip=False`, `optimize=0`.
@@ -55,7 +55,7 @@ auditoria independente da cadeia de fornecimento.
 EXE x64: seções `.text`, `.rdata`, `.data`, `.pdata`, `.fptable`, `.rsrc`,
 `.reloc`; imports de bootloader USER32, KERNEL32 e ADVAPI32.
 Recursos PE: ícone console padrão, grupo de ícones e manifesto `asInvoker`,
-sem recurso VERSIONINFO customizado ou assinatura de código NYRA.
+sem recurso VERSIONINFO customizado ou assinatura de código KAZUMI.
 O overlay é o CArchive normal do PyInstaller, com o PYZ comprimido em zlib.
 DLLs/modelos ficam em `_internal`, sem extração onefile `_MEI*` por execução.
 
@@ -89,7 +89,7 @@ Build anterior ao Deepgram e build Deepgram: mesmos **159 arquivos nativos
 DATA/BINARY do Analysis. O COLLECT remove a duplicação.
 
 Pacote final: 45 BINARY + 110 EXTENSION = **155 DLLs/PYDs**, 464 DATA,
-um único EXE (`nyra-backend.exe`); 2556 módulos Python no Analysis.
+um único EXE (`kazumi-backend.exe`); 2556 módulos Python no Analysis.
 Executáveis, DLLs ou runtime hooks inesperados: **0** dentro desse inventário.
 
 Famílias presentes: CPython 3.11/OpenSSL/SQLite/libffi; runtime VC++;
@@ -128,7 +128,7 @@ autorun/RunOnce, mudanças no Defender, PowerShell codificado, download oculto
 de executáveis, eval/exec/marshal e uso de subprocess/ctypes/registro.
 Os pontos examinados correspondem a funções explícitas:
 
-- Credential Broker usa `NYRA_CRED:`/CredReadW e DPAPI para seus próprios
+- Credential Broker usa `KAZUMI_CRED:`/CredReadW e DPAPI para seus próprios
   registros, sem enumeração ou dumping de credenciais de terceiros;
 - descoberta de apps/USB e observação de janelas usam consultas locais;
   OpenProcess observado solicita apenas PROCESS_QUERY_LIMITED_INFORMATION;
@@ -159,11 +159,11 @@ nunca são apagados ou sobrescritos por essa mudança.
    Defender concluído em 21:34:23 sem alerta.
 3. Higiene do pacote: assets públicos explícitos; excluir apenas dependências
    de teste identificadas; `--clean` com `PYINSTALLER_CONFIG_DIR` isolado por build.
-   UPX, bootloader, versão do PyInstaller e funcionalidades NYRA preservados.
+   UPX, bootloader, versão do PyInstaller e funcionalidades KAZUMI preservados.
 
-Cada build usa `%LOCALAPPDATA%/NYRA/tmp/pyinstaller-<id>/{cache,work,dist}`.
+Cada build usa `%LOCALAPPDATA%/KAZUMI/tmp/pyinstaller-<id>/{cache,work,dist}`.
 `--clean` só toca seu cache gerado, não cache global ou dados do operador.
-O output anterior é movido pelo builder para `nyra-backend-previous-<id>`;
+O output anterior é movido pelo builder para `kazumi-backend-previous-<id>`;
 nenhum arquivo da quarentena é recuperado. Não houve limpeza destrutiva.
 Não foi necessário criar matriz de repros mínimos, porque o controle
 inalterado já passou. Não se fez uma série de mudanças para procurar um hash
@@ -186,8 +186,8 @@ caminhos oficiais:
 Ambas as pastas oficiais passaram por exames personalizados locais do Defender
 concluídos em 21:37:23/24 sem nova ameaça.
 
-O atalho real `C:/Users/<USER>/Desktop/NYRA.lnk` aponta para WScript +
-`<REPO_ROOT>/scripts/launch-nyra.vbs`. Lançamento normal (não dev/CDP) respondeu
+O atalho real `C:/Users/<USER>/Desktop/KAZUMI.lnk` aponta para WScript +
+`<REPO_ROOT>/scripts/launch-kazumi.vbs`. Lançamento normal (não dev/CDP) respondeu
 health em 21:39:18 com um backend e um desktop; porta 8000 em 127.0.0.1.
 Evento nativo WM_CLOSE nas duas janelas visíveis: ambas ocultas, backend
 continuou online (X = HIDE_TO_TRAY).
@@ -198,7 +198,7 @@ nesta sessão. A instância de release normal não expõe CDP; não foi criado u
 endpoint de teste, não foi recompilado o desktop para esse fim e não se usou
 kill de processo como substituto do coordenador.
 
-Foi confirmado no source que `quit_nyra` (UiExit), o item nativo `quit`
+Foi confirmado no source que `quit_kazumi` (UiExit), o item nativo `quit`
 (TrayExit) e ExitRequested (OsShutdown) delegam à mesma função
 `shutdown::request_app_shutdown`. Ela para cursor/STT bridge, chama
 `backend_manager::shutdown_owned`, encerra Presence, remove tray/janelas e
@@ -215,14 +215,14 @@ o listener; netstat e a consulta fora do sandbox confirmaram a porta em escuta.
 
 ### Helper incompatível (somente inspeção após a proibição)
 
-`.tmp/invoke-nyra-tray-exit.ps1` não contém Stop-Process, taskkill, WM_CLOSE,
+`.tmp/invoke-kazumi-tray-exit.ps1` não contém Stop-Process, taskkill, WM_CLOSE,
 SendMessage/PostMessage ou comando que encerre PowerShell/terminal.
 Contém EnumWindows/FindWindow por classe, acessibilidade e cliques por
 coordenadas. Seleciona um ícone sem título e procura um menu visível genérico,
-confirmando o texto `Encerrar NYRA` somente mais adiante.
+confirmando o texto `Encerrar KAZUMI` somente mais adiante.
 
 Antes de qualquer validação do alvo, usa `keybd_event(27, ...)` para enviar
-Esc globalmente, sem vincular o teclado à NYRA. Se Codex estiver em primeiro
+Esc globalmente, sem vincular o teclado à KAZUMI. Se Codex estiver em primeiro
 plano, esse Esc pode cancelar a sessão ativa — explicação provável, não uma
 prova instrumentada de qual janela recebeu o evento. O resultado recuperado
 da execução interrompida mostrou retângulo do botão de overflow

@@ -2,7 +2,7 @@
 
 Fases:
 1) Read-only: estados reais de todos os serviços registrados.
-2) ACT -> VERIFY real e reversível em nyra_test_service (start -> health -> restart -> health -> stop).
+2) ACT -> VERIFY real e reversível em kazumi_test_service (start -> health -> restart -> health -> stop).
 """
 
 import io
@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import os
 
-os.environ.setdefault("NYRA_OLLAMA_PRELOAD", "false")
-os.environ.setdefault("NYRA_CONVERSATION_ENGINE", "false")
+os.environ.setdefault("KAZUMI_OLLAMA_PRELOAD", "false")
+os.environ.setdefault("KAZUMI_CONVERSATION_ENGINE", "false")
 
 from fastapi.testclient import TestClient
 
@@ -38,7 +38,7 @@ def main() -> None:
         assert listing.status_code == 200
         services = {item["id"]: item for item in listing.json()["services"]}
         show("SERVIÇOS (read-only)", listing.json())
-        for expected in ("nyra_backend", "nyra_frontend_dev", "ollama", "utamo_sentinel", "nyra_test_service"):
+        for expected in ("kazumi_backend", "kazumi_frontend_dev", "ollama", "utamo_sentinel", "kazumi_test_service"):
             assert expected in services, expected
 
         for service_id in services:
@@ -52,24 +52,24 @@ def main() -> None:
         assert missing.status_code == 404
 
         # ACT -> VERIFY real e reversível no serviço de teste seguro
-        started = client.post("/api/runtime/services/nyra_test_service/start", json={}).json()
-        show("START nyra_test_service", started)
+        started = client.post("/api/runtime/services/kazumi_test_service/start", json={}).json()
+        show("START kazumi_test_service", started)
         assert started["success"] is True and started["effect_verified"] is True and started["state"] == "READY"
 
-        health = client.get("/api/runtime/services/nyra_test_service/health").json()
-        show("HEALTH nyra_test_service", health)
+        health = client.get("/api/runtime/services/kazumi_test_service/health").json()
+        show("HEALTH kazumi_test_service", health)
         assert health["health"]["healthy"] is True
 
-        restarted = client.post("/api/runtime/services/nyra_test_service/restart", json={}).json()
-        show("RESTART nyra_test_service", restarted)
+        restarted = client.post("/api/runtime/services/kazumi_test_service/restart", json={}).json()
+        show("RESTART kazumi_test_service", restarted)
         assert restarted["success"] is True and restarted["state"] == "READY"
 
-        logs = client.get("/api/runtime/services/nyra_test_service/logs?lines=20").json()
-        show("LOGS nyra_test_service", logs)
+        logs = client.get("/api/runtime/services/kazumi_test_service/logs?lines=20").json()
+        show("LOGS kazumi_test_service", logs)
         assert logs["exists"] is True and any("online" in line for line in logs["lines"])
 
-        stopped = client.post("/api/runtime/services/nyra_test_service/stop", json={}).json()
-        show("STOP nyra_test_service", stopped)
+        stopped = client.post("/api/runtime/services/kazumi_test_service/stop", json={}).json()
+        show("STOP kazumi_test_service", stopped)
         assert stopped["success"] is True and stopped["state"] == "STOPPED"
 
         history = client.get("/api/runtime/history").json()
@@ -77,7 +77,7 @@ def main() -> None:
         actions = [event["action"] for event in history["events"][:4]]
         assert {"start", "restart", "stop"} <= set(actions)
 
-        self_restart = client.post("/api/runtime/services/nyra_backend/restart", json={}).json()
+        self_restart = client.post("/api/runtime/services/kazumi_backend/restart", json={}).json()
         show("SELF-RESTART bloqueado (limitação declarada)", self_restart)
         assert self_restart["error_code"] == "SELF_RESTART_UNSUPPORTED"
 

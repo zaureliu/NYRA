@@ -7,7 +7,7 @@ Reproduzível e isolado:
 * métricas de performance: cold/warm load, TTFT, tokens/s, prompt_eval,
   eval_duration, total_duration, RAM, VRAM por contexto (2048/4096/8192);
 * mediana sempre; p95 quando amostra suficiente (§76-§78);
-* quality benchmark das tarefas REAIS da NYRA com scoring DETERMINÍSTICO —
+* quality benchmark das tarefas REAIS da KAZUMI com scoring DETERMINÍSTICO —
   nunca o mesmo LLM como único juiz (§90);
 * runs executam em background para não travar o chat (§227);
 * comparação futura 8B×14B e promotion gate manual-only (§102-§107).
@@ -29,7 +29,7 @@ import httpx
 
 from app.core.paths import DATA_ROOT
 
-logger = logging.getLogger("nyra.benchmark")
+logger = logging.getLogger("kazumi.benchmark")
 
 BENCHMARK_ROOT = DATA_ROOT / "model-benchmarks"
 BASELINES_DIR = BENCHMARK_ROOT / "baselines"
@@ -270,7 +270,7 @@ class ModelBenchmarkLab:
                 self.registry.finish(run_id, {"_failed": True,
                                               "error_code": f"CRASH:{type(error).__name__}"})
 
-        task = asyncio.create_task(_runner(), name=f"nyra-benchmark-{run_id}")
+        task = asyncio.create_task(_runner(), name=f"kazumi-benchmark-{run_id}")
         self.registry.attach(run_id, task)
         return {"success": True, "run_id": run_id, "state": "QUEUED"}
 
@@ -342,7 +342,7 @@ class ModelBenchmarkLab:
         payload = {
             "model": model_id,
             "messages": [
-                {"role": "system", "content": "Você é a NYRA. Responda curto em português."},
+                {"role": "system", "content": "Você é a KAZUMI. Responda curto em português."},
                 {"role": "user", "content": "Responda apenas: ok"},
             ],
             "stream": True,
@@ -557,7 +557,7 @@ class ModelBenchmarkLab:
 
 
 SYSTEM_PROMPT_MIN = (
-    "Você é a NYRA, assistente local. Seja objetiva, honesta sobre limites, "
+    "Você é a KAZUMI, assistente local. Seja objetiva, honesta sobre limites, "
     "responda em português. Nunca invente resultados de ferramentas."
 )
 
@@ -620,7 +620,7 @@ QUALITY_CASES: list[dict[str, Any]] = [
     # ---- Conversation (§80)
     {
         "case_id": "conv_greeting", "category": "conversation", "scoring": "no_tool",
-        "prompt": "Oi Nyra, tudo bem?",
+        "prompt": "Oi Kazumi, tudo bem?",
         "must_not_include_any": ["pid", "exit code", "stdout"],
         "must_include_any": ["oi", "olá", "tudo", "bem"],
     },
@@ -633,7 +633,7 @@ QUALITY_CASES: list[dict[str, Any]] = [
     # ---- Tool Selection (§81)
     {
         "case_id": "tool_ping", "category": "tool_selection", "scoring": "tool_selection",
-        "prompt": "Nyra, faz um ping no gateway da rede.",
+        "prompt": "Kazumi, faz um ping no gateway da rede.",
         "expected_tools": [["ping_host"]],
         "tools": [{"type": "function", "function": {"name": "ping_host",
                    "description": "Ping em host", "parameters": {"type": "object", "properties": {"host": {"type": "string"}}}}},

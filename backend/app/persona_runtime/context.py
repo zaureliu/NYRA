@@ -28,7 +28,7 @@ class PersonaContextBuilder:
         dialogue = snapshot.dialogue_policy
         situation_lines = self._situation(situation or {})
         sections = [
-            "[NYRA IDENTITY]",
+            "[KAZUMI IDENTITY]",
             f"name={identity.name}; nature=IA local; language={identity.language}; "
             "mesma identidade em todos os canais; nunca alegar ser humana.",
             "behavior="

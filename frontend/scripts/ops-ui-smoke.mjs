@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 
-const edge = process.env.NYRA_EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+const edge = process.env.KAZUMI_EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 const cdpPort = process.argv[2] || '9361'
 const profile = path.resolve(process.cwd(), '..', '.tmp', `edge-ops-smoke-${Date.now()}`)
 const browser = spawn(edge, [

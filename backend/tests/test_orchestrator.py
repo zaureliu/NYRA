@@ -13,7 +13,7 @@ from app.speech.tts import DisabledTTS
 @pytest.mark.asyncio
 async def test_mock_llm_pipeline_persists_both_messages(tmp_path: Path):
     bus = EventBus()
-    memory = MemoryRepository(tmp_path / "nyra.db", bus)
+    memory = MemoryRepository(tmp_path / "kazumi.db", bus)
     await memory.initialize()
     orchestrator = ChatOrchestrator(
         MockLLMProvider("Estou online. Os serviços parecem comportados, por enquanto."),
@@ -22,11 +22,11 @@ async def test_mock_llm_pipeline_persists_both_messages(tmp_path: Path):
         bus,
         DisabledTTS(),
     )
-    result = await orchestrator.converse("Nyra, você está online?", synthesize=False)
+    result = await orchestrator.converse("Kazumi, você está online?", synthesize=False)
     conversation = await memory.recent_conversation()
     assert result.response.startswith("Estou online")
     assert result.display_text == result.response
     assert result.speech_text
     assert result.speech_text != ""
     assert [item.role for item in conversation] == ["user", "assistant"]
-    assert EventType.NYRA_RESPONSE in [event.type for event in bus.history()]
+    assert EventType.KAZUMI_RESPONSE in [event.type for event in bus.history()]

@@ -1,4 +1,4 @@
-"""NYRA Autonomous Computer Operator V2 (spec: prompt9_autonomous_computer_operator_v2.md).
+"""KAZUMI Autonomous Computer Operator V2 (spec: prompt9_autonomous_computer_operator_v2.md).
 
 Capabilities layered ON TOP of the existing Agent Controller — never a second
 brain. Each sub-module is independently testable and follows the house rules:

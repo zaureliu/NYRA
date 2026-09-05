@@ -48,7 +48,7 @@ async def http_probe(url: str, timeout_seconds: float = 4.0, *, bearer_token: st
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return ProbeResult(kind="http", success=False, detail="URL inválida")
-    headers = {"User-Agent": "NYRA-Homelab/1.0"}
+    headers = {"User-Agent": "KAZUMI-Homelab/1.0"}
     if bearer_token:
         # The token lives only in the request header; it never reaches
         # ProbeResult detail, logs or the registry (spec §94, §149-150).

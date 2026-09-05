@@ -1,4 +1,4 @@
-"""Daily-use E2E da NYRA (spec Partes S-AH, BI, BH).
+"""Daily-use E2E da KAZUMI (spec Partes S-AH, BI, BH).
 
 Executa contra o RUNTIME REAL (backend em :8000 + Ollama) os cenários diários,
 sempre com prova verificável por etapa (§258-§263):
@@ -40,7 +40,7 @@ import httpx  # noqa: E402
 PASS, DEGRADED, FAIL, SKIPPED = "PASS", "DEGRADED", "FAIL", "SKIPPED"
 ensure_script_directories()
 REPORT_PATH = REPORT_ROOT / "daily-use-report.json"
-LEAK_TOKENS = ["nyra-daily", "wf_check_nyra_health", "wfr_", "bm_"]
+LEAK_TOKENS = ["kazumi-daily", "wf_check_kazumi_health", "wfr_", "bm_"]
 
 
 class Scenario:
@@ -331,11 +331,11 @@ class DailyE2E:
         by_id = {item.get("id") or item.get("service_id"): item for item in services}
         scenario.proofs["service_ids"] = sorted(by_id.keys())
         interesting = {}
-        for service_id in ("nyra_backend", "ollama", "nyra_frontend_dev"):
+        for service_id in ("kazumi_backend", "ollama", "kazumi_frontend_dev"):
             entry = by_id.get(service_id) or {}
             interesting[service_id] = entry.get("state")
         scenario.proofs["states"] = interesting
-        backend_state = str(interesting["nyra_backend"]).upper()
+        backend_state = str(interesting["kazumi_backend"]).upper()
         ollama_state = str(interesting["ollama"]).upper()
         ok = response.status_code == 200 and backend_state in {"RUNNING", "READY"}
         degraded = ollama_state not in {"READY", "RUNNING", "OLLAMA_READY", "EXTERNAL_SERVICE"}
@@ -483,14 +483,14 @@ class DailyE2E:
                                             else (DEGRADED if chat_ok else FAIL)))
 
     def s14_workflow_check_health(self) -> None:
-        scenario = Scenario("14_workflow_check_nyra_health")
-        dry = self.client.post(f"{self.base_url}/api/workflows/wf_check_nyra_health/dry-run",
+        scenario = Scenario("14_workflow_check_kazumi_health")
+        dry = self.client.post(f"{self.base_url}/api/workflows/wf_check_kazumi_health/dry-run",
                                json={}).json()
         scenario.proofs["dry_run_ok"] = bool(dry.get("success"))
-        preflight = self.client.post(f"{self.base_url}/api/workflows/wf_check_nyra_health/preflight",
+        preflight = self.client.post(f"{self.base_url}/api/workflows/wf_check_kazumi_health/preflight",
                                      json={}).json()
         scenario.proofs["preflight_ready"] = bool(preflight.get("ready_to_run"))
-        run = self.client.post(f"{self.base_url}/api/workflows/wf_check_nyra_health/run",
+        run = self.client.post(f"{self.base_url}/api/workflows/wf_check_kazumi_health/run",
                                json={}, timeout=90).json()
         scenario.proofs["run_state"] = run.get("state")
         scenario.proofs["run_success"] = bool(run.get("success"))
@@ -508,7 +508,7 @@ class DailyE2E:
 
     def s15_recovery_controlled(self) -> None:
         scenario = Scenario("15_recovery_falha_controlada")
-        start = self.client.post(f"{self.base_url}/api/runtime/services/nyra_test_service/start",
+        start = self.client.post(f"{self.base_url}/api/runtime/services/kazumi_test_service/start",
                                  json={}, timeout=60)
         scenario.proofs["start_http"] = start.status_code
         if start.status_code >= 300 and "already_running" not in json.dumps(start.json()).lower():
@@ -517,7 +517,7 @@ class DailyE2E:
 
         def snapshot():
             return self.client.get(
-                f"{self.base_url}/api/runtime/services/nyra_test_service").json()
+                f"{self.base_url}/api/runtime/services/kazumi_test_service").json()
 
         snap = snapshot()
         pid = snap.get("pid") or (snap.get("process") or {}).get("pid")
@@ -543,7 +543,7 @@ class DailyE2E:
         scenario.proofs["failure_detected_state"] = str((detected or {}).get("state", "")).upper()
 
         restarted = self.client.post(
-            f"{self.base_url}/api/runtime/services/nyra_test_service/restart",
+            f"{self.base_url}/api/runtime/services/kazumi_test_service/restart",
             json={}, timeout=90)
 
         def healthy():
@@ -563,7 +563,7 @@ class DailyE2E:
         scenario.proofs["recovered_state"] = str((recovered or {}).get("state", "")).upper()
         scenario.proofs["verification"] = str((recovered or {}).get("verification_status", ""))
         stopped = self.client.post(
-            f"{self.base_url}/api/runtime/services/nyra_test_service/stop", json={}, timeout=60)
+            f"{self.base_url}/api/runtime/services/kazumi_test_service/stop", json={}, timeout=60)
         scenario.proofs["stopped_after_test"] = stopped.status_code < 300
 
         detected_ok = scenario.proofs["failure_detected_state"] in {"FAILED", "CRASH_LOOP", "STOPPED"}
@@ -670,8 +670,8 @@ class DailyE2E:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Daily-use E2E real da NYRA")
-    parser.add_argument("--base-url", default=os.environ.get("NYRA_BASE_URL", "http://127.0.0.1:8000"))
+    parser = argparse.ArgumentParser(description="Daily-use E2E real da KAZUMI")
+    parser.add_argument("--base-url", default=os.environ.get("KAZUMI_BASE_URL", "http://127.0.0.1:8000"))
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--only", nargs="*", help="prefixos de cenário (ex.: 01 07)")
     parser.add_argument("--with-vscode", action="store_true")

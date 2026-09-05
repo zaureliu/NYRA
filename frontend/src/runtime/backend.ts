@@ -89,7 +89,7 @@ async function tauriBackendFetch(input: RequestInfo | URL, init?: RequestInit): 
     )
   } catch (issue) {
     if (request.signal.aborted) throw abortError(request.signal)
-    throw new Error(typeof issue === 'string' ? issue : 'Falha no transporte local da NYRA')
+    throw new Error(typeof issue === 'string' ? issue : 'Falha no transporte local da KAZUMI')
   }
 
   const noBody = response.body.length === 0 || [101, 204, 205, 304].includes(response.status)
@@ -100,7 +100,7 @@ async function tauriBackendFetch(input: RequestInfo | URL, init?: RequestInit): 
   })
 }
 
-export function nyraFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export function kazumiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   if (!isTauriRuntime()) return globalThis.fetch(input, init)
   return tauriBackendFetch(input, init)
 }
@@ -109,12 +109,12 @@ export function installTauriBackendBridge(): void {
   if (!isTauriRuntime() || installed) return
   nativeFetch = window.fetch.bind(window)
   installed = true
-  window.fetch = nyraFetch
+  window.fetch = kazumiFetch
 }
 
 export async function backendObjectUrl(value: string): Promise<string> {
   if (!isTauriRuntime() || !backendPath(value)) return backendUrl(value)
-  const response = await nyraFetch(value)
+  const response = await kazumiFetch(value)
   if (!response.ok) throw new Error(`BACKEND_MEDIA_HTTP_${response.status}`)
   return URL.createObjectURL(await response.blob())
 }

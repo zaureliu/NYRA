@@ -35,7 +35,7 @@ from app.network_watch.targets import (
 )
 
 
-logger = logging.getLogger("nyra.network_watch")
+logger = logging.getLogger("kazumi.network_watch")
 EVENT_TYPES = {
     "network_monitor_started": EventType.NETWORK_MONITOR_STARTED,
     "network_monitor_stopped": EventType.NETWORK_MONITOR_STOPPED,
@@ -99,14 +99,14 @@ class NetworkWatchMonitor:
             self._stop.clear()
             self.started_at = datetime.now(timezone.utc)
             self._due.clear()
-            self._task = asyncio.create_task(self._run(), name="nyra-network-watch")
+            self._task = asyncio.create_task(self._run(), name="kazumi-network-watch")
             asyncio.create_task(
                 self._emit(NetworkEvent(
                     type="network_monitor_started",
                     severity=NetworkSeverity.INFO,
                     message="Monitoramento de rede iniciado.",
                 )),
-                name="nyra-network-watch-start-event",
+                name="kazumi-network-watch-start-event",
             )
 
     async def stop(self) -> None:

@@ -1,4 +1,4 @@
-r"""Camada 6 — UsageLearningService (nyra-7c §50-§63).
+r"""Camada 6 — UsageLearningService (kazumi-7c §50-§63).
 
 Aprende PADRÕES OPERACIONAIS confirmados — nunca conteúdo privado (§52):
 aliases, preferências (pasta/projeto por tarefa), sequências recorrentes
@@ -6,7 +6,7 @@ aliases, preferências (pasta/projeto por tarefa), sequências recorrentes
 (§60) e explicabilidade resumida (§61, sem chain-of-thought).
 
 Só aprende com `verified_result=True` (§54). Storage FORA do repo em
-%LOCALAPPDATA%\NYRA\usage-learning (§62) com retenção/compação (§63).
+%LOCALAPPDATA%\KAZUMI\usage-learning (§62) com retenção/compação (§63).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger("nyra.computer.usage")
+logger = logging.getLogger("kazumi.computer.usage")
 
 ALIAS_CONFIRM_THRESHOLD = 3       # §59: 3+ sucessos consistentes → candidato
 WORKFLOW_HIGH_CONFIDENCE = 5      # §59: 5+ sucessos → alta confiança
@@ -30,12 +30,12 @@ EVENT_TTL_SECONDS = 30 * 86400
 
 
 def default_usage_home() -> Path:
-    override = os.environ.get("NYRA_USAGE_HOME")
+    override = os.environ.get("KAZUMI_USAGE_HOME")
     if override:
         return Path(override)
     local = os.environ.get("LOCALAPPDATA")
     base = Path(local) if local else Path.home() / "AppData" / "Local"
-    return base / "NYRA" / "usage-learning"
+    return base / "KAZUMI" / "usage-learning"
 
 
 def redact_arguments(arguments: dict[str, str]) -> dict[str, str]:
@@ -45,7 +45,7 @@ def redact_arguments(arguments: dict[str, str]) -> dict[str, str]:
 
 
 class UsageEvent(BaseModel):
-    """Schema nyra-7c §53."""
+    """Schema kazumi-7c §53."""
 
     timestamp: float = Field(default_factory=time.time)
     context_signature: str = ""          # hash curto do contexto (não o conteúdo)

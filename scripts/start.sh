@@ -5,5 +5,5 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_PID=$!
 (cd "$ROOT/frontend" && npm run dev) &
 FRONTEND_PID=$!
-printf '{"backend":%s,"frontend":%s}\n' "$BACKEND_PID" "$FRONTEND_PID" > "$ROOT/.nyra-processes.json"
-echo 'NYRA: http://127.0.0.1:5173'
+printf '{"backend":%s,"frontend":%s}\n' "$BACKEND_PID" "$FRONTEND_PID" > "$ROOT/.kazumi-processes.json"
+echo 'KAZUMI: http://127.0.0.1:5173'

@@ -71,7 +71,7 @@ export function OverviewPage({ activityFeed }: {
       <ErrorAlert message={intelligence.error} />
 
       <div className="ops-card-grid">
-        <Card title="NYRA Core" sub="API + memória + banco"><StatusBadge state={subsystemState('api', 'memory', 'database')} /></Card>
+        <Card title="KAZUMI Core" sub="API + memória + banco"><StatusBadge state={subsystemState('api', 'memory', 'database')} /></Card>
         <Card title="LLM" sub="Modelo local via Ollama"><StatusBadge state={subsystemState('llm', 'ollama')} /></Card>
         <Card title="Voz" sub="STT · TTS · escuta"><StatusBadge state={subsystemState('voice', 'conversation', 'always_listening')} /></Card>
         <Card title="Watchdog" sub="Supervisão externa"><StatusBadge state={subsystemState('watchdog')} /></Card>

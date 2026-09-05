@@ -7,15 +7,15 @@ from pathlib import Path
 
 
 def runtime_root() -> Path:
-    override = os.environ.get("NYRA_DATA_HOME", "").strip()
+    override = os.environ.get("KAZUMI_DATA_HOME", "").strip()
     if override:
         return Path(override).expanduser().resolve()
     local = os.environ.get("LOCALAPPDATA", "").strip()
     if local:
-        return (Path(local) / "NYRA").resolve()
+        return (Path(local) / "KAZUMI").resolve()
     xdg = os.environ.get("XDG_DATA_HOME", "").strip()
     base = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
-    return (base / "NYRA").resolve()
+    return (base / "KAZUMI").resolve()
 
 
 RUNTIME_ROOT = runtime_root()

@@ -1,4 +1,4 @@
-"""Universal Intent Parser (nyra-full V3 §3/§4/§6/§7/§18).
+"""Universal Intent Parser (kazumi-full V3 §3/§4/§6/§7/§18).
 
 Converte linguagem natural PT-BR em uma intenção operacional local SEM LLM.
 Texto e voz convergem no mesmo NormalizedUserIntent porque ambos entram pelo
@@ -47,7 +47,7 @@ _SWITCH_VERBS = r"(?:altern[ae]r?|troca(?:r|e)?|mud[ae]r?)"
 
 _ARTICLE = r"^(?:o|a|os|as|um|uma|meu|minha)\s+"
 
-# Pastas conhecidas (chaves já normalizadas sem espaços/acentos — nyra-full §6).
+# Pastas conhecidas (chaves já normalizadas sem espaços/acentos — kazumi-full §6).
 # Valores: (display_name, shell URI). Resolução DINÂMICA: URIs shell nunca
 # contêm username; caminhos por ambiente ficam no executor (control.py).
 FOLDER_SHELL_URIS: dict[str, tuple[str, str]] = {
@@ -118,7 +118,7 @@ def parse_universal_intent(text: str) -> UniversalIntent | None:
     value = " ".join((text or "").strip().split())
     if not value or len(value) > 120:
         return None
-    value = re.sub(r"^(?:nyra|ei nyra|oi nyra)\s*[,!:.]?\s*", "", value, count=1, flags=re.IGNORECASE)
+    value = re.sub(r"^(?:kazumi|ei kazumi|oi kazumi)\s*[,!:.]?\s*", "", value, count=1, flags=re.IGNORECASE)
     lowered = value.casefold()
 
     if _NON_APP_HINTS.search(lowered):
@@ -132,7 +132,7 @@ def parse_universal_intent(text: str) -> UniversalIntent | None:
         if not target or len(target.split()) > 6:
             return None
 
-        # 1) Reabertura contextual: "abre de novo" (nyra-full §18).
+        # 1) Reabertura contextual: "abre de novo" (kazumi-full §18).
         if target in _REOPEN_TARGETS:
             return UniversalIntent(UniversalAction.OPEN_APP, target, True)
 
@@ -226,7 +226,7 @@ _NOTEPAD_MULTISTEP = re.compile(
 
 
 def parse_notepad_multistep(text: str) -> dict | None:
-    """nyra-full §26/§38: padrão canônico abrir→escrever→salvar, sem LLM."""
+    """kazumi-full §26/§38: padrão canônico abrir→escrever→salvar, sem LLM."""
     value = " ".join((text or "").strip().split())
     match = _NOTEPAD_MULTISTEP.search(value)
     if not match:

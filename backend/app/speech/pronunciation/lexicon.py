@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from app.core.paths import DATA_ROOT, IDENTITY_ROOT, RESOURCE_ROOT
+from app.brand_compat import pronunciation_document
 from .models import PronunciationDictionary, PronunciationRule
 
 
@@ -16,7 +17,7 @@ OVERRIDE_PATH = DATA_ROOT / "pronunciation" / "user_overrides.json"
 
 def _load(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        return pronunciation_document(json.loads(path.read_text(encoding="utf-8"))) if path.is_file() else {}
     except (OSError, json.JSONDecodeError):
         return {}
 

@@ -1,4 +1,4 @@
-"""Integrated local-first intelligence services for NYRA.
+"""Integrated local-first intelligence services for KAZUMI.
 
 The platform export is lazy so sibling logical domains can depend on the
 storage/memory modules without importing the full runtime graph.

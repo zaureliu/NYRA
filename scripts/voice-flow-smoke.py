@@ -10,7 +10,7 @@ import httpx
 
 
 async def main() -> int:
-    parser = argparse.ArgumentParser(description="Smoke local STT -> NYRA -> TTS sem expor a transcricao.")
+    parser = argparse.ArgumentParser(description="Smoke local STT -> KAZUMI -> TTS sem expor a transcricao.")
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     args = parser.parse_args()

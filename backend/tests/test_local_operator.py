@@ -1,4 +1,4 @@
-﻿"""Local Operator unit tests: filesystem ACT→VERIFY, approvals, guards, power."""
+"""Local Operator unit tests: filesystem ACT→VERIFY, approvals, guards, power."""
 
 from __future__ import annotations
 
@@ -41,14 +41,14 @@ async def test_fs_write_mkdir_read_rename_roundtrip(tmp_path: Path):
     file_path = target_dir / "arquivo.txt"
     write_id = await grant_for(
         controller, gate, "fs_write", str(file_path),
-        binding_digest=controller._binding_digest(False, "conteúdo NYRA çãí"),
+        binding_digest=controller._binding_digest(False, "conteúdo KAZUMI çãí"),
     )
-    written = await controller.fs_write(str(file_path), "conteúdo NYRA çãí",
+    written = await controller.fs_write(str(file_path), "conteúdo KAZUMI çãí",
                                         append=False, approval_id=write_id)
     assert written["success"] and written["effect_verified"]
 
     read = await controller.fs_read(str(file_path))
-    assert read["success"] and "conteúdo NYRA" in read["content"]
+    assert read["success"] and "conteúdo KAZUMI" in read["content"]
 
     rename_id = await grant_for(
         controller, gate, "rename", str(file_path),

@@ -32,7 +32,7 @@ class AttentionEngine:
 
     async def start(self) -> None:
         await self.event_bus.subscribe(self.handle_event)
-        self._task = asyncio.create_task(self._decay(), name="nyra-attention-decay")
+        self._task = asyncio.create_task(self._decay(), name="kazumi-attention-decay")
 
     async def stop(self) -> None:
         await self.event_bus.unsubscribe(self.handle_event)

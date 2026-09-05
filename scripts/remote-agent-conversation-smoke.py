@@ -24,14 +24,14 @@ from app.tools import RemoteShellService, SystemShellService, create_tool_regist
 
 
 PROMPTS = [
-    "Nyra, verifica o Proxmox.",
-    "Nyra, vê se o OpenWrt está saudável.",
-    "Nyra, verifica por que o backend da NYRA não está respondendo e tenta recuperar, mas não faça mudança sem policy ou aprovação.",
+    "Kazumi, verifica o Proxmox.",
+    "Kazumi, vê se o OpenWrt está saudável.",
+    "Kazumi, verifica por que o backend da KAZUMI não está respondendo e tenta recuperar, mas não faça mudança sem policy ou aprovação.",
 ]
 
 
 async def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="nyra-agent-conversation-") as directory:
+    with tempfile.TemporaryDirectory(prefix="kazumi-agent-conversation-") as directory:
         # Conversational smoke is deliberately read-only; ACT/VERIFY mutation is
         # covered with controlled fakes in the unit suite.
         settings = Settings.from_sources(

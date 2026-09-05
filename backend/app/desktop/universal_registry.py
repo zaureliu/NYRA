@@ -1,4 +1,4 @@
-"""Universal Application Registry (nyra-full §2/§3/§4/§6/§30).
+"""Universal Application Registry (kazumi-full §2/§3/§4/§6/§30).
 
 Índice persistente e regenerável de todos os aplicativos utilizáveis no
 Windows. Fontes de descoberta vivem em `discovery.ApplicationDiscovery`;
@@ -32,13 +32,13 @@ from app.desktop.discovery import (
     normalize,
 )
 
-logger = logging.getLogger("nyra.universal_apps")
+logger = logging.getLogger("kazumi.universal_apps")
 
 REGISTRY_DIRNAME = "app-registry"
 INDEX_FILENAME = "index.json"
 LEARNED_FILENAME = "learned.json"
 
-# Sementes PT-BR genéricas — fallback apenas (nyra-full §4: nunca fonte única).
+# Sementes PT-BR genéricas — fallback apenas (kazumi-full §4: nunca fonte única).
 _GENERIC_ALIASES: dict[str, tuple[str, ...]] = {
     "code.exe": ("vs code", "vscode", "visual studio code", "editor", "editor de codigo"),
     "notepad.exe": ("bloco de notas", "editor de texto"),
@@ -200,7 +200,7 @@ class UniversalAppRegistry:
     # ---------------------------------------------------------------- refresh
 
     def refresh(self, force: bool = True) -> dict[str, int]:
-        """Reconstrói o índice a partir das fontes do discovery (nyra-full §6)."""
+        """Reconstrói o índice a partir das fontes do discovery (kazumi-full §6)."""
         from app.desktop.canonical_apps import canonicalize_candidates
 
         candidates = canonicalize_candidates(self.discovery.index(force=force))
@@ -521,7 +521,7 @@ class UniversalAppRegistry:
         alias_query: str | None = None,
         launch_candidate: ApplicationCandidate | None = None,
     ) -> None:
-        """Aprendizado pós-sucesso verificado (nyra-full §30)."""
+        """Aprendizado pós-sucesso verificado (kazumi-full §30)."""
         entry = self.entries.get(app_id)
         if entry is None and launch_candidate is not None:
             entry = self._entry_from_candidate(launch_candidate)
@@ -581,7 +581,7 @@ class UniversalAppRegistry:
 
 
 def build_aliases(entry: UniversalAppEntry) -> list[str]:
-    """Alias engine automática (nyra-full §4): nome oficial + exe + seeds."""
+    """Alias engine automática (kazumi-full §4): nome oficial + exe + seeds."""
     aliases: set[str] = {entry.app_id}
     display = entry.display_name.strip()
     if display:

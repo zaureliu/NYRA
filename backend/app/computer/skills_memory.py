@@ -1,4 +1,4 @@
-r"""Camada 7 — SkillMemoryService (nyra-7c §64-§74).
+r"""Camada 7 — SkillMemoryService (kazumi-7c §64-§74).
 
 Transforma workflows CONFIRMADOS (UsageLearning) em skills reutilizáveis.
 Skill é definição ESTRUTURADA (§65), não prompt livre.
@@ -8,7 +8,7 @@ LEARNED (ou "aprende isso" explícito, §68). Execução: match →
 precondições → step → verify → next (§70). Falha repetida degrada e faz
 fallback para o planner normal (§72). Versioning runtime simples (§71).
 
-Storage: %LOCALAPPDATA%\NYRA\skills (§74), sem secrets.
+Storage: %LOCALAPPDATA%\KAZUMI\skills (§74), sem secrets.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger("nyra.computer.skills")
+logger = logging.getLogger("kazumi.computer.skills")
 
 
 class SkillState(StrEnum):
@@ -43,7 +43,7 @@ class LearnedStep(BaseModel):
 
 class LearnedSkill(BaseModel):
     skill_id: str = Field(default_factory=lambda: f"skl_{uuid4().hex[:10]}")
-    name: str                  # slug curto, ex.: open_nyra_workspace
+    name: str                  # slug curto, ex.: open_kazumi_workspace
     aliases: list[str] = Field(default_factory=list)
     trigger_intents: list[str] = Field(default_factory=list)
     preconditions: list[dict[str, str]] = Field(default_factory=list)  # {"kind":"app_visible","value":"code"}
@@ -69,12 +69,12 @@ DEGRADE_THRESHOLD_CONFIDENCE = 0.35
 
 
 def default_skills_home() -> Path:
-    override = os.environ.get("NYRA_SKILLS_HOME")
+    override = os.environ.get("KAZUMI_SKILLS_HOME")
     if override:
         return Path(override)
     local = os.environ.get("LOCALAPPDATA")
     base = Path(local) if local else Path.home() / "AppData" / "Local"
-    return base / "NYRA" / "skills"
+    return base / "KAZUMI" / "skills"
 
 
 def register_skill_events() -> None:

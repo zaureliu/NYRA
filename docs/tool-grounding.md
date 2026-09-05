@@ -1,9 +1,9 @@
 # Tool Grounding & Anti-Hallucination
 
-Política de confiabilidade para afirmações da NYRA sobre estado real do sistema.
+Política de confiabilidade para afirmações da KAZUMI sobre estado real do sistema.
 Regra fundamental: **toda afirmação sobre estado do computador, rede, processos,
 serviços, arquivos ou infraestrutura deve estar fundamentada em evidência retornada
-por uma tool.** A NYRA não inventa, completa, estima ou infere valores ausentes.
+por uma tool.** A KAZUMI não inventa, completa, estima ou infere valores ausentes.
 
 ## Componentes
 
@@ -36,7 +36,7 @@ tool_call A -> result A   (nunca result B)
 assistant(N calls) -> N tool messages na mesma ordem, cada uma com o id da chamada
 ```
 
-Logs debug (`nyra.grounding.*`): `tool_observation_recorded`,
+Logs debug (`kazumi.grounding.*`): `tool_observation_recorded`,
 `mutation_verification_matched`, `grounding_correction_triggered` — sempre com
 redaction aplicada pelos serviços de shell; nunca chain-of-thought.
 
@@ -117,7 +117,7 @@ com grounding — pedidos de abrir aplicativos nunca devem ser respondidos por t
 
 ## Runtime Supervisor
 
-Ainda não implementado em código (apenas snapshot `.nyra-runtime.json` do launcher).
+Ainda não implementado em código (apenas snapshot `.kazumi-runtime.json` do launcher).
 Quando existir, `runtime_status/runtime_health/runtime_restart` devem ser fonte
 preferencial e seus estados (READY/RUNNING/FAILED/STOPPED/CRASH_LOOP) provenientes de
 checks reais — o mesmo padrão EXECUTED vs VERIFIED se aplica (restart executado +
@@ -126,21 +126,21 @@ health falhando ⇒ "executado, mas o health check não passou").
 ## Exemplos
 
 ```text
-Operador: Nyra, abre o bloco de notas.
+Operador: Kazumi, abre o bloco de notas.
 [Start-Process notepad.exe => exit 0]
 [Get-Process notepad    => nenhum processo]
-NYRA: A solicitação de abertura foi executada, mas não consegui confirmar uma instância ativa do Notepad.
+KAZUMI: A solicitação de abertura foi executada, mas não consegui confirmar uma instância ativa do Notepad.
 ```
 
 ```text
 Operador: Qual é o PID?
 [Get-Process notepad => exit 0, stdout vazio]
-NYRA: O comando terminou sem erro, mas não retornou dados que permitam informar o PID.
+KAZUMI: O comando terminou sem erro, mas não retornou dados que permitam informar o PID.
 ```
 
 ```text
 [New-Item => exit 0][Test-Path => False]
-NYRA: O comando de criação foi executado, mas a verificação indicou que o arquivo não existe; não posso afirmar que foi criado.
+KAZUMI: O comando de criação foi executado, mas a verificação indicou que o arquivo não existe; não posso afirmar que foi criado.
 ```
 
 ## Testes

@@ -1,4 +1,4 @@
-"""Public schemas for NYRA's grounded, local World State Engine."""
+"""Public schemas for KAZUMI's grounded, local World State Engine."""
 
 from __future__ import annotations
 
@@ -67,5 +67,5 @@ class WorldSnapshot(BaseModel):
     recent_events: list[WorldEvent] = Field(default_factory=list)
     user_activity_state: WorldValue | None = None
     assistant_state: WorldValue | None = None
-    nyra_emotion: WorldValue | None = None
+    kazumi_emotion: WorldValue | None = None
     dialogue_policy: WorldValue | None = None

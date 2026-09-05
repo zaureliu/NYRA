@@ -12,7 +12,7 @@ from app.memory.models import MemoryCategory, MemoryCreate
 from app.tools import ToolRegistry
 
 
-logger = logging.getLogger("nyra.homelab")
+logger = logging.getLogger("kazumi.homelab")
 
 
 class HomelabMonitor:
@@ -35,7 +35,7 @@ class HomelabMonitor:
     def start(self) -> None:
         if self._task is None or self._task.done():
             self._stop.clear()
-            self._task = asyncio.create_task(self._run(), name="nyra-homelab-monitor")
+            self._task = asyncio.create_task(self._run(), name="kazumi-homelab-monitor")
 
     async def stop(self) -> None:
         self._stop.set()

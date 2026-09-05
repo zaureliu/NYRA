@@ -5,7 +5,7 @@ import socket
 import ssl
 from urllib.parse import urlsplit, urlunsplit
 
-logger = logging.getLogger('nyra.web_research')
+logger = logging.getLogger('kazumi.web_research')
 trace: ContextVar[list | None] = ContextVar('web_research_trace', default=None)
 
 

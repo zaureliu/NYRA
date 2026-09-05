@@ -34,7 +34,7 @@ def device(
     return apply_fingerprint(UsbDeviceObservation(
         name=name,
         category=category,
-        manufacturer="NYRA Test Fixtures",
+        manufacturer="KAZUMI Test Fixtures",
         product=name,
         vid=vid,
         pid=pid,

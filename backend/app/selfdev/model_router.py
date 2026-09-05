@@ -60,7 +60,7 @@ class SelfDevModelRouter:
             LLMMessage(
                 role="system",
                 content=(
-                    "Você é o worker local do NYRA SelfDev. Responda SOMENTE JSON válido conforme o schema. "
+                    "Você é o worker local do KAZUMI SelfDev. Responda SOMENTE JSON válido conforme o schema. "
                     "Nunca gere comandos de shell, secrets, deleções ou paths absolutos. "
                     "Cada UPDATE exige expected_sha256 do índice fornecido."
                 ),

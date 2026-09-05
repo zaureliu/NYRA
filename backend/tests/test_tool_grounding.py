@@ -1,4 +1,4 @@
-﻿"""Anti-hallucination / tool grounding suite.
+"""Anti-hallucination / tool grounding suite.
 
 Covers the notepad incident regression and the grounding policy:
 provenance (tool_call_id correlation), execution vs effect distinction,
@@ -289,7 +289,7 @@ async def test_notepad_incident_exit_zero_with_missing_process_never_reports_suc
         LLMResponse(content="notepad.exe foi iniciado com sucesso e está ativo."),
         LLMResponse(content="A solicitação de abertura foi executada, mas não consegui confirmar uma instância ativa do Notepad."),
     ])
-    response = await ToolAgentLoop(llm, registry).run([LLMMessage(role="user", content="Nyra, abre o bloco de notas.")])
+    response = await ToolAgentLoop(llm, registry).run([LLMMessage(role="user", content="Kazumi, abre o bloco de notas.")])
     assert "iniciado com sucesso" not in response
     assert "não consegui confirmar" in response or "não confirmada" in response
 
@@ -406,7 +406,7 @@ async def test_truncated_flag_is_recorded_and_blocks_absence_conclusion(tmp_path
     service = await shell_service(tmp_path, executor, shell_max_output_chars=1000)
     result = await service.execute("Get-Process | Out-String")
     assert result["stdout_truncated"] is True
-    assert "NYRA OUTPUT TRUNCATED" in result["stdout"]
+    assert "KAZUMI OUTPUT TRUNCATED" in result["stdout"]
 
     ledger = GroundingLedger()
     observation = ledger.record(
@@ -490,11 +490,11 @@ async def test_agent_run_completes_with_unverified_status_when_verification_impo
 
 def test_routing_sends_gui_and_pid_requests_to_agent():
     tools = ToolRegistry()
-    assert tools.should_route_to_agent("Nyra, abre o bloco de notas.") is True
-    assert tools.should_route_to_agent("Nyra, existe algum notepad.exe rodando agora?") is True
-    assert tools.should_route_to_agent("Nyra, qual o PID do Notepad?") is True
-    assert tools.should_route_to_agent("Nyra, abre a calculadora.") is True
-    assert tools.should_route_to_agent("Nyra, bom dia") is False
+    assert tools.should_route_to_agent("Kazumi, abre o bloco de notas.") is True
+    assert tools.should_route_to_agent("Kazumi, existe algum notepad.exe rodando agora?") is True
+    assert tools.should_route_to_agent("Kazumi, qual o PID do Notepad?") is True
+    assert tools.should_route_to_agent("Kazumi, abre a calculadora.") is True
+    assert tools.should_route_to_agent("Kazumi, bom dia") is False
     assert tools.should_route_to_agent("me explica o que é DNS") is False
 
 

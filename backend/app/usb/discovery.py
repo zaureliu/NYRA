@@ -18,7 +18,7 @@ from app.usb.models import (
     serial_from_instance_id,
 )
 
-logger = logging.getLogger("nyra.usb.discovery")
+logger = logging.getLogger("kazumi.usb.discovery")
 
 _IS_WINDOWS = sys.platform == "win32"
 _NO_ERROR = 0

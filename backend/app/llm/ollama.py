@@ -11,7 +11,7 @@ from app.llm.base import LLMMessage, LLMProvider, LLMResponse
 from typing import Any
 
 
-logger = logging.getLogger("nyra")
+logger = logging.getLogger("kazumi")
 
 
 def ollama_keep_alive_payload(value: str | int) -> str | int:
@@ -70,7 +70,7 @@ class OllamaProvider(LLMProvider):
         """Serializa mensagens em formato aceitável para chat templates rígidos.
 
         Templates como o do wrench/qwen3 no Ollama exigem: system somente no
-        início e no máximo um assistant no fim. Diretivas tardias da NYRA
+        início e no máximo um assistant no fim. Diretivas tardias da KAZUMI
         (TURNO ATUAL, VERIFY REQUIRED, correções de grounding) são mantidas na
         posição original recodificadas como mensagem do usuário com marcador
         explícito — assim não sobra par de assistants adjacente nem system

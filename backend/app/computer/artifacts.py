@@ -22,7 +22,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
-logger = logging.getLogger("nyra.computer.artifacts")
+logger = logging.getLogger("kazumi.computer.artifacts")
 
 ArtifactScope = Literal["local", "remote", "url"]
 ArtifactExistsState = Literal["planned", "created", "verified", "missing", "unknown"]
@@ -527,7 +527,7 @@ class ArtifactContextService:
                 verified=True,
                 source="artifact_context",
             ),
-            name="nyra-artifact-world-state",
+            name="kazumi-artifact-world-state",
         )
         task.add_done_callback(
             lambda done: None if done.cancelled() else done.exception()

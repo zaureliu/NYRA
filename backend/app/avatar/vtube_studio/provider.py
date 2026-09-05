@@ -14,10 +14,10 @@ from app.avatar.vtube_studio.mouse_tracking import MouseTrackingController
 from app.avatar.vtube_studio.motions import list_hotkeys, trigger_hotkey
 from app.avatar.vtube_studio.parameters import discover_ids, mouse_parameter_values, resolve_mapping
 from app.core.paths import DATA_ROOT
-from app.persona_runtime.models import NyraEmotion
+from app.persona_runtime.models import KazumiEmotion
 
 CONFIG_PATH=DATA_ROOT/"vtube-studio-settings.json"; TOKEN_PATH=DATA_ROOT/"secrets/vtube_studio_token.json"
-logger=logging.getLogger("nyra")
+logger=logging.getLogger("kazumi")
 
 
 class VTubeStudioAvatarProvider:
@@ -143,8 +143,8 @@ class VTubeStudioAvatarProvider:
 
     async def apply_emotion(self, emotion: str, intensity: float, transition: dict[str,Any]|None=None) -> dict[str,Any]:
         """Apply, but never infer, the canonical Persona Runtime emotion."""
-        try: selected=NyraEmotion(str(emotion).casefold()).value
-        except ValueError: selected=NyraEmotion.NEUTRAL.value
+        try: selected=KazumiEmotion(str(emotion).casefold()).value
+        except ValueError: selected=KazumiEmotion.NEUTRAL.value
         self.current_emotion=selected; self.current_emotion_intensity=min(.65,max(0.0,float(intensity)))
         self.current_transition=dict(transition or {})
         return await self._synchronize_emotion()
@@ -202,10 +202,15 @@ class VTubeStudioAvatarProvider:
         if expression: return expression
         if kind=="parameter" and self._has_emotion_parameter(emotion): return {"kind":"parameter","target":emotion}
         if kind=="auto":
-            canonical=f"NYRA_{emotion.upper()}"
+            canonical=f"KAZUMI_{emotion.upper()}"
             hotkey=self._find_hotkey(canonical)
             if hotkey: return hotkey
             expression=self._find_expression(canonical)
+            if expression: return expression
+            # Legacy model assets remain accepted during migration.
+            hotkey=self._find_hotkey(f"NYRA_{emotion.upper()}")
+            if hotkey: return hotkey
+            expression=self._find_expression(f"NYRA_{emotion.upper()}")
             if expression: return expression
             if self._has_emotion_parameter(emotion): return {"kind":"parameter","target":emotion}
         return {"kind":"neutral","target":None}
@@ -308,7 +313,8 @@ class VTubeStudioAvatarProvider:
 
     def _resolve_hotkey(self, mode: str) -> str|None:
         configured=self.config.state_hotkeys.get(mode) or self.config.state_hotkeys.get(mode.upper())
-        names=[configured,f"NYRA_{mode.upper()}"] if configured else [f"NYRA_{mode.upper()}"]
+        names=[configured,f"KAZUMI_{mode.upper()}"] if configured else [f"KAZUMI_{mode.upper()}"]
+        names.append(f"NYRA_{mode.upper()}")  # legacy hotkey compatibility
         for candidate in names:
             for hotkey in self.hotkeys:
                 if str(hotkey.get("name","")).casefold()==str(candidate).casefold():
@@ -348,7 +354,7 @@ class VTubeStudioAvatarProvider:
                 "parameter_count":sum(len(v) for v in self.mapping.values()),"mapping":self.mapping,"update_hz":self.update_hz,
                 "parameters":self.parameters,"hotkeys":[{"id":item.get("hotkeyID") or item.get("hotkeyId"),"name":item.get("name"),"type":item.get("type")} for item in self.hotkeys],
                 "expressions":[{"file":item.get("file") or item.get("expressionFile"),"name":item.get("name"),"active":bool(item.get("active"))} for item in self.expressions],
-                "emotion_capabilities":{emotion.value:self._resolve_emotion_target(emotion.value) for emotion in NyraEmotion},
+                "emotion_capabilities":{emotion.value:self._resolve_emotion_target(emotion.value) for emotion in KazumiEmotion},
                 "last_emotion_presentation":self.last_emotion_presentation,
                 "last_hotkey":self.last_hotkey,"vts_presence":self.presence,
                 "last_error":self.last_error,"requests_sent":getattr(self.client,"requests_sent",0),"last_request":getattr(self.client,"last_message_type",None),

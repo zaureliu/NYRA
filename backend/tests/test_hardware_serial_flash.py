@@ -21,9 +21,9 @@ class SerialFixture:
     def reset_input_buffer(self): self.line = b''
     def write(self, command):
         nonce = command.decode().split()[1]
-        data = {'protocol': 'nyra/1', 'nonce': 'stale' if self.stale else nonce,
+        data = {'protocol': 'kazumi/1', 'nonce': 'stale' if self.stale else nonce,
                 'board': 'uno', 'pin': 13, 'value': True, 'mode': 1, 'source': 'gpio_readback', 'capabilities': ['LED ON']}
-        self.line = ('NYRA1 ' + nonce + ' ' + json.dumps(data) + '\n').encode()
+        self.line = ('KAZUMI1 ' + nonce + ' ' + json.dumps(data) + '\n').encode()
         return len(command)
     def read_until(self, end, size):
         line, self.line = self.line, b''

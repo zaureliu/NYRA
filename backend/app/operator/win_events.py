@@ -62,7 +62,7 @@ def ensure_pump(callback) -> bool:
             ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_longlong,
             ctypes.c_long, ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
         )(_dispatch_stub(callback))
-        thread = threading.Thread(target=runner, daemon=True, name="nyra-win-event-pump")
+        thread = threading.Thread(target=runner, daemon=True, name="kazumi-win-event-pump")
         thread.start()
         _started = True
         # aguarda thread registrar seu id para permitir shutdown limpo

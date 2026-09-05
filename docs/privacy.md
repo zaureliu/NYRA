@@ -6,7 +6,7 @@
 - Arquivos temporários de utterances são removidos após processamento.
 - `Ctrl+Shift+M`, tray e Settings permitem mutar; mute encerra a captura real.
 - Fala sem wake word é descartada antes do LLM quando não há sessão hands-free.
-- Edge TTS recebe somente `speech_text` da resposta da NYRA, nunca áudio do microfone, memória completa ou topologia.
+- Edge TTS recebe somente `speech_text` da resposta da KAZUMI, nunca áudio do microfone, memória completa ou topologia.
 - OpenAI e ElevenLabs TTS ficam desligados por padrão. Mesmo com uma credencial
   salva, o toggle `Enable Online Voice Providers` desligado garante zero requests
   de voz externos, inclusive health e catálogo. Quando ativado, somente o

@@ -1,7 +1,7 @@
-# NYRA Desktop Application Control V1
+# KAZUMI Desktop Application Control V1
 
 Abertura e verificação REAL de aplicações GUI no desktop Windows.
-Correção do incidente Notepad: a NYRA nunca mais afirma "aberto" sem janela
+Correção do incidente Notepad: a KAZUMI nunca mais afirma "aberto" sem janela
 visível confirmada por enumeração Win32 — e quando confirma, a janela está
 efetivamente no desktop (checagem cruzada com o SO nos smokes).
 
@@ -13,7 +13,7 @@ desktop_launch(app_id)            ← LLM só passa o ID; comando vem do registr
 DesktopController.launch()
         ├─ registry config/desktop_apps.yaml (fonte única confiável)
         ├─ snapshot PRÉ-launch das janelas já visíveis (do operador)
-        ├─ spawn detached (DEVNULL pipes, sem console da NYRA)
+        ├─ spawn detached (DEVNULL pipes, sem console da KAZUMI)
         └─ polling Win32 EnumWindows até janela NOVA/persistente OU timeout honesto
                 ↓
 Structured Result (grounding):
@@ -31,7 +31,7 @@ Structured Result (grounding):
    amostragens para descartar flash transitório do boot do processo.
 4. **Match**: PID rastreado/descendentes OU process_names OU window_title_contains.
 5. **Falha honesta**: timeout/exit-sem-janela ⇒ `WINDOW_NOT_CONFIRMED`,
-   `effect_verified=false`, e o processo filho DA NYRA é encerrado (higiene).
+   `effect_verified=false`, e o processo filho DA KAZUMI é encerrado (higiene).
 6. `single_instance: true` + janela já aberta ⇒ `already_open` VERIFIED sem spawn.
 
 ## Registry (config/desktop_apps.yaml)
@@ -72,7 +72,7 @@ Eventos: `DESKTOP_APP_LAUNCHED`, `DESKTOP_WINDOW_VERIFIED`.
 ```
 
 Smoke real executa: launch notepad → janela visível confirmada (Win32) →
-tasklist independente confirma o PID no SO → fecha somente o PID da NYRA.
+tasklist independente confirma o PID no SO → fecha somente o PID da KAZUMI.
 
 ## Limitações conhecidas
 

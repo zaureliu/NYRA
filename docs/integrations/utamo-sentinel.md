@@ -1,18 +1,18 @@
 # Utamo Sentinel Bridge
 
-A integração mantém os dois sistemas independentes. O Sentinel detecta e produz alertas; a NYRA descobre uma instância autorizada, mantém um stream read-only e transforma eventos relevantes em histórico, estado visual e fala.
+A integração mantém os dois sistemas independentes. O Sentinel detecta e produz alertas; a KAZUMI descobre uma instância autorizada, mantém um stream read-only e transforma eventos relevantes em histórico, estado visual e fala.
 
 ## Ativação
 
 No Sentinel:
 
-1. execute `python scripts/generate_nyra_bridge_token.py`;
-2. coloque o token no `.env` privado como `NYRA_BRIDGE_TOKEN`;
-3. defina `NYRA_BRIDGE_ENABLED=1`;
+1. execute `python scripts/generate_kazumi_bridge_token.py`;
+2. coloque o token no `.env` privado como `KAZUMI_BRIDGE_TOKEN`;
+3. defina `KAZUMI_BRIDGE_ENABLED=1`;
 4. mantenha `UTAMO_HOST=127.0.0.1` para mesma máquina; para LAN, exponha HTTPS com certificado confiável e use um IP privado literal autorizado;
 5. reinicie o Sentinel.
 
-Na NYRA, abra `Settings > Integrations > Utamo Sentinel`, cole o token, salve, ative `Sentinel Watch` e use `Procurar agora`. O token é enviado somente ao backend loopback, gravado em `data/secrets/sentinel-bridge-token.txt` e nunca retornado à interface.
+Na KAZUMI, abra `Settings > Integrations > Utamo Sentinel`, cole o token, salve, ative `Sentinel Watch` e use `Procurar agora`. O token é enviado somente ao backend loopback, gravado em `data/secrets/sentinel-bridge-token.txt` e nunca retornado à interface.
 
 ## Controles
 
@@ -32,8 +32,8 @@ As tools `get_sentinel_status`, `get_sentinel_connection_status`, `get_sentinel_
 
 Comandos explícitos suportados:
 
-- “Nyra, ativa a busca pelo Sentinel.”
-- “Nyra, para de procurar o Sentinel.”
+- “Kazumi, ativa a busca pelo Sentinel.”
+- “Kazumi, para de procurar o Sentinel.”
 
 Uma menção casual ao Sentinel nunca muda configuração.
 
@@ -43,4 +43,4 @@ O token pode trafegar em HTTP apenas para `127.0.0.1`/`::1` literais. O campo ma
 
 ## Independência
 
-Sem Sentinel, a NYRA mantém LLM, memória, voz, Network Watch e Desktop Presence. Sem NYRA, o Sentinel mantém scanners, banco, UI e alertas. Falha da bridge é fail-open para os dois processos.
+Sem Sentinel, a KAZUMI mantém LLM, memória, voz, Network Watch e Desktop Presence. Sem KAZUMI, o Sentinel mantém scanners, banco, UI e alertas. Falha da bridge é fail-open para os dois processos.

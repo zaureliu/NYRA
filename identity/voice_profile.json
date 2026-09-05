@@ -1,10 +1,10 @@
 {
-  "profile_id": "NYRA_VOICE_AVA_V1",
+  "profile_id": "KAZUMI_VOICE_AVA_V1",
   "default_language": "pt-BR",
   "presentation": "adult_feminine",
   "provider": "edge_tts",
   "model": "Microsoft Edge Neural TTS",
-  "reference_file": "data/voices/nyra_reference.wav",
+  "reference_file": "data/voices/kazumi_reference.wav",
   "edge_rate": "+0%",
   "edge_pitch": "+0Hz",
   "edge_volume": "+0%",

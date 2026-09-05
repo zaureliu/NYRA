@@ -73,7 +73,7 @@ from app.emotional_presence.api import router as emotional_presence_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
-logger = logging.getLogger("nyra")
+logger = logging.getLogger("kazumi")
 
 
 async def _prepare_stt(provider: FasterWhisperSTT) -> None:
@@ -157,7 +157,7 @@ async def lifespan(app: FastAPI):
         ),
         gain=settings.mic_gain,
     )
-    stt_preload_task = asyncio.create_task(_prepare_stt(stt), name="nyra-stt-preload") if settings.conversation_engine else None
+    stt_preload_task = asyncio.create_task(_prepare_stt(stt), name="kazumi-stt-preload") if settings.conversation_engine else None
     selected_tts_provider = settings.tts_local_engine
     selected_voice = settings.tts_voice
     local_tts = await create_tts_provider(
@@ -316,7 +316,7 @@ async def lifespan(app: FastAPI):
         input_fallback_enabled=settings.desktop_input_fallback_enabled,
     )
 
-    # nyra-7c: pipeline de autonomia do computador (7 camadas, §75).
+    # kazumi-7c: pipeline de autonomia do computador (7 camadas, §75).
     from app.computer import (
         ComputerAutonomyService,
         ArtifactContextService,
@@ -381,9 +381,9 @@ async def lifespan(app: FastAPI):
     from app.usb.hardware import register_hardware_tool
     register_hardware_tool(tools, usb)
 
-    # nyra-full §6/§42: Universal Application Registry — startup leve e
+    # kazumi-full §6/§42: Universal Application Registry — startup leve e
     # refresh periódico em background (nunca bloqueia o event loop).
-    universal_refresh_task = asyncio.create_task(_universal_refresh_loop(desktop), name="nyra-universal-apps")
+    universal_refresh_task = asyncio.create_task(_universal_refresh_loop(desktop), name="kazumi-universal-apps")
     operator = None
     browser_controller = None
     if settings.local_operator_enabled:
@@ -421,7 +421,7 @@ async def lifespan(app: FastAPI):
     await operator_v2.start()
     register_operator_v2_tools(tools, operator_v2)
     orchestrator.monitor_jobs = operator_v2.monitor_jobs
-    usb_start_task = asyncio.create_task(usb.start(), name="nyra-usb-start")
+    usb_start_task = asyncio.create_task(usb.start(), name="kazumi-usb-start")
     attention = AttentionEngine(event_bus)
     await attention.start()
     reactions = ReactionEngine(event_bus, avatar, perception, proactive, v4_settings.value.realtime)
@@ -639,7 +639,7 @@ async def lifespan(app: FastAPI):
         settings=settings,
     )
     logger.info(
-        "nyra_started",
+        "kazumi_started",
         extra={"llm": llm.name, "model": settings.llm_model, "tts": tts.name, "stt": stt.name},
     )
     yield
@@ -653,7 +653,7 @@ _UNIVERSAL_REFRESH_INTERVAL_SECONDS = 6 * 3600
 
 
 async def _universal_refresh_loop(desktop) -> None:
-    """nyra-full §42: load → lightweight verification → periodic background refresh."""
+    """kazumi-full §42: load → lightweight verification → periodic background refresh."""
     try:
         await asyncio.to_thread(desktop.universal.refresh, True)
     except Exception as error:  # noqa: BLE001 - índice nunca derruba o backend
@@ -706,7 +706,7 @@ async def _graceful_shutdown(scope: dict) -> None:
         if parent_watch is not None:
             await asyncio.to_thread(parent_watch.stop)
     if computer is not None:
-        # nyra-7c §83: persistência atômica de contexto/usage/skills.
+        # kazumi-7c §83: persistência atômica de contexto/usage/skills.
         await _bounded_step("computer_autonomy_shutdown", computer.shutdown)
 
     async def _cancel_universal() -> None:
@@ -783,7 +783,7 @@ async def _graceful_shutdown(scope: dict) -> None:
 
 
 app = FastAPI(
-    title="NYRA Local AI",
+    title="KAZUMI Local AI",
     version=APP_VERSION,
     description="Identidade + LLM + memória + percepção + voz + avatar + ferramentas + eventos",
     lifespan=lifespan,
@@ -820,8 +820,8 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 @app.post("/internal/owned-shutdown", include_in_schema=False)
 async def owned_backend_shutdown(request: Request) -> dict:
     """Private one-shot shutdown signal from the owning Tauri process."""
-    expected = os.environ.get("NYRA_OWNER_TOKEN", "")
-    supplied = request.headers.get("x-nyra-owner-token", "")
+    expected = os.environ.get("KAZUMI_OWNER_TOKEN", "")
+    supplied = request.headers.get("x-kazumi-owner-token", "") or request.headers.get("x-nyra-owner-token", "")
     client_host = request.client.host if request.client else ""
     if client_host not in {"127.0.0.1", "::1"} or not expected or not hmac.compare_digest(expected, supplied):
         raise HTTPException(status_code=404, detail="Not found")
@@ -851,7 +851,7 @@ async def root_health():
     )
     return {
         "status": "online" if llm_ok and memory_ok else "degraded",
-        "character": "NYRA",
+        "character": "KAZUMI",
         "llm": llm_ok,
         "llm_ready": llm_ready,
         "ollama": services.warm_manager.status() if services.warm_manager else None,

@@ -17,7 +17,7 @@ from typing import Any
 
 import logging
 
-logger = logging.getLogger("nyra.routes")
+logger = logging.getLogger("kazumi.routes")
 
 from app.api.models import (
     ChatRequest,
@@ -105,9 +105,9 @@ from app.speech.reference import REFERENCE_PATH, inspect_reference, normalize_re
 
 router = APIRouter(prefix="/api")
 SAFE_AUDIO = re.compile(
-    r"^(?:nyra(?:-(?:edge|processed|openai|elevenlabs|gradium|custom))?-[a-f0-9]+|voice-cache-[a-f0-9]{64})\.(?:wav|mp3)$"
+    r"^(?:kazumi(?:-(?:edge|processed|openai|elevenlabs|gradium|custom))?-[a-f0-9]+|voice-cache-[a-f0-9]{64})\.(?:wav|mp3)$"
 )
-from app.speech.tts_identity import NYRA_IDENTITY_ID, NYRA_VOICE_ID
+from app.speech.tts_identity import KAZUMI_IDENTITY_ID, KAZUMI_VOICE_ID
 PLAYBACK_CONFIRMATION_SECONDS = 12.0
 
 
@@ -139,7 +139,7 @@ async def health(request: Request) -> dict:
     )
     return {
         "status": "online" if llm_ok and memory_ok else "degraded",
-        "character": "NYRA",
+        "character": "KAZUMI",
         "llm": llm_ok,
         "llm_ready": llm_ready,
         "ollama": services.warm_manager.status() if services.warm_manager else None,
@@ -239,7 +239,7 @@ async def usb_forget_device(request: Request, device_id: str) -> dict:
 async def chat(payload: ChatRequest, request: Request):
     services = request.app.state.services
     if not await services.llm.ready():
-        # nyra-full §41 / nyra-7c: comandos universais locais (abrir/fechar
+        # kazumi-full §41 / kazumi-7c: comandos universais locais (abrir/fechar
         # app, pastas, arquivos, plano canônico do bloco de notas e skills
         # aprendidas) rodam no fast path SEM LLM e não ficam bloqueados pelo
         # warmup.
@@ -1576,7 +1576,7 @@ async def audio(filename: str):
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Áudio não encontrado")
     media_type = "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
-    return FileResponse(path, media_type=media_type, filename=f"nyra-response{path.suffix}")
+    return FileResponse(path, media_type=media_type, filename=f"kazumi-response{path.suffix}")
 
 
 @router.get("/homelab/status")
@@ -1881,7 +1881,7 @@ async def import_voice_reference(file: UploadFile = File(...)):
         result = await asyncio.to_thread(normalize_reference, temp, REFERENCE_PATH)
         if not result.get("valid"):
             raise HTTPException(status_code=422, detail="WAV inválido ou sem áudio utilizável")
-        return {**result, "recommendations": RECOMMENDATIONS, "stored": "data/voices/nyra_reference.wav"}
+        return {**result, "recommendations": RECOMMENDATIONS, "stored": "data/voices/kazumi_reference.wav"}
     finally:
         temp.unlink(missing_ok=True)
 
@@ -1933,7 +1933,7 @@ async def save_voice_profile(payload: VoiceProfileUpdate, request: Request):
     path = IDENTITY_ROOT / "voice_profile.json"
     current = json.loads(path.read_text(encoding="utf-8"))
     current.update(payload.model_dump())
-    current["profile_id"] = NYRA_IDENTITY_ID
+    current["profile_id"] = KAZUMI_IDENTITY_ID
     await asyncio.to_thread(
         path.write_text, json.dumps(current, ensure_ascii=False, indent=2) + "\n", "utf-8"
     )
@@ -2071,9 +2071,9 @@ async def desktop_app_launch(request: Request, app_id: str):
     return await request.app.state.services.desktop.launch(app_id, origin="api")
 
 
-# ============================== Universal Operator (nyra-full §29/§34) =======
+# ============================== Universal Operator (kazumi-full §29/§34) =======
 
-# nyra-7c: observabilidade das camadas de autonomia (sem UI nova).
+# kazumi-7c: observabilidade das camadas de autonomia (sem UI nova).
 
 @router.get("/computer/state")
 async def computer_state_route(request: Request):
@@ -2123,7 +2123,7 @@ async def computer_skills_list(request: Request, q: str | None = None):
 
 @router.post("/computer/skills/explicit")
 async def computer_skill_explicit(request: Request):
-    """Fixture/E2E: 'aprende isso' explícito (nyra-7c §68) sem LLM."""
+    """Fixture/E2E: 'aprende isso' explícito (kazumi-7c §68) sem LLM."""
     services = request.app.state.services
     memory = getattr(services, "skill_memory", None)
     if memory is None:
@@ -2206,7 +2206,7 @@ async def apps_registry_diagnostics(request: Request, query: str):
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """Event bus broadcast + contrato de voz nyra.voice.v1 (Apêndice PRO E).
+    """Event bus broadcast + contrato de voz kazumi.voice.v1 (Apêndice PRO E).
 
     Mensagens aceitas do cliente: hello → hello_ack; voice.barge_in e tts.stop →
     cancelam SOMENTE o TTS atual (sem derrubar Agent Run); heartbeat → ack.
@@ -2241,14 +2241,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 hello_state["handshake"] = True
                 hello_state["satellite_id"] = str(message.get("satellite_id") or "") or None
                 logger.info("voice_hello", extra={
-                    "protocol": str(message.get("protocol_version") or "nyra.voice.v1"),
+                    "protocol": str(message.get("protocol_version") or "kazumi.voice.v1"),
                     "satellite_id": str(message.get("satellite_id") or "unknown"),
                 })
                 await _send({
                     "type": "hello_ack",
-                    "protocol": "nyra.voice.v1",
+                    "protocol": "kazumi.voice.v1",
                     "accepted": True,
-                    "character": "NYRA",
+                    "character": "KAZUMI",
                 })
             elif message_type in {"voice.barge_in", "tts.stop"}:
                 orchestrator = getattr(services, "orchestrator", None)
@@ -2257,10 +2257,10 @@ async def websocket_endpoint(websocket: WebSocket):
             elif message_type == "heartbeat":
                 await _send({"type": "heartbeat_ack"})
 
-    receiver_task = asyncio.create_task(receiver(), name="nyra-ws-receiver")
+    receiver_task = asyncio.create_task(receiver(), name="kazumi-ws-receiver")
     await event_bus.subscribe(forward)
     try:
-        await _send({"type": "CONNECTED", "payload": {"character": "NYRA"}})
+        await _send({"type": "CONNECTED", "payload": {"character": "KAZUMI"}})
         await receiver_task
     except WebSocketDisconnect:
         pass
@@ -3777,7 +3777,7 @@ class PowerActionRequest(BaseModel):
 @router.post("/runtime/power/{action}")
 async def runtime_power_endpoint(request: Request, action: str,
                                  payload: PowerActionRequest | None = None) -> dict:
-    """Closure §12/§13: Encerrar NYRA completamente / Reiniciar NYRA completamente.
+    """Closure §12/§13: Encerrar KAZUMI completamente / Reiniciar KAZUMI completamente.
 
     Ação iniciada pelo operador na UI (confirmação de uso único no clique) —
     nunca acionável por texto do LLM. Watchdog é desarmado antes da saída.

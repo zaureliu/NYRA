@@ -11,12 +11,12 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 def test_public_project_root_is_user_relative_and_overridable(tmp_path, monkeypatch):
-    monkeypatch.delenv('NYRA_PROJECTS_ROOT', raising=False)
+    monkeypatch.delenv('KAZUMI_PROJECTS_ROOT', raising=False)
     monkeypatch.setattr(Path, 'home', lambda: tmp_path)
     services = SimpleNamespace(usb=None, world_state=None, shell=None)
     engine = HardwareEngineeringService(services, tmp_path / 'state')
-    assert engine.projects.root == tmp_path / 'NYRA-Projects'
-    monkeypatch.setenv('NYRA_PROJECTS_ROOT', str(tmp_path / 'chosen'))
+    assert engine.projects.root == tmp_path / 'Kazumi-Projects'
+    monkeypatch.setenv('KAZUMI_PROJECTS_ROOT', str(tmp_path / 'chosen'))
     engine = HardwareEngineeringService(services, tmp_path / 'state')
     assert engine.projects.root == tmp_path / 'chosen'
 

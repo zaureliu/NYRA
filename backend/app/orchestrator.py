@@ -22,8 +22,8 @@ from app.speech.prosody import ProsodyProcessor
 from app.speech.queue import SpeechPriority, SpeechQueue
 
 
-conversation_logger = logging.getLogger("nyra.conversation")
-error_logger = logging.getLogger("nyra.errors")
+conversation_logger = logging.getLogger("kazumi.conversation")
+error_logger = logging.getLogger("kazumi.errors")
 
 
 class ChatResult(BaseModel):
@@ -122,7 +122,7 @@ class ChatOrchestrator:
         )
         await self.memory.retain()
         await self.event_bus.publish(
-            EventType.NYRA_RESPONSE,
+            EventType.KAZUMI_RESPONSE,
             text=response,
             display_text=prepared.display_text,
             speech_text=prepared.speech_text,

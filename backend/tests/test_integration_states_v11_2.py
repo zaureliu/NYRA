@@ -61,7 +61,7 @@ def ha_env(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "PROFILES_PATH", tmp_path / "ha-profiles.json")
     monkeypatch.setattr(mod, "SECRETS_DIR", tmp_path / "secrets")
     monkeypatch.setattr(mod, "_last_monitor_record_monotonic", 0.0)
-    monkeypatch.delenv("NYRA_HOME_ASSISTANT_TOKEN", raising=False)
+    monkeypatch.delenv("KAZUMI_HOME_ASSISTANT_TOKEN", raising=False)
     broker = StubBroker()
     monkeypatch.setattr(mod, "_broker", lambda: broker)
     yield mod, broker, tmp_path
@@ -400,7 +400,7 @@ class TestHAMonitorRefresh:
             homelab_registry_path=tmp_path / "registry.yaml",
             homelab_default_timeout_seconds=2.0,
             homelab_overview_cache_seconds=0,
-            database_path=tmp_path / "nyra-test.db",
+            database_path=tmp_path / "kazumi-test.db",
             home_assistant_enabled=True,
             home_assistant_url="https://192.168.1.200",
             home_assistant_token="monitor-tok-refresh",

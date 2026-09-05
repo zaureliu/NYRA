@@ -1,7 +1,7 @@
-// One device claim across NYRA windows. Coordination never carries audio.
+// One device claim across KAZUMI windows. Coordination never carries audio.
 const manualOwners = new Map<string, number>()
 const subscribers = new Set<() => void>()
-const channel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('nyra-microphone-owner') : null
+const channel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('kazumi-microphone-owner') : null
 channel?.addEventListener('message', (event) => {
   if (event.data?.type !== 'manual') return
   if (event.data.active) manualOwners.set(String(event.data.owner), Date.now() + 65000)
@@ -27,7 +27,7 @@ export function setManualCapture(active: boolean, owner: string) {
 export async function acquireMicrophone(): Promise<(() => void) | null> {
   if (!navigator.locks) return () => undefined
   return new Promise((resolve) => {
-    void navigator.locks.request('nyra-microphone', { ifAvailable: true }, async (lock) => {
+    void navigator.locks.request('kazumi-microphone', { ifAvailable: true }, async (lock) => {
       if (!lock) { resolve(null); return }
       await new Promise<void>((release) => resolve(release))
     }).catch(() => resolve(null))

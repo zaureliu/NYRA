@@ -17,7 +17,7 @@ class FakeTTS:
     async def synthesize(self, text: str, state: str) -> Path:
         self.calls.append(text)
         await asyncio.sleep(self.delay)
-        output_dir = Path(tempfile.gettempdir()) / "nyra-speech-queue-tests"
+        output_dir = Path(tempfile.gettempdir()) / "kazumi-speech-queue-tests"
         output_dir.mkdir(parents=True, exist_ok=True)
         output = output_dir / f"{text}.wav"
         output.write_bytes(b"RIFF" + b"\0" * 128)

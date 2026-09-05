@@ -11,7 +11,7 @@ from app.speech.prosody import ProsodyProcessor
 from app.speech.queue import SpeechPriority, SpeechQueue
 
 
-logger = logging.getLogger("nyra.network_watch")
+logger = logging.getLogger("kazumi.network_watch")
 NETWORK_EVENT_TYPES = {
     EventType.NETWORK_GATEWAY_DOWN,
     EventType.NETWORK_GATEWAY_RECOVERED,
@@ -67,7 +67,7 @@ class ProactiveNetworkAlerts:
     async def handle_event(self, event: Event) -> None:
         if event.type not in NETWORK_EVENT_TYPES:
             return
-        task = asyncio.create_task(self._process(event), name="nyra-network-alert")
+        task = asyncio.create_task(self._process(event), name="kazumi-network-alert")
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
@@ -105,7 +105,7 @@ class ProactiveNetworkAlerts:
                 output = await self.voice_processor.process(output, state.value)
             audio_url = f"/api/audio/{Path(output).name}"
             await self.event_bus.publish(
-                EventType.NYRA_RESPONSE,
+                EventType.KAZUMI_RESPONSE,
                 text=message,
                 display_text=message,
                 speech_text=prepared.speech_text,

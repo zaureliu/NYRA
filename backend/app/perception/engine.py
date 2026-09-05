@@ -29,7 +29,7 @@ class PCAwareness:
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._run(), name="nyra-pc-awareness")
+            self._task = asyncio.create_task(self._run(), name="kazumi-pc-awareness")
 
     async def stop(self) -> None:
         if self._task:
@@ -82,7 +82,7 @@ class PCAwareness:
         self.snapshot = PerceptionSnapshot(
             timestamp=datetime.now(timezone.utc), enabled=True, user_activity=activity,
             idle_seconds=round(idle, 1), foreground_app=app, mouse=mouse, system=system,
-            network=previous.network, sentinel=previous.sentinel, nyra_state=previous.nyra_state,
+            network=previous.network, sentinel=previous.sentinel, kazumi_state=previous.kazumi_state,
         )
         if app.process != previous.foreground_app.process:
             await self.event_bus.publish(EventType.PC_ACTIVE_WINDOW_CHANGED, process=app.process, app=app.classification)

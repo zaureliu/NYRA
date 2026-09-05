@@ -1,10 +1,10 @@
 # Voz V3 / custom Chatterbox pt-BR
 
-O perfil persistido continua `NYRA_VOICE` em Kokoro `pf_dora`, o fallback feminino pt-BR rápido deste host. O Voice Lab agora oferece A/B/C: Kokoro, Chatterbox Multilingual V3 e Chatterbox V3 com `data/voices/nyra_reference.wav` autorizado. A referência é importada como WAV, validada, convertida para 24 kHz e normalizada levemente; o arquivo é protegido pelo `.gitignore`.
+O perfil persistido continua `KAZUMI_VOICE` em Kokoro `pf_dora`, o fallback feminino pt-BR rápido deste host. O Voice Lab agora oferece A/B/C: Kokoro, Chatterbox Multilingual V3 e Chatterbox V3 com `data/voices/kazumi_reference.wav` autorizado. A referência é importada como WAV, validada, convertida para 24 kHz e normalizada levemente; o arquivo é protegido pelo `.gitignore`.
 
 O provider genérico usa worker residente: cold start medido em 39,17 s e warm generation em 20,36 s para a frase curta, enquanto as gerações seguintes reutilizam a instância. Falha, timeout ou ausência do provider retorna a Kokoro. O checkpoint oficial `ResembleAI/Chatterbox-Multilingual-pt-br` está catalogado, mas o pacote local `chatterbox-tts==0.1.7` não possui loader para os assets single-language; por isso aparece indisponível até um loader compatível/assets serem instalados. Não houve download automático.
 
-Perfil oficial: NYRA_VOICE, Kokoro pf_dora, speaking rate 0.88, sentence pause 240 ms e paragraph pause 460 ms. Não há pitch shift ou referência de pessoa real.
+Perfil oficial: KAZUMI_VOICE, Kokoro pf_dora, speaking rate 0.88, sentence pause 240 ms e paragraph pause 460 ms. Não há pitch shift ou referência de pessoa real.
 
 O Voice Lab consulta supported_parameters. Kokoro mostra voice/rate/pausas; Chatterbox mostra temperature/exaggeration/CFG/seed/pausa. O A/B guarda A e B separadamente, permite repetir e selecionar antes de salvar.
 

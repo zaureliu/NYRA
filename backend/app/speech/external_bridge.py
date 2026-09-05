@@ -28,7 +28,7 @@ import httpx
 
 from app.core.runtime_settings import save_runtime_settings
 
-logger = logging.getLogger("nyra.voice_bridge")
+logger = logging.getLogger("kazumi.voice_bridge")
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8977"
 PROBE_TIMEOUT_SECONDS = 2.0

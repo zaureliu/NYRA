@@ -24,8 +24,8 @@ class WindowsHostAdapter(SshHostAdapter):
             return True, ""
         if self.remote_method == "winrm":
             return False, "WinRM ainda não está configurado para este host."
-        if self.remote_method == "nyra_remote_node":
-            return False, "NYRA Remote Node ainda não está implementado."
+        if self.remote_method == "kazumi_remote_node":
+            return False, "KAZUMI Remote Node ainda não está implementado."
         return False, "Nenhum método de gerenciamento remoto configurado para este host Windows."
 
     async def metrics(self) -> dict[str, Any]:

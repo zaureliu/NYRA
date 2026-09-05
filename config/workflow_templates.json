@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "description": "Templates oficiais de workflow da NYRA (spec §59-§62). Usam tools estruturadas do registry — nunca shell cru quando existe capability dedicada. Seed idempotente: templates ausentes são criados; edits do operador nunca são sobrescritos.",
+  "description": "Templates oficiais de workflow da KAZUMI (spec §59-§62). Usam tools estruturadas do registry — nunca shell cru quando existe capability dedicada. Seed idempotente: templates ausentes são criados; edits do operador nunca são sobrescritos.",
   "templates": [
     {
-      "workflow_id": "wf_check_nyra_health",
-      "name": "Check NYRA Health",
-      "description": "Verificação estruturada da saúde da NYRA: runtime services + status geral. Somente leitura.",
-      "trigger_phrases": ["verifica a nyra", "check nyra health", "health check"],
+      "workflow_id": "wf_check_kazumi_health",
+      "name": "Check KAZUMI Health",
+      "description": "Verificação estruturada da saúde da KAZUMI: runtime services + status geral. Somente leitura.",
+      "trigger_phrases": ["verifica a kazumi", "check kazumi health", "health check"],
       "risk": "READ_ONLY",
       "parameters": {},
       "steps": [
@@ -32,15 +32,15 @@
     {
       "workflow_id": "wf_open_dev_environment",
       "name": "Open Development Environment",
-      "description": "Abre VS Code no projeto NYRA e verifica runtime (frontend/Ollama).",
+      "description": "Abre VS Code no projeto KAZUMI e verifica runtime (frontend/Ollama).",
       "trigger_phrases": ["abre ambiente de desenvolvimento", "open dev environment"],
       "risk": "LOW_RISK",
-      "parameters": {"project_path": "<NYRA_ROOT>"},
+      "parameters": {"project_path": "<KAZUMI_ROOT>"},
       "steps": [
         {
           "step_id": "s1_frontend",
           "tool": "runtime_status",
-          "params": {"service_id": "nyra_frontend_dev"},
+          "params": {"service_id": "kazumi_frontend_dev"},
           "depends_on": [],
           "verification": "frontend dev server visível ao supervisor",
           "description": "Confere frontend dev antes de abrir editor"
@@ -61,7 +61,7 @@
           "verification": "janela do VS Code aberta",
           "timeout_seconds": 60,
           "rollback": null,
-          "description": "Abre VS Code no projeto NYRA"
+          "description": "Abre VS Code no projeto KAZUMI"
         }
       ]
     },
@@ -138,10 +138,10 @@
     {
       "workflow_id": "wf_build_project",
       "name": "Build Project",
-      "description": "Build do frontend NYRA com verificação determinística do artefato dist.",
+      "description": "Build do frontend KAZUMI com verificação determinística do artefato dist.",
       "trigger_phrases": ["build do projeto", "build project"],
       "risk": "LOW_RISK",
-      "parameters": {"project_root": "<NYRA_ROOT>/frontend"},
+      "parameters": {"project_root": "<KAZUMI_ROOT>/frontend"},
       "steps": [
         {
           "step_id": "s1_build",
@@ -175,7 +175,7 @@
       "description": "Diagnóstico somente leitura de um serviço local gerenciado (parâmetro service_id).",
       "trigger_phrases": ["diagnostica servico local"],
       "risk": "READ_ONLY",
-      "parameters": {"service_id": "nyra_backend"},
+      "parameters": {"service_id": "kazumi_backend"},
       "steps": [
         {
           "step_id": "s1_health",

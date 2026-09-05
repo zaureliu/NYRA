@@ -11,15 +11,15 @@ from app.avatar.vtube_studio.provider import VTubeStudioAvatarProvider
 from app.emotional_presence import EmotionPresentationCoordinator, VoicePresentationAdapter
 from app.emotional_presence.models import EmotionalPresenceSettings, EmotionalPresenceSettingsUpdate, VoiceEmotionSupport
 from app.events import EventBus, EventType
-from app.persona_runtime import NyraEmotion, PersonaRuntime
+from app.persona_runtime import KazumiEmotion, PersonaRuntime
 from app.speech.tts import TtsCapabilities
 
 
 class FakeVoiceProvider:
     name = "local"
     active_provider = "local"
-    active_voice = "NYRA_FIXED_VOICE"
-    default_voice = "NYRA_FIXED_VOICE"
+    active_voice = "KAZUMI_FIXED_VOICE"
+    default_voice = "KAZUMI_FIXED_VOICE"
 
     def __init__(self, capabilities: TtsCapabilities) -> None:
         self._capabilities = capabilities
@@ -37,7 +37,7 @@ class FakeVTS:
         self.calls.append((emotion, intensity))
         self.current = {
             "kind": "expression" if emotion == "happy" else "neutral",
-            "target": "NYRA_HAPPY" if emotion == "happy" else None,
+            "target": "KAZUMI_HAPPY" if emotion == "happy" else None,
             "applied": emotion in {"neutral", "happy"},
             "fallback": None if emotion in {"neutral", "happy"} else "model_has_no_compatible_emotion_capability",
             "model_id": "fake-model",
@@ -54,7 +54,7 @@ class FakeVTS:
 
 async def build_runtime(tmp_path: Path):
     bus = EventBus()
-    runtime = PersonaRuntime(tmp_path / "nyra.db", bus)
+    runtime = PersonaRuntime(tmp_path / "kazumi.db", bus)
     await runtime.start()
     avatar = AvatarController(bus)
     vts = FakeVTS()
@@ -71,18 +71,18 @@ async def build_runtime(tmp_path: Path):
 async def test_single_persona_emotion_reaches_text_voice_internal_avatar_and_vts(tmp_path: Path):
     bus, runtime, avatar, vts, _voice, coordinator = await build_runtime(tmp_path)
 
-    await coordinator.controlled_transition(NyraEmotion.HAPPY, .44)
+    await coordinator.controlled_transition(KazumiEmotion.HAPPY, .44)
     context = await runtime.build_context("continue")
     status = await coordinator.status()
 
-    assert runtime.emotion.primary == NyraEmotion.HAPPY
+    assert runtime.emotion.primary == KazumiEmotion.HAPPY
     assert "primary=happy; intensity=0.44" in context
     assert status["emotion"] == "happy" and status["intensity"] == .44
     assert status["voice"]["emotion"] == "happy" and status["voice"]["intensity"] == .44
     assert status["avatar"]["emotion"] == "happy" and status["avatar"]["intensity"] == .44
     assert avatar.state.expression == "happy" and avatar.state.emotion_intensity == .44
     assert vts.calls[-1] == ("happy", .44)
-    assert any(item.type == EventType.NYRA_EMOTIONAL_PRESENCE_SYNCED for item in bus.history())
+    assert any(item.type == EventType.KAZUMI_EMOTIONAL_PRESENCE_SYNCED for item in bus.history())
 
     # THINKING/LISTENING are operational and must not erase the emotion.
     await avatar.mode("thinking")
@@ -102,7 +102,7 @@ async def test_transition_metadata_and_barge_in_close_mouth_without_erasing_emot
     await bus.publish(EventType.SPEECH_CANCELLED, reason="barge_in")
     assert avatar.state.mouth_open == 0
     assert avatar.state.expression == "focused"
-    assert coordinator.current.emotion == NyraEmotion.WARNING
+    assert coordinator.current.emotion == KazumiEmotion.WARNING
     await coordinator.stop(); await runtime.stop()
 
 
@@ -149,7 +149,7 @@ def test_voice_adapter_reports_real_capabilities_and_keeps_one_voice_identity():
         assert built.presentation.emotion_support == VoiceEmotionSupport.PARTIAL
         assert built.presentation.acoustic_emotion == "neutral"
         assert built.presentation.pitch_adjustment_hz == 0
-    assert identities == {"NYRA_FIXED_VOICE"}
+    assert identities == {"KAZUMI_FIXED_VOICE"}
     assert adapter.build_voice_style("happy", .4, {}, full).presentation.emotion_support == VoiceEmotionSupport.FULL
     unsupported = adapter.build_voice_style("happy", .4, {}, none).presentation
     assert unsupported.emotion_support == VoiceEmotionSupport.NONE and unsupported.degraded
@@ -174,13 +174,13 @@ class FakeVTSClient:
             return {"data": {"modelLoaded": True, "modelName": "Current Model", "modelID": self.model_id}}
         if kind == "InputParameterListRequest":
             values = [{"name": "MouthOpen"}]
-            if self.with_capabilities: values.append({"name": "NyraAmused"})
+            if self.with_capabilities: values.append({"name": "KazumiAmused"})
             return {"data": {"defaultParameters": values}}
         if kind == "HotkeysInCurrentModelRequest":
-            hotkeys = [{"hotkeyID": "happy-id", "name": "NYRA_HAPPY", "type": "ToggleExpression"}] if self.with_capabilities else []
+            hotkeys = [{"hotkeyID": "happy-id", "name": "KAZUMI_HAPPY", "type": "ToggleExpression"}] if self.with_capabilities else []
             return {"data": {"availableHotkeys": hotkeys}}
         if kind == "ExpressionStateRequest":
-            expressions = [{"file": "NYRA_CONCERNED.exp3.json", "name": "NYRA_CONCERNED", "active": False}] if self.with_capabilities else []
+            expressions = [{"file": "KAZUMI_CONCERNED.exp3.json", "name": "KAZUMI_CONCERNED", "active": False}] if self.with_capabilities else []
             return {"data": {"expressions": expressions}}
         return {"data": {}}
 
@@ -212,7 +212,7 @@ async def test_vts_discovers_real_targets_lip_sync_coexists_and_model_switch_ref
     assert provider._resolve_emotion_target("warning")["kind"] == "neutral"
 
     happy = await provider.apply_emotion("happy", .4, {"cooldown_ms": 250})
-    assert happy["applied"] and happy["target"] == "NYRA_HAPPY"
+    assert happy["applied"] and happy["target"] == "KAZUMI_HAPPY"
     await provider.apply(AvatarState(mouth_open=.51, expression="happy"))
     assert provider.current_emotion == "happy"
     injection = [data for kind, data in client.calls if kind == "InjectParameterDataRequest"][-1]

@@ -27,7 +27,7 @@ from app.tools.shell_models import (
 from app.tools.shell_risk import ShellRiskClassifier
 
 
-logger = logging.getLogger("nyra.shell")
+logger = logging.getLogger("kazumi.shell")
 
 
 class SystemShellService:
@@ -443,7 +443,7 @@ class SystemShellService:
                     message=(
                         "O Windows indicou que esta operação requer elevação administrativa. "
                         "Solicite approval e, com ele concedido, reenvie o comando com elevate=true; "
-                        "o consentimento UAC será exibido ao operador. Nenhuma senha é coletada pela NYRA."
+                        "o consentimento UAC será exibido ao operador. Nenhuma senha é coletada pela KAZUMI."
                     ),
                     reason=safe_reason,
                     execution_success=False,
@@ -536,7 +536,7 @@ class SystemShellService:
     def _truncate_one(value: str, limit: int) -> tuple[str, bool]:
         if len(value) <= limit:
             return value, False
-        marker = f"\n\n... [NYRA OUTPUT TRUNCATED: {len(value) - limit} characters omitted] ...\n\n"
+        marker = f"\n\n... [KAZUMI OUTPUT TRUNCATED: {len(value) - limit} characters omitted] ...\n\n"
         available = max(0, limit - len(marker))
         head = int(available * 0.6)
         tail = available - head

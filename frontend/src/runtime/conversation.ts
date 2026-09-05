@@ -1,5 +1,5 @@
 import type { ChatResponse } from '../types'
-import { nyraFetch } from './backend'
+import { kazumiFetch } from './backend'
 
 export interface ChatPayload {
   message: string
@@ -21,7 +21,7 @@ function requestError(body: unknown): Error {
 }
 
 export async function sendChat(payload: ChatPayload): Promise<ChatResponse> {
-  const response = await nyraFetch('/api/chat', {
+  const response = await kazumiFetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

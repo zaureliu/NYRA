@@ -18,11 +18,11 @@ from app.speech.custom_provider import CustomTTSProvider
 from app.speech.synthesis_config import UniversalTtsSettings
 
 
-logger = logging.getLogger("nyra.voice.registry")
+logger = logging.getLogger("kazumi.voice.registry")
 
 
 class LocalTtsProvider(TTSProvider):
-    """Official logical `local` provider around NYRA's existing local engine."""
+    """Official logical `local` provider around KAZUMI's existing local engine."""
 
     def __init__(self, delegate: TTSProvider) -> None:
         self.delegate = delegate

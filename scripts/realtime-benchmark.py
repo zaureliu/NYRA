@@ -34,7 +34,7 @@ async def benchmark(text: str, base_url: str) -> dict:
                 if event_type == "SENTENCE_READY": marks.setdefault("first_sentence_ms", elapsed)
                 if event_type == "TTS_CHUNK_STARTED": marks.setdefault("tts_start_ms", elapsed)
                 if event_type == "TTS_CHUNK_FINISHED": marks.setdefault("first_audio_ms", elapsed)
-                if event_type == "NYRA_RESPONSE":
+                if event_type == "KAZUMI_RESPONSE":
                     marks.setdefault("response_event_ms", elapsed)
                 if request.done() and "response_event_ms" in marks:
                     break
@@ -52,7 +52,7 @@ async def benchmark(text: str, base_url: str) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--text", default="Nyra, você está online? Responda em uma frase curta.")
+    parser.add_argument("--text", default="Kazumi, você está online? Responda em uma frase curta.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     args = parser.parse_args()
     print(json.dumps(asyncio.run(benchmark(args.text, args.base_url)), ensure_ascii=False, indent=2))

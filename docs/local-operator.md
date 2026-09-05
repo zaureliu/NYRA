@@ -1,13 +1,13 @@
-# NYRA Local Operator V1
+# KAZUMI Local Operator V1
 
-Camada que transforma a NYRA em **operadora local do Windows** — além de shell e app launcher: janelas, UI Automation, input, filesystem, processos, serviços, registro, tarefas agendadas, navegador e energia. O AgentController continua sendo o único cérebro; tudo aqui são capabilities com schema Pydantic, risco, approval, grounding e verificação.
+Camada que transforma a KAZUMI em **operadora local do Windows** — além de shell e app launcher: janelas, UI Automation, input, filesystem, processos, serviços, registro, tarefas agendadas, navegador e energia. O AgentController continua sendo o único cérebro; tudo aqui são capabilities com schema Pydantic, risco, approval, grounding e verificação.
 
 ## Módulos
 
 | Arquivo | Responsabilidade |
 |---|---|
 | `backend/app/desktop/control.py` | Ciclo de vida de apps: launch/find/status + operações de janela (focus/minimize/maximize/restore/move/resize/close) com ACT→VERIFY |
-| `backend/app/desktop/window_manager.py` | Win32 puro: SetForegroundWindow/ShowWindow/SetWindowPos/WM_CLOSE + releitura de estado para confirmar efeito; guarda de processos NYRA |
+| `backend/app/desktop/window_manager.py` | Win32 puro: SetForegroundWindow/ShowWindow/SetWindowPos/WM_CLOSE + releitura de estado para confirmar efeito; guarda de processos KAZUMI |
 | `backend/app/desktop/uia.py` | UI Automation via comtypes/UIAutomationCore: inspect/find/click(InvokePattern)/set_text(ValuePattern+releitura)/get_text/send_keys(SendInput com foreground verify) |
 | `backend/app/desktop/discovery.py` | Descoberta dinâmica de apps (App Paths, PATH, Start Menu, Get-StartApps/UWP) |
 | `backend/app/desktop/operator.py` | Filesystem/processos/serviços/registro/tarefas/energia com approval single-use e elevação UAC legítima |
@@ -17,9 +17,9 @@ Camada que transforma a NYRA em **operadora local do Windows** — além de shel
 
 **Desktop/janelas**: `desktop_list_apps`, `desktop_windows`, `desktop_find_application`, `desktop_open_application`, `desktop_launch`, `desktop_focus`, `desktop_close`, `desktop_minimize`, `desktop_maximize`, `desktop_restore`, `desktop_move_window`, `desktop_resize_window`, `desktop_open_file`, `desktop_open_url`.
 
-**UI Automation** (flag `NYRA_DESKTOP_UI_AUTOMATION_ENABLED`; send_keys também exige `NYRA_DESKTOP_INPUT_FALLBACK_ENABLED`): `ui_inspect`, `ui_find`, `ui_click`, `ui_set_text`, `ui_get_text`, `ui_send_keys`.
+**UI Automation** (flag `KAZUMI_DESKTOP_UI_AUTOMATION_ENABLED`; send_keys também exige `KAZUMI_DESKTOP_INPUT_FALLBACK_ENABLED`): `ui_inspect`, `ui_find`, `ui_click`, `ui_set_text`, `ui_get_text`, `ui_send_keys`.
 
-**Operador local** (master flag `NYRA_LOCAL_OPERATOR_ENABLED`):
+**Operador local** (master flag `KAZUMI_LOCAL_OPERATOR_ENABLED`):
 - filesystem: `filesystem_list/read/write/copy/move/rename/delete/mkdir/search`
 - processos: `process_list/status/start/stop`
 - serviços: `windows_service_list/status/start/stop/restart`
@@ -30,8 +30,8 @@ Camada que transforma a NYRA em **operadora local do Windows** — além de shel
 
 ## Segurança
 
-- Fechar janelas usa **WM_CLOSE gracioso**; taskkill nunca é primeira opção. Documento não salvo → diálogo detectado, NYRA **não descarta** sozinha.
-- Componentes NYRA (backend, presence Tauri) são **protegidos**: close/stop neles é bloqueado.
+- Fechar janelas usa **WM_CLOSE gracioso**; taskkill nunca é primeira opção. Documento não salvo → diálogo detectado, KAZUMI **não descarta** sozinha.
+- Componentes KAZUMI (backend, presence Tauri) são **protegidos**: close/stop neles é bloqueado.
 - Mutações sensíveis exigem `approval_id` de uso único (mesmo ShellApprovalGate); serviços/registro elevam por `runas`/UAC real (sem bypass, sem credenciais).
 - `filesystem_delete` bloqueia raízes/home/projeto; `system_power` shutdown/restart dão 30s de cancelamento (`shutdown /a`).
 - Browser CDP roda em **perfil dedicado**; cookies/tokens nunca saem das chamadas.

@@ -155,7 +155,7 @@ async def _track_orchestrators():
 
 async def build_orchestrator(tmp_path: Path, llm, tts=None, tools_registry=None):
     bus = EventBus()
-    memory = MemoryRepository(tmp_path / "nyra.db", bus)
+    memory = MemoryRepository(tmp_path / "kazumi.db", bus)
     await memory.initialize()
     state_machine = StateMachine(memory, bus)
     speech_queue = SpeechQueue()

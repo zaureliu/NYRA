@@ -187,7 +187,7 @@ export function UsbDevicesPage() {
         <div>
           <h1 className="ops-page-title">Dispositivos USB</h1>
           <p className="ops-page-subtitle">
-            Presença e metadados PnP do Windows. A NYRA não lê arquivos, áudio, teclas ou conteúdo dos dispositivos.
+            Presença e metadados PnP do Windows. A KAZUMI não lê arquivos, áudio, teclas ou conteúdo dos dispositivos.
           </p>
         </div>
         <div className="ops-header-spacer" />

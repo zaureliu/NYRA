@@ -21,7 +21,7 @@ from app.operator.vision import VisionEngine
 from app.operator.watcher import DesktopWatcher
 from app.operator.workflows import WorkflowEngine
 
-logger = logging.getLogger("nyra.operator.v2")
+logger = logging.getLogger("kazumi.operator.v2")
 
 
 class OperatorV2Service:
@@ -129,7 +129,7 @@ class OperatorV2Service:
             seeded = self.workflows.seed_templates()
             if not seeded.get("success"):
                 logger.warning("workflow template seed failed: %s", seeded)
-        self.event_task = asyncio.create_task(self._subscribe_events(), name="nyra-operator-v2-events")
+        self.event_task = asyncio.create_task(self._subscribe_events(), name="kazumi-operator-v2-events")
         self._started = True
 
     async def stop(self) -> None:

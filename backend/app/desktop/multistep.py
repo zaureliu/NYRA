@@ -1,4 +1,4 @@
-"""Multi-step determinístico (nyra-full §26/§38): abrir → digitar → salvar.
+"""Multi-step determinístico (kazumi-full §26/§38): abrir → digitar → salvar.
 
 Executor SEM LLM para o padrão canônico do Bloco de Notas. Cada passo é
 PLAN→ACT→VERIFY; falha real interrompe com relatório honesto por passo.
@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("nyra.desktop.multistep")
+logger = logging.getLogger("kazumi.desktop.multistep")
 
 
 async def notepad_write_and_save(controller, text: str, filename: str,

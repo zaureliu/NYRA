@@ -14,7 +14,7 @@ from app.events import EventBus, EventType
 from app.llm.ollama import ollama_keep_alive_payload
 
 
-logger = logging.getLogger("nyra.ollama_warm")
+logger = logging.getLogger("kazumi.ollama_warm")
 
 
 class OllamaReadiness(StrEnum):
@@ -43,7 +43,7 @@ class OllamaWarmManager:
     def start(self) -> None:
         if self._task is None or self._task.done():
             self._stopping = False
-            self._task = asyncio.create_task(self._monitor(), name="nyra-ollama-warm-manager")
+            self._task = asyncio.create_task(self._monitor(), name="kazumi-ollama-warm-manager")
 
     async def stop(self) -> None:
         self._stopping = True
@@ -115,7 +115,7 @@ class OllamaWarmManager:
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=5)) as client:
             request = asyncio.create_task(
                 client.post(f"{self.settings.ollama_url}/api/generate", json=payload),
-                name="nyra-ollama-empty-preload",
+                name="kazumi-ollama-empty-preload",
             )
             deadline = time.monotonic() + timeout
             try:

@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'runtime-paths.ps1')
-$runtimePaths = Initialize-NyraRuntimePaths
+$runtimePaths = Initialize-KazumiRuntimePaths
 $logDir = $runtimePaths.Logs
 $statePath = $runtimePaths.ProcessState
 $bootstrapLog = Join-Path $logDir 'bootstrap.log'
@@ -87,7 +87,7 @@ function Invoke-BoundedProcess {
     return $result
 }
 
-function Start-NyraManagedProcess {
+function Start-KazumiManagedProcess {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -120,10 +120,10 @@ function Test-NpmDependencies {
     $lockPath = Join-Path $componentRoot 'package-lock.json'
     $packagePath = Join-Path $componentRoot 'package.json'
     $modulesPath = Join-Path $componentRoot 'node_modules'
-    $markerPath = Join-Path $modulesPath '.nyra-lock.sha256'
+    $markerPath = Join-Path $modulesPath '.kazumi-lock.sha256'
     if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf) -or -not (Test-Path -LiteralPath $packagePath -PathType Leaf) -or -not (Test-Path -LiteralPath $modulesPath -PathType Container)) { return $false }
     $lockHash = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    $dependencyFingerprint = Get-NyraFilesFingerprint -RepoRoot $repoRoot -InputPaths @(
+    $dependencyFingerprint = Get-KazumiFilesFingerprint -RepoRoot $repoRoot -InputPaths @(
         ($Component + '\package.json'), ($Component + '\package-lock.json')
     )
     $markerHash = if (Test-Path -LiteralPath $markerPath) { (Get-Content -LiteralPath $markerPath -Raw).Trim().ToLowerInvariant() } else { '' }
@@ -147,34 +147,34 @@ function Ensure-NpmDependencies {
         return
     }
     Write-BootstrapLog -Level WARN -Message ("dependencias $Component ausentes ou inconsistentes; reparo necessario")
-    $null = Stop-NyraOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
+    $null = Stop-KazumiOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
     $componentRoot = Join-Path $repoRoot $Component
     $install = Invoke-BoundedProcess -FilePath $node -ArgumentList @($npmCliArgument, 'ci', '--no-audit', '--no-fund') -WorkingDirectory $componentRoot -TimeoutSeconds 600 -Label ('npm-ci-' + $Component)
     if ($install.ExitCode -ne 0) {
         throw ("npm ci falhou em $Component. " + $install.Stderr)
     }
     $script:DependencyInstalls++
-    $dependencyFingerprint = Get-NyraFilesFingerprint -RepoRoot $repoRoot -InputPaths @(
+    $dependencyFingerprint = Get-KazumiFilesFingerprint -RepoRoot $repoRoot -InputPaths @(
         ($Component + '\package.json'), ($Component + '\package-lock.json')
     )
-    Set-Content -LiteralPath (Join-Path $componentRoot 'node_modules\.nyra-lock.sha256') -Value $dependencyFingerprint -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $componentRoot 'node_modules\.kazumi-lock.sha256') -Value $dependencyFingerprint -Encoding ASCII
     if (-not (Test-NpmDependencies -Component $Component)) { throw "Dependencias de $Component continuaram inconsistentes apos npm ci." }
     Write-BootstrapLog -Level INFO -Message ("dependencias $Component reparadas; npm_ci=true")
 }
 
 function Test-BackendPackageCurrent {
-    $executable = Join-Path $repoRoot 'packaging\dist\nyra-backend\nyra-backend.exe'
-    $markerPath = Join-Path $repoRoot 'packaging\dist\.nyra-backend-build.json'
+    $executable = Join-Path $repoRoot 'packaging\dist\kazumi-backend\kazumi-backend.exe'
+    $markerPath = Join-Path $repoRoot 'packaging\dist\.kazumi-backend-build.json'
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf) -or -not (Test-Path -LiteralPath $markerPath -PathType Leaf)) { return $false }
     try {
         $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-        $source = Get-NyraBackendSourceFingerprint -RepoRoot $repoRoot
+        $source = Get-KazumiBackendSourceFingerprint -RepoRoot $repoRoot
         $binary = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
         return $marker.source_fingerprint -eq $source -and $marker.executable_sha256 -eq $binary
     } catch { return $false }
 }
 
-function Test-NyraTtsModels {
+function Test-KazumiTtsModels {
     $expected = [ordered]@{
         'kokoro-v1.0.int8.onnx' = '6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb'
         'voices-v1.0.bin' = 'bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d'
@@ -188,15 +188,15 @@ function Test-NyraTtsModels {
     return $true
 }
 
-function Ensure-NyraTtsModels {
-    if (Test-NyraTtsModels) {
+function Ensure-KazumiTtsModels {
+    if (Test-KazumiTtsModels) {
         Write-BootstrapLog -Level INFO -Message 'modelos TTS locais validados'
         return
     }
     Write-BootstrapLog -Level WARN -Message 'modelos TTS ausentes ou invalidos; download oficial necessario'
     $downloader = Join-Path $repoRoot 'scripts\download_tts_models.ps1'
     $result = Invoke-BoundedProcess -FilePath $powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $downloader) -WorkingDirectory $repoRoot -TimeoutSeconds 900 -Label 'download-tts-models'
-    if ($result.ExitCode -ne 0 -or -not (Test-NyraTtsModels)) {
+    if ($result.ExitCode -ne 0 -or -not (Test-KazumiTtsModels)) {
         throw ('Preparacao dos modelos TTS falhou. ' + $result.Stderr)
     }
     Write-BootstrapLog -Level INFO -Message 'modelos TTS baixados e validados'
@@ -208,7 +208,7 @@ function Ensure-BackendPackage {
         return
     }
     Write-BootstrapLog -Level WARN -Message 'backend PyInstaller ausente ou stale; rebuild=true antes do Tauri'
-    $null = Stop-NyraOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
+    $null = Stop-KazumiOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
     $builder = Join-Path $repoRoot 'packaging\build-backend.ps1'
     $result = Invoke-BoundedProcess -FilePath $powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $builder) -WorkingDirectory $repoRoot -TimeoutSeconds $BuildTimeoutSeconds -Label 'build-backend'
     if ($result.ExitCode -ne 0 -or -not (Test-BackendPackageCurrent)) {
@@ -217,18 +217,18 @@ function Ensure-BackendPackage {
     Write-BootstrapLog -Level INFO -Message 'backend PyInstaller reconstruido e validado'
 }
 
-function Get-NyraHealth {
+function Get-KazumiHealth {
     try { return Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/health' -TimeoutSec 4 }
     catch { return $null }
 }
 
-function Wait-NyraHealth {
+function Wait-KazumiHealth {
     param([int]$TimeoutSeconds, $OwnerProcess = $null)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $last = $null
     while ((Get-Date) -lt $deadline) {
-        $last = Get-NyraHealth
-        if ($last -and $last.character -eq 'NYRA' -and $last.status -eq 'online') { return $last }
+        $last = Get-KazumiHealth
+        if ($last -and $last.character -eq 'KAZUMI' -and $last.status -eq 'online') { return $last }
         if ($OwnerProcess) {
             $OwnerProcess.Refresh()
             if ($OwnerProcess.HasExited) { break }
@@ -239,18 +239,18 @@ function Wait-NyraHealth {
     throw "Backend nao ficou HEALTHY em /api/health dentro de $TimeoutSeconds segundos (status=$status)."
 }
 
-function Test-NyraUi {
+function Test-KazumiUi {
     try {
         $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5173/' -TimeoutSec 3
         return $response.StatusCode -eq 200 -and $response.Content -match '<div id="root"'
     } catch { return $false }
 }
 
-function Wait-NyraUi {
+function Wait-KazumiUi {
     param([int]$TimeoutSeconds, $OwnerProcess)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        if (Test-NyraUi) { return }
+        if (Test-KazumiUi) { return }
         $OwnerProcess.Refresh()
         if ($OwnerProcess.HasExited) {
             throw ('Vite encerrou antes da readiness. ' + (Read-TextTail -Path (Join-Path $logDir 'frontend.stderr.log')))
@@ -271,8 +271,8 @@ function Assert-PortAvailable {
     param([int]$Port, [string]$Purpose)
     $owner = Find-ListeningProcess -Port $Port
     if (-not $owner) { return }
-    $owned = Test-NyraOwnedProcess -Process $owner -RepoRoot $repoRoot
-    throw ("Porta $Port ocupada por processo nao reutilizavel para $Purpose (pid=" + $owner.ProcessId + ", nyra_owned=" + $owned.ToString().ToLowerInvariant() + ').')
+    $owned = Test-KazumiOwnedProcess -Process $owner -RepoRoot $repoRoot
+    throw ("Porta $Port ocupada por processo nao reutilizavel para $Purpose (pid=" + $owner.ProcessId + ", kazumi_owned=" + $owned.ToString().ToLowerInvariant() + ').')
 }
 
 function Ensure-OllamaAvailable {
@@ -301,7 +301,7 @@ function Ensure-OllamaAvailable {
     throw 'Ollama nao respondeu dentro de 45 segundos.'
 }
 
-function Get-NyraOfficialModel {
+function Get-KazumiOfficialModel {
     $settingsPath = Join-Path $runtimePaths.Data 'brain-settings.json'
     if (Test-Path -LiteralPath $settingsPath) {
         try {
@@ -309,17 +309,17 @@ function Get-NyraOfficialModel {
             if ($saved.official_model) { return [string]$saved.official_model }
         } catch { Write-BootstrapLog -Level WARN -Message 'brain-settings.json invalido; usando configuracao local' }
     }
-    if ($env:NYRA_LLM_MODEL) { return [string]$env:NYRA_LLM_MODEL }
+    if ($env:KAZUMI_LLM_MODEL) { return [string]$env:KAZUMI_LLM_MODEL }
     $envPath = Join-Path $repoRoot '.env'
     if (Test-Path -LiteralPath $envPath) {
-        $line = Get-Content -LiteralPath $envPath | Where-Object { $_ -match '^\s*NYRA_LLM_MODEL\s*=' } | Select-Object -Last 1
+        $line = Get-Content -LiteralPath $envPath | Where-Object { $_ -match '^\s*KAZUMI_LLM_MODEL\s*=' } | Select-Object -Last 1
         if ($line) { return (($line -split '=', 2)[1].Trim().Trim('"').Trim("'")) }
     }
     return 'qwen3:8b'
 }
 
-function Ensure-NyraOllamaModel {
-    $model = Get-NyraOfficialModel
+function Ensure-KazumiOllamaModel {
+    $model = Get-KazumiOfficialModel
     $tags = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 5
     $installed = @($tags.models | ForEach-Object { [string]$_.name })
     if ($model -in $installed) {
@@ -337,7 +337,7 @@ function Ensure-NyraOllamaModel {
     Write-BootstrapLog -Level INFO -Message ("modelo Ollama instalado model=$model")
 }
 
-function Save-NyraState {
+function Save-KazumiState {
     param(
         [string]$StateMode,
         $BackendProcess = $null,
@@ -366,7 +366,7 @@ function Get-ValidatedStateProcess {
     param($State, [string]$Property)
     if (-not $State -or -not $State.$Property) { return $null }
     $candidate = Get-CimInstance Win32_Process -Filter ('ProcessId=' + [int]$State.$Property) -ErrorAction SilentlyContinue
-    if (-not $candidate -or -not (Test-NyraOwnedProcess -Process $candidate -RepoRoot $repoRoot)) { return $null }
+    if (-not $candidate -or -not (Test-KazumiOwnedProcess -Process $candidate -RepoRoot $repoRoot)) { return $null }
     return Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
 }
 
@@ -376,19 +376,19 @@ function Get-SavedState {
     catch { return $null }
 }
 
-function Find-NyraDesktopProcess {
+function Find-KazumiDesktopProcess {
     param([string]$ExecutablePath)
     $expected = [IO.Path]::GetFullPath($ExecutablePath)
-    return Get-Process -Name 'nyra-desktop' -ErrorAction SilentlyContinue | Where-Object {
+    return Get-Process -Name 'kazumi-desktop' -ErrorAction SilentlyContinue | Where-Object {
         try { $_.Path -and $_.Path.Equals($expected, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
     } | Select-Object -First 1
 }
 
-function Wait-NyraDesktop {
+function Wait-KazumiDesktop {
     param([string]$ExecutablePath, [int]$TimeoutSeconds, $OwnerProcess = $null)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        $desktop = Find-NyraDesktopProcess -ExecutablePath $ExecutablePath
+        $desktop = Find-KazumiDesktopProcess -ExecutablePath $ExecutablePath
         if ($desktop) {
             $handleDeadline = (Get-Date).AddSeconds(20)
             while ((Get-Date) -lt $handleDeadline) {
@@ -409,28 +409,28 @@ function Wait-NyraDesktop {
     throw "Desktop Tauri nao abriu dentro de $TimeoutSeconds segundos."
 }
 
-function Build-NyraRelease {
+function Build-KazumiRelease {
     Write-BootstrapLog -Level INFO -Message 'build release: encerrando somente processos owned pela raiz canonica'
-    $null = Stop-NyraOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
+    $null = Stop-KazumiOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
     $result = Invoke-BoundedProcess -FilePath $node -ArgumentList @($npmCliArgument, 'run', 'build') -WorkingDirectory (Join-Path $repoRoot 'desktop') -TimeoutSeconds $BuildTimeoutSeconds -Label 'tauri-build'
     if ($result.ExitCode -ne 0) { throw ('Tauri build falhou. ' + $result.Stderr) }
-    $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\nyra-desktop.exe'
-    if (-not (Test-Path -LiteralPath $release -PathType Leaf)) { throw 'Tauri terminou sem produzir nyra-desktop.exe.' }
-    $fingerprint = Get-NyraReleaseSourceFingerprint -RepoRoot $repoRoot
+    $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\kazumi-desktop.exe'
+    if (-not (Test-Path -LiteralPath $release -PathType Leaf)) { throw 'Tauri terminou sem produzir kazumi-desktop.exe.' }
+    $fingerprint = Get-KazumiReleaseSourceFingerprint -RepoRoot $repoRoot
     $hash = (Get-FileHash -LiteralPath $release -Algorithm SHA256).Hash.ToLowerInvariant()
     [ordered]@{ schema = 1; source_fingerprint = $fingerprint; executable_sha256 = $hash; built_at = (Get-Date).ToString('o') } |
-        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repoRoot 'desktop\src-tauri\target\release\.nyra-release-build.json') -Encoding UTF8
+        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repoRoot 'desktop\src-tauri\target\release\.kazumi-release-build.json') -Encoding UTF8
     Write-BootstrapLog -Level INFO -Message ("build release PASS path=$release")
     return $release
 }
 
 function Test-ReleaseCurrent {
-    $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\nyra-desktop.exe'
-    $markerPath = Join-Path $repoRoot 'desktop\src-tauri\target\release\.nyra-release-build.json'
+    $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\kazumi-desktop.exe'
+    $markerPath = Join-Path $repoRoot 'desktop\src-tauri\target\release\.kazumi-release-build.json'
     if (-not (Test-Path -LiteralPath $release -PathType Leaf) -or -not (Test-Path -LiteralPath $markerPath -PathType Leaf)) { return $false }
     try {
         $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-        return $marker.source_fingerprint -eq (Get-NyraReleaseSourceFingerprint -RepoRoot $repoRoot) -and
+        return $marker.source_fingerprint -eq (Get-KazumiReleaseSourceFingerprint -RepoRoot $repoRoot) -and
             $marker.executable_sha256 -eq (Get-FileHash -LiteralPath $release -Algorithm SHA256).Hash.ToLowerInvariant()
     } catch { return $false }
 }
@@ -438,79 +438,79 @@ function Test-ReleaseCurrent {
 function Start-Development {
     $saved = Get-SavedState
     $savedDesktop = Get-ValidatedStateProcess -State $saved -Property 'desktop'
-    $savedHealth = Get-NyraHealth
-    if ($saved -and $saved.mode -eq 'development' -and $savedDesktop -and $savedHealth -and $savedHealth.status -eq 'online' -and (Test-NyraUi)) {
-        Write-BootstrapLog -Level INFO -Message 'NYRA development ja esta pronta; processos existentes reutilizados'
+    $savedHealth = Get-KazumiHealth
+    if ($saved -and $saved.mode -eq 'development' -and $savedDesktop -and $savedHealth -and $savedHealth.status -eq 'online' -and (Test-KazumiUi)) {
+        Write-BootstrapLog -Level INFO -Message 'KAZUMI development ja esta pronta; processos existentes reutilizados'
         return
     }
-    $null = Stop-NyraOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
+    $null = Stop-KazumiOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
     if (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force }
     Assert-PortAvailable -Port 8000 -Purpose 'backend'
     Assert-PortAvailable -Port 5173 -Purpose 'frontend'
     Ensure-OllamaAvailable
-    Ensure-NyraOllamaModel
+    Ensure-KazumiOllamaModel
 
-    $python = Find-NyraPythonExecutable -RepoRoot $repoRoot
+    $python = Find-KazumiPythonExecutable -RepoRoot $repoRoot
     if (-not $python) { throw 'Venv Python ausente em .venv e backend\.venv.' }
-    $backend = Start-NyraManagedProcess -FilePath $python -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000') -WorkingDirectory (Join-Path $repoRoot 'backend') -LogName 'backend'
-    $health = Wait-NyraHealth -TimeoutSeconds $BackendTimeoutSeconds -OwnerProcess $backend
+    $backend = Start-KazumiManagedProcess -FilePath $python -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000') -WorkingDirectory (Join-Path $repoRoot 'backend') -LogName 'backend'
+    $health = Wait-KazumiHealth -TimeoutSeconds $BackendTimeoutSeconds -OwnerProcess $backend
     Write-BootstrapLog -Level INFO -Message ("backend HEALTHY pid=" + $backend.Id + ' port=8000 status=' + $health.status)
 
     $vite = Join-Path $repoRoot 'frontend\node_modules\vite\bin\vite.js'
-    $frontend = Start-NyraManagedProcess -FilePath $node -ArgumentList @($vite, '--host', '127.0.0.1', '--port', '5173', '--strictPort') -WorkingDirectory (Join-Path $repoRoot 'frontend') -LogName 'frontend'
-    Wait-NyraUi -TimeoutSeconds $FrontendTimeoutSeconds -OwnerProcess $frontend
+    $frontend = Start-KazumiManagedProcess -FilePath $node -ArgumentList @($vite, '--host', '127.0.0.1', '--port', '5173', '--strictPort') -WorkingDirectory (Join-Path $repoRoot 'frontend') -LogName 'frontend'
+    Wait-KazumiUi -TimeoutSeconds $FrontendTimeoutSeconds -OwnerProcess $frontend
     Write-BootstrapLog -Level INFO -Message ("frontend READY pid=" + $frontend.Id + ' port=5173')
 
     $tauriCli = Join-Path $repoRoot 'desktop\node_modules\@tauri-apps\cli\tauri.js'
-    $tauri = Start-NyraManagedProcess -FilePath $node -ArgumentList @($tauriCli, 'dev') -WorkingDirectory (Join-Path $repoRoot 'desktop') -LogName 'tauri'
-    $debugExecutable = Join-Path $repoRoot 'desktop\src-tauri\target\debug\nyra-desktop.exe'
-    $desktop = Wait-NyraDesktop -ExecutablePath $debugExecutable -TimeoutSeconds $DesktopTimeoutSeconds -OwnerProcess $tauri
-    Save-NyraState -StateMode 'development' -BackendProcess $backend -FrontendProcess $frontend -TauriProcess $tauri -DesktopProcess $desktop
+    $tauri = Start-KazumiManagedProcess -FilePath $node -ArgumentList @($tauriCli, 'dev') -WorkingDirectory (Join-Path $repoRoot 'desktop') -LogName 'tauri'
+    $debugExecutable = Join-Path $repoRoot 'desktop\src-tauri\target\debug\kazumi-desktop.exe'
+    $desktop = Wait-KazumiDesktop -ExecutablePath $debugExecutable -TimeoutSeconds $DesktopTimeoutSeconds -OwnerProcess $tauri
+    Save-KazumiState -StateMode 'development' -BackendProcess $backend -FrontendProcess $frontend -TauriProcess $tauri -DesktopProcess $desktop
     Write-BootstrapLog -Level INFO -Message ("startup_result mode=development dependency_installs=$script:DependencyInstalls backend_pid=" + $backend.Id + ' backend_port=8000 frontend_pid=' + $frontend.Id + ' frontend_port=5173 tauri_pid=' + $tauri.Id + ' desktop_pid=' + $desktop.Id + ' health=online ui=ready')
 }
 
 function Start-Release {
-    $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\nyra-desktop.exe'
+    $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\kazumi-desktop.exe'
     $saved = Get-SavedState
     $savedDesktop = Get-ValidatedStateProcess -State $saved -Property 'desktop'
-    $savedHealth = Get-NyraHealth
+    $savedHealth = Get-KazumiHealth
     if ($saved -and $saved.mode -eq 'release' -and $savedDesktop -and $savedHealth -and $savedHealth.status -eq 'online') {
         $backendOwner = Find-ListeningProcess -Port 8000
-        Save-NyraState -StateMode 'release' -BackendProcess $backendOwner -DesktopProcess $savedDesktop
-        Write-BootstrapLog -Level INFO -Message 'NYRA release ja esta pronta; processos existentes reutilizados'
+        Save-KazumiState -StateMode 'release' -BackendProcess $backendOwner -DesktopProcess $savedDesktop
+        Write-BootstrapLog -Level INFO -Message 'KAZUMI release ja esta pronta; processos existentes reutilizados'
         return
     }
-    $null = Stop-NyraOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
+    $null = Stop-KazumiOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
     if (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force }
     Assert-PortAvailable -Port 8000 -Purpose 'backend release'
     Ensure-OllamaAvailable
-    Ensure-NyraOllamaModel
+    Ensure-KazumiOllamaModel
     $desktop = Start-Process -FilePath $release -WorkingDirectory $repoRoot -PassThru
-    $desktop = Wait-NyraDesktop -ExecutablePath $release -TimeoutSeconds 60 -OwnerProcess $desktop
-    $health = Wait-NyraHealth -TimeoutSeconds $BackendTimeoutSeconds -OwnerProcess $desktop
+    $desktop = Wait-KazumiDesktop -ExecutablePath $release -TimeoutSeconds 60 -OwnerProcess $desktop
+    $health = Wait-KazumiHealth -TimeoutSeconds $BackendTimeoutSeconds -OwnerProcess $desktop
     $backendOwner = Find-ListeningProcess -Port 8000
-    Save-NyraState -StateMode 'release' -BackendProcess $backendOwner -DesktopProcess $desktop
+    Save-KazumiState -StateMode 'release' -BackendProcess $backendOwner -DesktopProcess $desktop
     Write-BootstrapLog -Level INFO -Message ("startup_result mode=release dependency_installs=$script:DependencyInstalls backend_pid=" + $backendOwner.ProcessId + ' backend_port=8000 desktop_pid=' + $desktop.Id + ' health=' + $health.status + ' ui=ready')
 }
 
 try {
     $createdNew = $false
-    $mutex = New-Object Threading.Mutex($false, 'Local\NYRA.Canonical.Bootstrap', [ref]$createdNew)
+    $mutex = New-Object Threading.Mutex($false, 'Local\KAZUMI.Canonical.Bootstrap', [ref]$createdNew)
     try { $mutexOwned = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $mutexOwned = $true }
-    if (-not $mutexOwned) { throw 'Outro bootstrap da NYRA esta em andamento.' }
+    if (-not $mutexOwned) { throw 'Outro bootstrap da KAZUMI esta em andamento.' }
 
     Write-BootstrapLog -Level INFO -Message ("bootstrap_begin root=$repoRoot")
     Ensure-NpmDependencies -Component 'frontend'
     Ensure-NpmDependencies -Component 'desktop'
-    Ensure-NyraTtsModels
+    Ensure-KazumiTtsModels
     Ensure-BackendPackage
 
     if ($Mode -eq 'Build') {
-        if ($ForceBuild -or -not (Test-ReleaseCurrent)) { $release = Build-NyraRelease }
-        else { $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\nyra-desktop.exe' }
+        if ($ForceBuild -or -not (Test-ReleaseCurrent)) { $release = Build-KazumiRelease }
+        else { $release = Join-Path $repoRoot 'desktop\src-tauri\target\release\kazumi-desktop.exe' }
         Write-BootstrapLog -Level INFO -Message ("bootstrap_complete mode=build dependency_installs=$script:DependencyInstalls release=$release")
     } elseif ($Mode -eq 'Release') {
-        if (-not (Test-ReleaseCurrent)) { $null = Build-NyraRelease }
+        if (-not (Test-ReleaseCurrent)) { $null = Build-KazumiRelease }
         Start-Release
         Write-BootstrapLog -Level INFO -Message ("bootstrap_complete mode=release dependency_installs=$script:DependencyInstalls")
     } else {
@@ -520,7 +520,7 @@ try {
 } catch {
     Write-BootstrapLog -Level ERROR -Message ('bootstrap_failed: ' + ($_.Exception.Message -replace '[\r\n]+', ' '))
     if ($Mode -ne 'Build') {
-        $null = Stop-NyraOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
+        $null = Stop-KazumiOwnedProcesses -RepoRoot $repoRoot -ExcludeProcessId $PID
         if (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force }
     }
     exit 1

@@ -31,7 +31,7 @@ from app.world_state import WorldStateEngine
 
 
 async def make_engine(tmp_path, *, bus: EventBus | None = None):
-    store = IntelligenceStore(tmp_path / "nyra.db")
+    store = IntelligenceStore(tmp_path / "kazumi.db")
     await store.initialize()
     memory = MemoryV2Service(store)
     events = bus or EventBus()
@@ -72,15 +72,15 @@ async def wait_for_state(engine: OpenLoopEngine, loop_id: str, state: OpenLoopSt
 async def test_create_goal_dedup_and_false_positive_policy(tmp_path):
     _store, _memory, _bus, engine = await make_engine(tmp_path)
     first, first_dedup = await engine.create(OpenLoopCreate(
-        title="Corrigir voz da NYRA", goal="Melhorar voz", related_project="nyra",
+        title="Corrigir voz da KAZUMI", goal="Melhorar voz", related_project="kazumi",
         type=OpenLoopType.GOAL,
     ))
     second, second_dedup = await engine.create(OpenLoopCreate(
-        title="Testar voz", goal="Melhorar voz", related_project="nyra",
+        title="Testar voz", goal="Melhorar voz", related_project="kazumi",
         type=OpenLoopType.PENDING_INTENTION,
     ))
     third, third_dedup = await engine.create(OpenLoopCreate(
-        title="A voz ainda está ruim", goal="Melhorar voz", related_project="nyra",
+        title="A voz ainda está ruim", goal="Melhorar voz", related_project="kazumi",
         type=OpenLoopType.BLOCKED_WORK,
     ))
     assert first_dedup is False
@@ -89,8 +89,8 @@ async def test_create_goal_dedup_and_false_positive_policy(tmp_path):
     assert len(await engine.list()) == 1
     assert len(await engine.list_goals()) == 1
     distinct, distinct_dedup = await engine.create(OpenLoopCreate(
-        title="Validar condição da voz NYRA", goal="Validar monitor de voz",
-        related_project="nyra", type=OpenLoopType.WAITING_CONDITION,
+        title="Validar condição da voz KAZUMI", goal="Validar monitor de voz",
+        related_project="kazumi", type=OpenLoopType.WAITING_CONDITION,
         state=OpenLoopState.WAITING,
     ))
     assert distinct_dedup is False and distinct.id != first.id
@@ -159,7 +159,7 @@ async def test_resolution_requires_grounded_evidence_and_writes_memory_v2(tmp_pa
     _store, memory, _bus, engine = await make_engine(tmp_path)
     loop, _ = await engine.create(OpenLoopCreate(
         title="Corrigir o bug de áudio", goal="Áudio estável",
-        related_task=["task_audio"], related_project="nyra",
+        related_task=["task_audio"], related_project="kazumi",
     ))
     with pytest.raises(ValueError, match="EVIDENCE_REQUIRED"):
         await engine.transition(loop.id, OpenLoopState.RESOLVED, reason="LLM disse resolvido")
@@ -186,7 +186,7 @@ async def test_resolution_requires_grounded_evidence_and_writes_memory_v2(tmp_pa
         reference_id="task_audio", detail={"effect_verified": True},
     ))
     assert resolved.state == OpenLoopState.RESOLVED
-    memories = await memory.retrieve("Open loop resolvido bug áudio", project="nyra")
+    memories = await memory.retrieve("Open loop resolvido bug áudio", project="kazumi")
     assert memories and memories[0].category == "open_loop_resolution"
     assert memories[0].provenance["loop_id"] == loop.id
     await engine.stop()
@@ -292,7 +292,7 @@ async def test_context_chat_world_state_and_no_execution_authority(tmp_path):
     await world.start()
     store, memory, _bus, loops = await make_engine(tmp_path, bus=bus)
     created = await loops.observe_user_intention(
-        "Depois eu testo a integração Discord", source_turn="turn_discord", project="nyra",
+        "Depois eu testo a integração Discord", source_turn="turn_discord", project="kazumi",
     )
     assert created is not None
     assert await loops.chat_response("o que ficou pendente?") == (

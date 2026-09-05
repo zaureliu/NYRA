@@ -1,4 +1,4 @@
-"""Stress diÃ¡rio da NYRA (spec Parte AJ Â§152-Â§156 + AK monitoraÃ§Ã£o).
+"""Stress diÃ¡rio da KAZUMI (spec Parte AJ Â§152-Â§156 + AK monitoraÃ§Ã£o).
 
 * 100 turnos simples sequenciais sem leak (Â§152) â€” default 100, configurÃ¡vel;
 * 25 chamadas de tool read-only com correlaÃ§Ã£o 1:1 payloadâ†”resposta (Â§153-154);

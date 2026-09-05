@@ -106,13 +106,13 @@ def test_missing_model_parameters_are_ignored_without_disabling_tracking():
 def test_mouse_does_not_overwrite_lip_sync_or_emotion_parameters():
     mapping = {
         "eye_x": ["EyeBallX"], "head_x": ["FaceAngleX"],
-        "mouth_open": ["MouthOpen"], "amused": ["NyraEmotionAmused"],
+        "mouth_open": ["MouthOpen"], "amused": ["KazumiEmotionAmused"],
     }
     mouse_ids = {value["id"] for value in mouse_parameter_values(frame_for(MouseTrackingMode.HEAD_EYES, 1, 0), mapping)}
     mouth_ids = {value["id"] for value in mouth_parameter_values(AvatarState(mouth_open=.7), mapping)}
     assert mouse_ids == {"EyeBallX", "FaceAngleX"}
     assert mouth_ids == {"MouthOpen"}
-    assert mouse_ids.isdisjoint(mouth_ids | {"NyraEmotionAmused"})
+    assert mouse_ids.isdisjoint(mouth_ids | {"KazumiEmotionAmused"})
 
 
 def test_speaking_reduces_head_influence_but_not_eye_influence():

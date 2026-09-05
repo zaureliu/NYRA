@@ -60,8 +60,8 @@ def build_elevated_script(command: str, shell: str, out_path: Path, err_path: Pa
         )
     return (
         "$ErrorActionPreference='Continue';"
-        f"$__nyra_oem=[Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage);"
-        "[Console]::OutputEncoding=$__nyra_oem;$OutputEncoding=$__nyra_oem;"
+        f"$__kazumi_oem=[Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage);"
+        "[Console]::OutputEncoding=$__kazumi_oem;$OutputEncoding=$__kazumi_oem;"
         f"$__o={out};$__e={err};"
         "$__r=& {" + command + "} 2>&1 | Out-String -Stream;"
         "$__ok=$?;$__native=$LASTEXITCODE;"
@@ -82,8 +82,8 @@ def run_elevated(
     """Execute one approved command through UAC consent; returns raw-shaped data."""
     started = time.perf_counter()
     run_id = os.urandom(6).hex()
-    out_path = Path(tempfile.gettempdir()) / f"nyra-elevated-{run_id}-out.txt"
-    err_path = Path(tempfile.gettempdir()) / f"nyra-elevated-{run_id}-err.txt"
+    out_path = Path(tempfile.gettempdir()) / f"kazumi-elevated-{run_id}-out.txt"
+    err_path = Path(tempfile.gettempdir()) / f"kazumi-elevated-{run_id}-err.txt"
     try:
         script = build_elevated_script(command, shell, out_path, err_path)
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)

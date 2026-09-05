@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { HardwareSummary, type HardwareStatus } from './HardwareEngineeringCard'
 
-const status: HardwareStatus = { full: false, project_root: 'E:\\NYRA-Projects', goals: [], serial: { open_handles: 0 }, research: {} }
+const status: HardwareStatus = { full: false, project_root: 'E:\\KAZUMI-Projects', goals: [], serial: { open_handles: 0 }, research: {} }
 
 describe('hardware evidence presentation', () => {
   it('does not manufacture a project, build, flash or physical effect', () => {

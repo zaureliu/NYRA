@@ -23,10 +23,10 @@ import httpx
 from app.integrations.base import IntegrationError, require_secure_credential_transport
 
 
-logger = logging.getLogger("nyra.homelab.proxmox")
+logger = logging.getLogger("kazumi.homelab.proxmox")
 
 _ERROR_PREFIX = "PROXMOX"
-_DEFAULT_CA_RELATIVE_PATH = Path("NYRA") / "certs" / "proxmox-root-ca.pem"
+_DEFAULT_CA_RELATIVE_PATH = Path("KAZUMI") / "certs" / "proxmox-root-ca.pem"
 
 
 class ProxmoxReadOnlyClient:
@@ -84,7 +84,7 @@ class ProxmoxReadOnlyClient:
         return {"Authorization": f"PVEAPIToken={self.token_id}={self._token_secret}"}
 
     def _httpx_verify(self) -> bool | ssl.SSLContext:
-        """Keep TLS verification on, adding NYRA's private Proxmox CA when present."""
+        """Keep TLS verification on, adding KAZUMI's private Proxmox CA when present."""
         local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
         if not local_app_data:
             return True
@@ -139,7 +139,7 @@ class ProxmoxReadOnlyClient:
         if not self.verify_ssl:
             raise IntegrationError(
                 f"{_ERROR_PREFIX}_TLS_VERIFICATION_REQUIRED",
-                "A API do Proxmox exige validação TLS ativa; instale a CA local no host NYRA.",
+                "A API do Proxmox exige validação TLS ativa; instale a CA local no host KAZUMI.",
             )
         require_secure_credential_transport(self.base_url)
         await self._check_fingerprint()

@@ -9,36 +9,36 @@
 
 ```bash
 # 1. Usuário dedicado, sem login interativo
-pveum user add nyra-observer@pve --comment "NYRA homelab integration"
+pveum user add kazumi-observer@pve --comment "KAZUMI homelab integration"
 
 # 2. Role mínima de leitura (auditoria) + start de VM se desejado
-pveum role add NYRAObserver -privs "Datastore.Audit,Sys.Audit,VM.Audit"
+pveum role add KAZUMIObserver -privs "Datastore.Audit,Sys.Audit,VM.Audit"
 # Opcional (permite proxmox_vm_start): acrescente VM.PowerMgmt
-# pveum role modify NYRAObserver -privs "Datastore.Audit,Sys.Audit,VM.Audit,VM.PowerMgmt"
+# pveum role modify KAZUMIObserver -privs "Datastore.Audit,Sys.Audit,VM.Audit,VM.PowerMgmt"
 
-pveum aclmod / -user nyra-observer@pve -role NYRAObserver
+pveum aclmod / -user kazumi-observer@pve -role KAZUMIObserver
 
 # 3. Token sem separar privilégios (herda os do usuário)
-pveum user token add nyra-observer@pve nyra --privsep 0
+pveum user token add kazumi-observer@pve kazumi --privsep 0
 ```
 
-Guarde o `token ID` (`nyra-observer@pve!nyra`) e o `secret` exibido **uma única vez**.
+Guarde o `token ID` (`kazumi-observer@pve!kazumi`) e o `secret` exibido **uma única vez**.
 
 ## Configuração (.env)
 
 ```env
-NYRA_PROXMOX_ENABLED=true
-NYRA_PROXMOX_URL=https://proxmox.example.invalid:8006
-NYRA_PROXMOX_TOKEN_ID=nyra-observer@pve!nyra   # não é secret por si só
-NYRA_PROXMOX_TOKEN_SECRET=<SECRET>
-NYRA_PROXMOX_VERIFY_SSL=true
+KAZUMI_PROXMOX_ENABLED=true
+KAZUMI_PROXMOX_URL=https://proxmox.example.invalid:8006
+KAZUMI_PROXMOX_TOKEN_ID=kazumi-observer@pve!kazumi   # não é secret por si só
+KAZUMI_PROXMOX_TOKEN_SECRET=<SECRET>
+KAZUMI_PROXMOX_VERIFY_SSL=true
 ```
 
 ## TLS / self-signed
 
-- `NYRA_PROXMOX_VERIFY_SSL=true` é obrigatório antes de qualquer envio do API Token.
-- Para certificado interno/self-signed, instale a CA emissora no repositório de confiança do Windows do usuário que executa a NYRA.
-- `NYRA_PROXMOX_TLS_FINGERPRINT` pode adicionar pin SHA-256 da leaf cert (hex, sem separadores), mas não substitui a validação da cadeia TLS. Divergência aborta com `PROXMOX_TLS_FINGERPRINT_MISMATCH`.
+- `KAZUMI_PROXMOX_VERIFY_SSL=true` é obrigatório antes de qualquer envio do API Token.
+- Para certificado interno/self-signed, instale a CA emissora no repositório de confiança do Windows do usuário que executa a KAZUMI.
+- `KAZUMI_PROXMOX_TLS_FINGERPRINT` pode adicionar pin SHA-256 da leaf cert (hex, sem separadores), mas não substitui a validação da cadeia TLS. Divergência aborta com `PROXMOX_TLS_FINGERPRINT_MISMATCH`.
 - Configuração com `verify_ssl=false` é rejeitada; nenhuma chamada autenticada é iniciada nesse estado.
 
 ## Privilégios por endpoint

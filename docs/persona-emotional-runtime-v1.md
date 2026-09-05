@@ -1,12 +1,12 @@
 # Persona & Emotional Runtime V1
 
 `app.persona_runtime` é a autoridade local para a identidade comportamental da
-NYRA. O Qwen continua responsável pela realização linguística; não define nem
+KAZUMI. O Qwen continua responsável pela realização linguística; não define nem
 persiste a identidade.
 
 ## Componentes e persistência
 
-- `NyraIdentity` e `PersonalityProfile`: contrato imutável versionado. O prompt
+- `KazumiIdentity` e `PersonalityProfile`: contrato imutável versionado. O prompt
   pode pedir um estilo temporário, mas não reescreve esse contrato.
 - `RelationshipState`: familiaridade e preferências de comunicação úteis.
   Evidência implícita precisa se repetir três vezes; preferência explícita pode
@@ -28,7 +28,7 @@ restaurados dias depois.
 ## Integrações
 
 O runtime recebe eventos estruturados de Tasks, Monitors, Runtime, Network,
-SelfDev, Operator e approvals. Ele publica `NYRA_EMOTION_CHANGED`; o World State
+SelfDev, Operator e approvals. Ele publica `KAZUMI_EMOTION_CHANGED`; o World State
 expõe somente emoção/intensidade e policy atuais. Memory V2 fornece no máximo
 três preferências ou episódios relevantes, tratados como dados sem autoridade.
 

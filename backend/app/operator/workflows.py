@@ -38,7 +38,7 @@ from pydantic import BaseModel, Field
 from app.core.paths import DATA_ROOT, PROJECT_ROOT
 from app.tools.redaction import redact_secrets
 
-logger = logging.getLogger("nyra.operator.workflows")
+logger = logging.getLogger("kazumi.operator.workflows")
 
 RUN_STATE_RUNNING = "RUNNING"
 RUN_STATE_SUCCEEDED = "SUCCEEDED"
@@ -235,7 +235,7 @@ class WorkflowRunStore:
     """SQLite persistence of workflow run history (§58)."""
 
     def __init__(self, database_path=None) -> None:
-        self.database_path = Path(database_path or (DATA_ROOT / "nyra.db"))
+        self.database_path = Path(database_path or (DATA_ROOT / "kazumi.db"))
         self._initialized = False
 
     async def initialize(self) -> None:

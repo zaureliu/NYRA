@@ -1,8 +1,8 @@
-"""E2E REAL do Operador Universal no runtime da janela NYRA (nyra-full §22-§30).
+"""E2E REAL do Operador Universal no runtime da janela KAZUMI (kazumi-full §22-§30).
 
 Requisitos:
   * backend REAL em 127.0.0.1:8000 (mesmo comando do launcher);
-  * janela REAL nyra-desktop.exe aberta (reusa o backend da porta 8000);
+  * janela REAL kazumi-desktop.exe aberta (reusa o backend da porta 8000);
   * comandos enviados pela MESMA rota usada pela UI (POST /api/chat);
   * verificação de efeito INDEPENDENTE (enumeração Win32 neste processo,
     fora do backend); effect_verified só quando o SO confirma;
@@ -154,7 +154,7 @@ def main() -> int:
         runtime["listening_disabled_for_battery"] = f"fail: {exc}"
     desktop_pids = subprocess.run(
         ["powershell", "-NoProfile", "-Command",
-         "Get-Process nyra-desktop -ErrorAction SilentlyContinue | "
+         "Get-Process kazumi-desktop -ErrorAction SilentlyContinue | "
          "Select-Object -First 1 Id,Path | ConvertTo-Json"],
         capture_output=True, text=True, timeout=20,
     ).stdout.strip()
@@ -266,15 +266,15 @@ def main() -> int:
         lambda: not count_windows("explorer", "Imagens"), 8)
 
     # ---------------------------------------------------------- §29 file
-    fixture = DATA_ROOT / "nyra-open-test.txt"
+    fixture = DATA_ROOT / "kazumi-open-test.txt"
     fixture.parent.mkdir(parents=True, exist_ok=True)
-    fixture.write_text("nyra-full §29 fixture\n", encoding="utf-8")
-    result = run_command("abre o arquivo nyra-open-test.txt", expect_fast=True)
+    fixture.write_text("kazumi-full §29 fixture\n", encoding="utf-8")
+    result = run_command("abre o arquivo kazumi-open-test.txt", expect_fast=True)
     result["effect_verified"] = wait_for(
-        lambda: any("nyra-open-test" in w["title"].casefold() for w in windows_now()), 14)
+        lambda: any("kazumi-open-test" in w["title"].casefold() for w in windows_now()), 14)
     results["open_file_fixture"] = result
     for w in windows_now():
-        if "nyra-open-test" in w["title"].casefold() and w["hwnd"] not in pre_existing:
+        if "kazumi-open-test" in w["title"].casefold() and w["hwnd"] not in pre_existing:
             from app.desktop import window_manager as wm
             wm.graceful_close(w["hwnd"], timeout_seconds=3)
 

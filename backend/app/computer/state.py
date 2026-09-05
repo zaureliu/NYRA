@@ -1,4 +1,4 @@
-r"""Camada 2 — ComputerStateService (nyra-7c §17-§22).
+r"""Camada 2 — ComputerStateService (kazumi-7c §17-§22).
 
 Representação compacta e ATUAL do estado operacional com freshness por slot
 (FRESH/STALE/UNKNOWN, §19), contexto de referência natural ("ele", "isso",
@@ -22,7 +22,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable
 
-logger = logging.getLogger("nyra.computer.state")
+logger = logging.getLogger("kazumi.computer.state")
 
 
 class Freshness(StrEnum):
@@ -65,12 +65,12 @@ class ResolvedTarget:
 
 
 def _default_base() -> Path:
-    override = os.environ.get("NYRA_COMPUTER_STATE_HOME")
+    override = os.environ.get("KAZUMI_COMPUTER_STATE_HOME")
     if override:
         return Path(override)
     local = os.environ.get("LOCALAPPDATA")
     base = Path(local) if local else Path.home() / "AppData" / "Local"
-    return base / "NYRA" / "computer-state"
+    return base / "KAZUMI" / "computer-state"
 
 
 _KIND_BY_TOKEN = {

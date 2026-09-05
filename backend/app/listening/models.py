@@ -15,7 +15,7 @@ class ListeningSettingsUpdate(BaseModel):
     enabled: bool = True
     natural_conversation: bool = True
     mode: ListeningMode = ListeningMode.HANDS_FREE
-    wake_word: str = Field("Nyra", min_length=2, max_length=32)
+    wake_word: str = Field("kazumi", min_length=2, max_length=32)
     hands_free_timeout_seconds: int = Field(120, ge=15, le=3600)
     vad_threshold: float = Field(0.5, ge=0, le=1)
     energy_threshold: float = Field(0.018, ge=0.001, le=0.25)

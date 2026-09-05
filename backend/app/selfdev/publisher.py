@@ -21,7 +21,7 @@ class GitHubPublisher:
     PUBLIC_ROOTS = {"backend", "config", "desktop", "docs", "frontend", "identity", "live2d", "scripts", "watchdog"}
     ROOT_FILES = {
         ".env.example", ".gitignore", "AGENTS.md", "CHANGELOG.md", "LICENSE",
-        "README.md", "build-nyra.ps1", "package.json", "start-nyra.ps1",
+        "README.md", "build-kazumi.ps1", "package.json", "start-kazumi.ps1",
     }
     BLOCKED_PARTS = {".git", "data", "logs", "cache", "downloads", "models", "node_modules", "target", "dist", "build", ".venv", "venv", ".tmp", ".test-temp"}
     BLOCKED_SUFFIXES = {".exe", ".msi", ".pdb", ".dmp", ".db", ".sqlite", ".log"}

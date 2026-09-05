@@ -13,7 +13,7 @@ arquivo verificado no filesystem) → browser → filesystem em temp
 (mkdir/write/read/rename/copy/delete) → shell (echo / Get-Date) →
 runtime supervisor → Home Assistant (API real) → homelab overview →
 OpenWrt (auth failure ≠ offline) → persistent job (chat continua responsivo)
-→ workflow Check NYRA Health → recovery controlado → watchdog (harness seguro)
+→ workflow Check KAZUMI Health → recovery controlado → watchdog (harness seguro)
 → voice (quando hardware disponível) → hello final SEM vazamento
 ```
 

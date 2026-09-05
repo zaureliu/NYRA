@@ -9,12 +9,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'runtime-paths.ps1')
-$runtimePaths = Initialize-NyraRuntimePaths
+$runtimePaths = Initialize-KazumiRuntimePaths
 $logDir = $runtimePaths.Logs
 $launcherLog = Join-Path $logDir 'launcher.log'
 $runtimeState = $runtimePaths.ProcessState
-$releaseExecutable = Join-Path $repoRoot 'desktop\src-tauri\target\release\nyra-desktop.exe'
-$pythonExecutable = Find-NyraPythonExecutable -RepoRoot $repoRoot
+$releaseExecutable = Join-Path $repoRoot 'desktop\src-tauri\target\release\kazumi-desktop.exe'
+$pythonExecutable = Find-KazumiPythonExecutable -RepoRoot $repoRoot
 $startupTimer = [Diagnostics.Stopwatch]::StartNew()
 $launcherMutex = $null
 $hasMutex = $false
@@ -42,7 +42,7 @@ function Show-LauncherError {
         $shell = New-Object -ComObject WScript.Shell
         # A finite timeout prevents an unattended error dialog from retaining
         # the single-start mutex forever.
-        $null = $shell.Popup("$Message`n`nConsulte: $launcherLog", 15, 'NYRA', 16)
+        $null = $shell.Popup("$Message`n`nConsulte: $launcherLog", 15, 'KAZUMI', 16)
     } catch {
         Write-LauncherLog -Level WARN -Message ('error_dialog_unavailable type=' + $_.Exception.GetType().Name)
     }
@@ -69,7 +69,7 @@ function Get-ConfiguredValue {
 }
 
 function Get-OfficialModel {
-    $configured = Get-ConfiguredValue -EnvironmentName 'NYRA_LLM_MODEL' -DefaultValue 'qwen3:8b'
+    $configured = Get-ConfiguredValue -EnvironmentName 'KAZUMI_LLM_MODEL' -DefaultValue 'qwen3:8b'
     $settingsPath = Join-Path $runtimePaths.Data 'brain-settings.json'
     if (Test-Path -LiteralPath $settingsPath) {
         try {
@@ -115,22 +115,22 @@ function Wait-Ollama {
     return $null
 }
 
-function Get-NyraHealth {
+function Get-KazumiHealth {
     param([string]$Uri)
     try {
         $health = Invoke-RestMethod -Uri $Uri -TimeoutSec 4
-        if ($health.character -eq 'NYRA') { return $health }
+        if ($health.character -eq 'KAZUMI') { return $health }
     } catch {
         return $null
     }
     return $null
 }
 
-function Wait-NyraHealth {
+function Wait-KazumiHealth {
     param([string]$Uri, [int]$TimeoutSeconds)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
-        $health = Get-NyraHealth -Uri $Uri
+        $health = Get-KazumiHealth -Uri $Uri
         if ($health) { return $health }
         if ($backendProcess -and $backendProcess.HasExited) { return $null }
         Start-Sleep -Milliseconds 400
@@ -152,14 +152,14 @@ function Save-RuntimeState {
 
 try {
     $createdNew = $false
-    $launcherMutex = New-Object System.Threading.Mutex($false, 'Local\NYRA.Launcher.Startup', [ref]$createdNew)
+    $launcherMutex = New-Object System.Threading.Mutex($false, 'Local\KAZUMI.Launcher.Startup', [ref]$createdNew)
     try { $hasMutex = $launcherMutex.WaitOne(0) }
     catch [Threading.AbandonedMutexException] { $hasMutex = $true }
 
     if (-not $hasMutex) {
         Write-LauncherLog -Level INFO -Message 'launcher_already_running action=focus_when_ready'
         if ((-not $SkipDesktop) -and (Test-Path -LiteralPath $releaseExecutable)) {
-            $runningDesktop = Get-Process -Name 'nyra-desktop' -ErrorAction SilentlyContinue | Where-Object {
+            $runningDesktop = Get-Process -Name 'kazumi-desktop' -ErrorAction SilentlyContinue | Where-Object {
                 try { $_.Path -and $_.Path.Equals($releaseExecutable, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
             } | Select-Object -First 1
             if (-not $runningDesktop) {
@@ -171,10 +171,10 @@ try {
 
     Write-LauncherLog -Level INFO -Message 'startup_begin mode=release vite=false'
 
-    $ollamaUrl = Get-ConfiguredValue -EnvironmentName 'NYRA_OLLAMA_URL' -DefaultValue 'http://127.0.0.1:11434'
+    $ollamaUrl = Get-ConfiguredValue -EnvironmentName 'KAZUMI_OLLAMA_URL' -DefaultValue 'http://127.0.0.1:11434'
     $officialModel = Get-OfficialModel
-    $portValue = Get-ConfiguredValue -EnvironmentName 'NYRA_BACKEND_PORT' -DefaultValue '8000'
-    if ($portValue -notmatch '^\d{2,5}$') { throw 'NYRA_BACKEND_PORT invalida.' }
+    $portValue = Get-ConfiguredValue -EnvironmentName 'KAZUMI_BACKEND_PORT' -DefaultValue '8000'
+    if ($portValue -notmatch '^\d{2,5}$') { throw 'KAZUMI_BACKEND_PORT invalida.' }
     $backendHealthUri = "http://127.0.0.1:$portValue/health"
 
     $ollamaStartedMs = $startupTimer.ElapsedMilliseconds
@@ -207,7 +207,7 @@ try {
     }
 
     $backendStartedMs = $startupTimer.ElapsedMilliseconds
-    $health = Get-NyraHealth -Uri $backendHealthUri
+    $health = Get-KazumiHealth -Uri $backendHealthUri
     if ($health) {
         Write-LauncherLog -Level INFO -Message ("backend_online reused=true status=" + $health.status + " ready_ms=" + ($startupTimer.ElapsedMilliseconds - $backendStartedMs))
     } elseif ($SkipDesktop) {
@@ -221,7 +221,7 @@ try {
         $pythonLayout = if ($pythonExecutable.IndexOf('\backend\.venv\', [StringComparison]::OrdinalIgnoreCase) -ge 0) { 'backend/.venv' } else { '.venv' }
         Write-LauncherLog -Level INFO -Message ("backend_start port=$portValue python=$pythonLayout")
         $backendProcess = Start-Process -FilePath $pythonExecutable -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', $portValue) -WorkingDirectory (Join-Path $repoRoot 'backend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDir 'backend.stdout.log') -RedirectStandardError (Join-Path $logDir 'backend.stderr.log') -PassThru
-        $health = Wait-NyraHealth -Uri $backendHealthUri -TimeoutSeconds $BackendTimeoutSeconds
+        $health = Wait-KazumiHealth -Uri $backendHealthUri -TimeoutSeconds $BackendTimeoutSeconds
         if ($health) {
             Write-LauncherLog -Level INFO -Message ("backend_online reused=false status=" + $health.status + " ready_ms=" + ($startupTimer.ElapsedMilliseconds - $backendStartedMs))
         } else {
@@ -235,8 +235,8 @@ try {
     }
 
     if (-not $SkipDesktop) {
-        if (-not (Test-Path -LiteralPath $releaseExecutable)) { throw 'Executavel release ausente. Execute build-nyra.ps1.' }
-        $existingDesktop = Get-Process -Name 'nyra-desktop' -ErrorAction SilentlyContinue | Where-Object {
+        if (-not (Test-Path -LiteralPath $releaseExecutable)) { throw 'Executavel release ausente. Execute build-kazumi.ps1.' }
+        $existingDesktop = Get-Process -Name 'kazumi-desktop' -ErrorAction SilentlyContinue | Where-Object {
             try { $_.Path -and $_.Path.Equals($releaseExecutable, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
         } | Select-Object -First 1
         if ($existingDesktop) {
@@ -245,12 +245,12 @@ try {
         } else {
             $desktopProcess = Start-Process -FilePath $releaseExecutable -WorkingDirectory $repoRoot -PassThru
             Start-Sleep -Milliseconds 900
-            if ($desktopProcess.HasExited) { throw 'NYRA Desktop encerrou durante a inicializacao.' }
+            if ($desktopProcess.HasExited) { throw 'KAZUMI Desktop encerrou durante a inicializacao.' }
             Write-LauncherLog -Level INFO -Message ("desktop_started pid=" + $desktopProcess.Id + " ready_ms=" + $startupTimer.ElapsedMilliseconds)
         }
 
         if (-not $health) {
-            $health = Wait-NyraHealth -Uri $backendHealthUri -TimeoutSeconds $BackendTimeoutSeconds
+            $health = Wait-KazumiHealth -Uri $backendHealthUri -TimeoutSeconds $BackendTimeoutSeconds
             if ($health) {
                 Write-LauncherLog -Level INFO -Message ("backend_online reused=false owner=desktop status=" + $health.status + " ready_ms=" + ($startupTimer.ElapsedMilliseconds - $backendStartedMs))
             } else {
@@ -262,7 +262,7 @@ try {
     Save-RuntimeState
 
     if (-not $health) {
-        Show-LauncherError -Message 'NYRA abriu, mas o backend local nao ficou disponivel.'
+        Show-LauncherError -Message 'KAZUMI abriu, mas o backend local nao ficou disponivel.'
     } elseif (-not $tags) {
         Write-LauncherLog -Level WARN -Message 'startup_degraded reason=ollama_unavailable desktop_open=true'
     }
@@ -284,7 +284,7 @@ try {
         try { $launcherMutex.ReleaseMutex() } catch {}
         $hasMutex = $false
     }
-    Show-LauncherError -Message ('NYRA nao conseguiu concluir a inicializacao: ' + $_.Exception.Message)
+    Show-LauncherError -Message ('KAZUMI nao conseguiu concluir a inicializacao: ' + $_.Exception.Message)
     exit 1
 } finally {
     if ($hasMutex -and $launcherMutex) { try { $launcherMutex.ReleaseMutex() } catch {} }

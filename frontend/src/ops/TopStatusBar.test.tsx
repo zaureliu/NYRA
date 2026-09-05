@@ -29,7 +29,7 @@ describe('TopStatusBar', () => {
   it('usa health e readiness reais sem confundir WebSocket ou modelo default com ativo', () => {
     setPolling('/api/health', {
       status: 'online',
-      character: 'NYRA',
+      character: 'KAZUMI',
       llm: true,
       llm_ready: true,
       ollama: { state: 'OLLAMA_READY', ready: true, model: 'qwen3.5:9b', keep_alive: '1h' },
@@ -56,7 +56,7 @@ describe('TopStatusBar', () => {
 
     const html = renderToStaticMarkup(<TopStatusBar />)
 
-    expect(html).toContain('NYRA: ONLINE')
+    expect(html).toContain('KAZUMI: ONLINE')
     expect(html).toContain('Backend: ONLINE')
     expect(html).toContain('Voz: PRONTA')
     expect(html).toContain('Watchdog: ATIVO')
@@ -72,7 +72,7 @@ describe('TopStatusBar', () => {
   it('preserva os estados conhecidos de Watchdog e Self-Dev em vez de inferi-los pelo health', () => {
     setPolling('/api/health', {
       status: 'online',
-      character: 'NYRA',
+      character: 'KAZUMI',
       llm: true,
       llm_ready: true,
       ollama: { state: 'OLLAMA_READY', ready: true, model: 'qwen3.5:9b', keep_alive: '1h' },
@@ -86,7 +86,7 @@ describe('TopStatusBar', () => {
 
     const html = renderToStaticMarkup(<TopStatusBar />)
 
-    expect(html).toContain('NYRA: ONLINE')
+    expect(html).toContain('KAZUMI: ONLINE')
     expect(html).toContain('Voz: PARCIAL')
     expect(html).toContain('Watchdog: INATIVO')
     expect(html).toContain('Self-Dev: OFF')
@@ -101,7 +101,7 @@ describe('TopStatusBar', () => {
 
     const html = renderToStaticMarkup(<TopStatusBar />)
 
-    expect(html).toContain('NYRA: OFFLINE')
+    expect(html).toContain('KAZUMI: OFFLINE')
     expect(html).toContain('Backend: OFFLINE')
     expect(html).toContain('Watchdog: ERROR')
     expect(html).toContain('Self-Dev: ERROR')

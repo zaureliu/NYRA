@@ -158,8 +158,8 @@ def test_options_and_capabilities_are_honest():
     assert values["profanity_filter"] == "false" and "redact" not in values
     assert "utterance_end_ms" not in dict(stream_options(STTSettings(interim_results=False), AudioFormat()))
     assert "keyterm" not in values
-    terms = stream_options(STTSettings(keyterms_enabled=True, keyterms=["NYRA", "ESP32"]), AudioFormat(), ["GPIO"])
-    assert [value for key, value in terms if key == "keyterm"] == ["NYRA", "ESP32", "GPIO"]
+    terms = stream_options(STTSettings(keyterms_enabled=True, keyterms=["KAZUMI", "ESP32"]), AudioFormat(), ["GPIO"])
+    assert [value for key, value in terms if key == "keyterm"] == ["KAZUMI", "ESP32", "GPIO"]
     assert DeepgramSTTProvider.capabilities(None).streaming
     assert not FasterWhisperSTTProvider.capabilities(None).streaming
     assert not FasterWhisperSTTProvider.capabilities(None).interim_results

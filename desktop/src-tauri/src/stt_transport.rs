@@ -118,7 +118,7 @@ impl SttBridge {
         let writing_closed = Arc::clone(&closed);
         let writing_channel = channel.clone();
         let sender_worker = thread::Builder::new()
-            .name("nyra-stt-send".into())
+            .name("kazumi-stt-send".into())
             .spawn(move || {
                 while !writing_closed.load(Ordering::SeqCst) {
                     match receiver.recv_timeout(Duration::from_millis(100)) {
@@ -142,7 +142,7 @@ impl SttBridge {
         let reading_closed = Arc::clone(&closed);
         let pong_sender = sender.clone();
         let reader_worker = thread::Builder::new()
-            .name("nyra-stt-receive".into())
+            .name("kazumi-stt-receive".into())
             .spawn(move || {
                 let mut fragments = Vec::new();
                 while !reading_closed.load(Ordering::SeqCst) {

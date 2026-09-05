@@ -11,7 +11,7 @@ Cada resposta recebe um `response_id`. O assembler protege abreviações, versõ
 
 ## Cancelamento e duplex
 
-`HALF_DUPLEX` é o padrão seguro: a captura é suspensa enquanto a NYRA fala. `SMART_DUPLEX` habilita barge-in somente quando também autorizado nas configurações. `USER_SPEECH_STARTED` cancela o stream, invalida chunks pendentes, interrompe a reprodução e devolve o estado para `LISTENING`.
+`HALF_DUPLEX` é o padrão seguro: a captura é suspensa enquanto a KAZUMI fala. `SMART_DUPLEX` habilita barge-in somente quando também autorizado nas configurações. `USER_SPEECH_STARTED` cancela o stream, invalida chunks pendentes, interrompe a reprodução e devolve o estado para `LISTENING`.
 
 A proteção contra autoescuta combina estado de fala, guard interval, fila conhecida de áudio, informações do dispositivo, `echoCancellation` e VAD. O modo inteligente é experimental porque cancelamento de eco depende do dispositivo/driver.
 

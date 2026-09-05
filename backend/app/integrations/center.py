@@ -18,7 +18,7 @@ import logging
 import time
 from typing import Any
 
-logger = logging.getLogger("nyra.integrations.center")
+logger = logging.getLogger("kazumi.integrations.center")
 
 INTEGRATION_IDS = ("sentinel", "home_assistant", "proxmox", "openwrt")
 

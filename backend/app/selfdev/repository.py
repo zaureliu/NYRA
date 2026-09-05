@@ -18,7 +18,7 @@ EXCLUDED_PARTS = {
     "__pycache__", ".pytest_cache", ".test-temp", ".tmp", "data", "logs",
     "cache", "downloads", "models", "artifacts", "worktrees", "rejected",
 }
-EXCLUDED_NAMES = {".env", ".nyra-runtime.json", "credentials-vault.bin"}
+EXCLUDED_NAMES = {".env", ".kazumi-runtime.json", "credentials-vault.bin"}
 ROUTE_RE = re.compile(r"(?:@router\.(?:get|post|put|patch|delete)\(\s*|fetch\(\s*|api(?:Send)?\(\s*)[\"']([^\"']+)")
 IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]{2,}\b")
 

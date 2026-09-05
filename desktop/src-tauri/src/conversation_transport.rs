@@ -45,7 +45,7 @@ impl ConversationBridge {
         {
             let state = Arc::clone(&self.state);
             if thread::Builder::new()
-                .name("nyra-conversation-events".into())
+                .name("kazumi-conversation-events".into())
                 .spawn(move || relay_forever(app, state))
                 .is_err()
             {
@@ -80,7 +80,7 @@ fn relay_forever(app: AppHandle, state: Arc<BridgeState>) {
 
 fn set_connected(app: &AppHandle, state: &BridgeState, connected: bool) {
     if state.connected.swap(connected, Ordering::SeqCst) != connected {
-        let _ = app.emit("nyra-backend-connection", connected);
+        let _ = app.emit("kazumi-backend-connection", connected);
     }
 }
 
@@ -161,7 +161,7 @@ fn relay_connection(app: &AppHandle, mut stream: TcpStream) -> Result<(), String
 fn emit_event(app: &AppHandle, payload: &[u8]) -> Result<(), String> {
     let event: Value =
         serde_json::from_slice(payload).map_err(|_| "EVENT_INVALID_JSON".to_string())?;
-    app.emit("nyra-backend-event", event)
+    app.emit("kazumi-backend-event", event)
         .map_err(|_| "EVENT_EMIT_FAILED".to_string())
 }
 

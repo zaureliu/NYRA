@@ -54,11 +54,11 @@ class FakeLocal(TTSProvider):
 
     @property
     def default_voice(self) -> str:
-        return "nyra-local"
+        return "kazumi-local"
 
     @property
     def voices(self) -> list[dict[str, str]]:
-        return [{"id": "nyra-local", "name": "Nyra local", "language": "pt-BR"}]
+        return [{"id": "kazumi-local", "name": "Kazumi local", "language": "pt-BR"}]
 
     def capabilities(self) -> TtsCapabilities:
         return TtsCapabilities(pt_br=True, offline=True, voice_selection=True)
@@ -276,7 +276,7 @@ async def test_provider_switch_is_hot_and_old_delayed_audio_is_cancelled(tmp_pat
     assert local.calls == ["Resposta atual."]
     assert registry.active_provider == "local"
     assert queue.counters["tts_items_cancelled"] >= 1
-    assert not list(tmp_path.glob("nyra-openai-*.wav"))
+    assert not list(tmp_path.glob("kazumi-openai-*.wav"))
 
 
 def test_tts_credential_wrapper_never_returns_the_secret() -> None:
@@ -312,6 +312,24 @@ def test_tts_credential_wrapper_never_returns_the_secret() -> None:
     assert raw.secret not in json.dumps(removed)
     assert raw.created is not None
     assert raw.created[1]["operator_direct"] is True
+
+
+@pytest.mark.parametrize("provider", ["openai", "elevenlabs", "gradium", "custom:test-provider"])
+def test_tts_credential_survives_empty_metadata_index_after_restart(provider):
+    class RestartedBroker:
+        def __init__(self):
+            self.present = True
+        def status(self, credential_id):
+            return {"success": False, "error_code": "CREDENTIAL_NOT_FOUND"}
+        def resolve(self, credential_id):
+            assert credential_id == TtsCredentialBroker.credential_id(provider)
+            return "fixture-secret" if self.present else None
+    protected = RestartedBroker()
+    adapter = TtsCredentialBroker(protected)
+    assert adapter.has_credential(provider) is True
+    protected.present = False
+    assert adapter.has_credential(provider) is False
+    assert TtsCredentialBroker(None).has_credential(provider) is False
 
 
 def test_speech_normalizer_removes_private_runtime_material() -> None:

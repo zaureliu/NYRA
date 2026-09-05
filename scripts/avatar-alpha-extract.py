@@ -1,4 +1,4 @@
-"""Extract a baked light checkerboard into real alpha for approved NYRA art.
+"""Extract a baked light checkerboard into real alpha for approved KAZUMI art.
 
 This is intentionally narrow: it only accepts a light, near-neutral background
 connected to the canvas border. Interior highlights are never selected merely

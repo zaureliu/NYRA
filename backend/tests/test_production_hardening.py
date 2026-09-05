@@ -81,7 +81,7 @@ def make_engine(tmp_path, registry=None) -> WorkflowEngine:
     engine = WorkflowEngine(
         registry,
         store_path=tmp_path / "workflows.json",
-        history_store=store_module.WorkflowRunStore(tmp_path / "nyra.db"),
+        history_store=store_module.WorkflowRunStore(tmp_path / "kazumi.db"),
     )
     return engine
 
@@ -404,7 +404,7 @@ def test_seed_templates_idempotent_preserves_operator_edits():
         engine = make_engine(Path(tmp), registry=None)  # sem registry: validação de tools é pulada
         seeded = engine.seed_templates(repo_templates)
         assert seeded["success"] is True
-        assert "wf_check_nyra_health" in seeded["created"]
+        assert "wf_check_kazumi_health" in seeded["created"]
         assert len(seeded["created"]) >= 7  # §59 mínimo de 7 templates
         # operador edita um template
         current = engine.get("wf_check_homelab")

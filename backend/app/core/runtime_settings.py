@@ -22,7 +22,8 @@ def load_runtime_settings(path: Path = RUNTIME_SETTINGS_PATH) -> dict[str, Any]:
         return {}
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {}
+        from app.brand_compat import preferences
+        return preferences(value) if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
 

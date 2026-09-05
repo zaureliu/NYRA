@@ -19,4 +19,4 @@ O setup verifica os hashes dos assets Kokoro antes de reutilizá-los. O adaptado
 | `qwen3:8b` | qwen3 | Q4_K_M | 8192 | 6,2 GB, 100% GPU | instalado, baseline e oficial |
 | `qwen3.5:9b` | qwen35 multimodal | Q4_K_M | 8192 | 5,6 GB, 100% GPU | instalado, candidate benchmarked |
 
-Instalação do 9B: 2026-08-19 via `ollama pull`; o 8B não foi removido. Embora a fonte declare até 256K para o 9B, a NYRA usa 8192 para latência/VRAM previsíveis.
+Instalação do 9B: 2026-08-19 via `ollama pull`; o 8B não foi removido. Embora a fonte declare até 256K para o 9B, a KAZUMI usa 8192 para latência/VRAM previsíveis.

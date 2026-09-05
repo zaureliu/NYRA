@@ -7,7 +7,7 @@ from app.speech.profile import VoiceSynthesisOptions
 
 @dataclass(frozen=True, slots=True)
 class VoiceStylePlan:
-    """Provider-agnostic description of how NYRA intends to sound.
+    """Provider-agnostic description of how KAZUMI intends to sound.
 
     Persona/Emotion runtimes only produce this plan. Provider adapters own the
     conversion to their supported API parameters and may safely ignore fields.

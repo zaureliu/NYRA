@@ -7,7 +7,7 @@ from .models import (AudioFormat, CanonicalTranscript, EventSink, RecognitionEve
 
 
 class FasterWhisperSTTProvider(RealtimeSTTProvider):
-    """Buffered adapter over NYRA's existing model and Silero. No streaming claim."""
+    """Buffered adapter over KAZUMI's existing model and Silero. No streaming claim."""
 
     provider_id = "faster_whisper"
 
@@ -37,7 +37,7 @@ class FasterWhisperSTTProvider(RealtimeSTTProvider):
             return CanonicalTranscript(text="", is_final=True, provider=self.provider_id,
                                        language=self.engine.language, utterance_id=self.utterance_id, sequence=1)
         self.worker = asyncio.create_task(self.engine.transcribe_pcm(bytes(self.buffer), self.audio_format.sample_rate),
-                                          name="nyra-stt-local-worker")
+                                          name="kazumi-stt-local-worker")
         try:
             result = await asyncio.shield(self.worker)
         except asyncio.CancelledError:

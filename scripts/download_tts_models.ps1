@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
-$runtimeRoot = if ($env:NYRA_DATA_HOME) { $env:NYRA_DATA_HOME } else { Join-Path $env:LOCALAPPDATA 'NYRA' }
+$runtimeRoot = if ($env:KAZUMI_DATA_HOME) { $env:KAZUMI_DATA_HOME } else { Join-Path $env:LOCALAPPDATA 'KAZUMI' }
 $modelDir = Join-Path $runtimeRoot 'data\models'
 New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
 $assets = @(

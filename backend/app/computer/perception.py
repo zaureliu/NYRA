@@ -1,4 +1,4 @@
-"""Camada 1 — ComputerPerceptionService (nyra-7c §6-§16).
+"""Camada 1 — ComputerPerceptionService (kazumi-7c §6-§16).
 
 Consolida fontes DETERMINÍSTICAS existentes em snapshots compactos:
   processos/janelas (Win32+psutil), clipboard (só metadata), filesystem
@@ -24,14 +24,14 @@ from typing import Any, Callable
 
 from app.events import EventBus, EventType
 
-logger = logging.getLogger("nyra.computer.perception")
+logger = logging.getLogger("kazumi.computer.perception")
 
 MAX_WINDOWS_IN_SNAPSHOT = 60
 MAX_PROCESSES_IN_SNAPSHOT = 40
 MAX_RECENT_FILES = 25
 RECENT_FILE_ROOTS = ("Desktop", "Downloads", "Documents", "Pictures", "Music", "Videos")
 
-# Novos eventos normalizados (nyra-7c §16) — aditivos ao EventType existente.
+# Novos eventos normalizados (kazumi-7c §16) — aditivos ao EventType existente.
 COMPUTER_EVENTS = {
     "WINDOW_FOREGROUND_CHANGED": "computer.window.foreground_changed",
     "WINDOW_OPENED": "computer.window.opened",
@@ -362,7 +362,7 @@ class ComputerPerceptionService:
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._run(), name="nyra-computer-perception")
+            self._task = asyncio.create_task(self._run(), name="kazumi-computer-perception")
 
     async def stop(self) -> None:
         if self._task and not self._task.done():

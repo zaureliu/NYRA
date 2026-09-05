@@ -197,7 +197,7 @@ def register_operator_tools(registry, controller: OperatorController) -> None:
     # ---------------- processes
     registry.register(ToolDefinition(
         "process_list",
-        "Lista processos locais com memória (ordenável) e marca componentes protegidos da NYRA.",
+        "Lista processos locais com memória (ordenável) e marca componentes protegidos da KAZUMI.",
         RiskLevel.READ_ONLY, ProcessListInput,
         lambda sort_by="memory", limit=25, **_: controller.process_list(sort_by, int(limit)),
         dynamic_risk=False, llm_enabled=True, preflight=_preflight("proc", "READ_ONLY"),
@@ -218,7 +218,7 @@ def register_operator_tools(registry, controller: OperatorController) -> None:
     ))
     registry.register(ToolDefinition(
         "process_stop",
-        "Para um processo por PID (terminate→kill como fallback interno; componentes NYRA são bloqueados). Exige approval_id.",
+        "Para um processo por PID (terminate→kill como fallback interno; componentes KAZUMI são bloqueados). Exige approval_id.",
         RiskLevel.ELEVATED, ProcessStopInput,
         lambda pid, force=False, approval_id=None, reason="", **_: controller.process_stop(int(pid), approval_id, bool(force), reason),
         dynamic_risk=False, llm_enabled=True, preflight=_preflight("proc", "ELEVATED"),
@@ -337,7 +337,7 @@ def register_browser_tools(registry, browser_controller) -> None:
 
     registry.register(ToolDefinition(
         "browser_open",
-        "Abre o navegador gerenciado (Chrome/Edge com perfil próprio da NYRA e CDP ativo) numa URL http(s); confirma pela lista de abas.",
+        "Abre o navegador gerenciado (Chrome/Edge com perfil próprio da KAZUMI e CDP ativo) numa URL http(s); confirma pela lista de abas.",
         RiskLevel.LOW_RISK, BrowserUrlInput, browser_open,
         dynamic_risk=False, llm_enabled=True, preflight=action_preflight("open"),
     ))

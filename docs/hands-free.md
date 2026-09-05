@@ -1,6 +1,6 @@
 # Hands-Free
 
-Uma chamada válida com “Nyra” abre uma janela hands-free de 120 segundos. Cada interação aceita renova o prazo. As frases “pode parar de ouvir”, “encerra a conversa”, “até depois” e “pode ficar quieta agora” encerram somente essa sessão.
+Uma chamada válida com “Kazumi” abre uma janela hands-free de 120 segundos. Cada interação aceita renova o prazo. As frases “pode parar de ouvir”, “encerra a conversa”, “até depois” e “pode ficar quieta agora” encerram somente essa sessão.
 
 Autoproteção de voz:
 

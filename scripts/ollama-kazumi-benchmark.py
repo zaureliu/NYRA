@@ -9,7 +9,7 @@ import httpx
 
 
 OLLAMA = "http://127.0.0.1:11434"
-NYRA = "http://127.0.0.1:8000"
+KAZUMI = "http://127.0.0.1:8000"
 MODEL = "qwen3:8b"
 QUESTIONS = [
     "Responda em uma frase: você está online?",
@@ -57,9 +57,9 @@ async def direct(client: httpx.AsyncClient, question: str) -> dict:
     }
 
 
-async def through_nyra(client: httpx.AsyncClient, question: str) -> dict:
+async def through_kazumi(client: httpx.AsyncClient, question: str) -> dict:
     started = time.perf_counter()
-    response = await client.post(f"{NYRA}/api/chat", json={"message": question, "synthesize": False})
+    response = await client.post(f"{KAZUMI}/api/chat", json={"message": question, "synthesize": False})
     response.raise_for_status()
     ended = time.perf_counter()
     value = response.json()
@@ -83,10 +83,10 @@ async def main() -> None:
     async with httpx.AsyncClient(timeout=timeout) as client:
         for index, question in enumerate(QUESTIONS, 1):
             direct_result = await direct(client, question)
-            nyra_result = await through_nyra(client, question)
-            results.append({"index": index, "question": question, "direct": direct_result, "nyra": nyra_result})
+            kazumi_result = await through_kazumi(client, question)
+            results.append({"index": index, "question": question, "direct": direct_result, "kazumi": kazumi_result})
             print(json.dumps(results[-1], ensure_ascii=False))
-    output = Path(__file__).resolve().parents[1] / "logs" / "ollama-nyra-benchmark.json"
+    output = Path(__file__).resolve().parents[1] / "logs" / "ollama-kazumi-benchmark.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({"model": MODEL, "runs": results}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"saved={output}")

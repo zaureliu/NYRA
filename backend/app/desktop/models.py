@@ -1,4 +1,4 @@
-"""NYRA Desktop Application Control V1 - models."""
+"""KAZUMI Desktop Application Control V1 - models."""
 
 from __future__ import annotations
 

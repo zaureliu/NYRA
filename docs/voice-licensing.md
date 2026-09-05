@@ -6,12 +6,12 @@ Licença do código/modelo, licença do dataset, direitos sobre a gravação e a
 
 | Status | Uso no Voice Hunter | Pode virar oficial? |
 |---|---|---:|
-| `SAFE_FOR_NYRA_REFERENCE` | sample sintético/licenciado pode ser usado como referência | sim, após clique do usuário |
+| `SAFE_FOR_KAZUMI_REFERENCE` | sample sintético/licenciado pode ser usado como referência | sim, após clique do usuário |
 | `SAFE_FOR_DIRECT_TTS` | geração pelo provider nos termos aplicáveis | sim, somente como provider direto |
 | `AUDITION_ONLY` | escuta e comparação | não |
 | `REJECTED` | registro documental | não |
 
-Para `SAFE_FOR_NYRA_REFERENCE`, os termos precisam permitir o uso derivativo necessário, e a procedência não pode depender de uma pessoa identificável sem consentimento específico. Uma voz sintética licenciada tem prioridade quando a qualidade é comparável.
+Para `SAFE_FOR_KAZUMI_REFERENCE`, os termos precisam permitir o uso derivativo necessário, e a procedência não pode depender de uma pessoa identificável sem consentimento específico. Uma voz sintética licenciada tem prioridade quando a qualidade é comparável.
 
 ## Decisões desta busca
 
